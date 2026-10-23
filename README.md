@@ -27,7 +27,7 @@ In game, type /addon load vengo vanacore, and add that line to your startup scri
 Type /vengo to open or close the window.
 
 Credits
-
+The Great Vanacore by Vekien
 Window style and VanaCore startup from YunaUI by Yunas.
 Venture board format and VNM drop list from the ventures addon by Commandobill, Seekey and Phatty.
 Warps through Uberwarp.
