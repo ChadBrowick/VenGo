@@ -1,35 +1,34 @@
-# Posts a release when a version tag (like 4.21) is pushed:
-# zips the vengo/ folder as VenGo-v<tag>.zip and uses release-notes/<tag>.md as the notes.
+# When you publish a release (tag like 4.21), this attaches VenGo-v<tag>.zip (the vengo/ folder)
+# and, if you left the description empty, fills it in from release-notes/<tag>.md.
 name: Release
 
 on:
-  push:
-    tags:
-      - '[0-9]*'
+  release:
+    types: [published]
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  attach:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Build the zip
-        run: zip -qr "VenGo-v${GITHUB_REF_NAME}.zip" vengo
+        run: zip -qr "VenGo-v${TAG}.zip" vengo
+        env:
+          TAG: ${{ github.event.release.tag_name }}
 
-      - name: Notes
-        run: |
-          if [ -f "release-notes/${GITHUB_REF_NAME}.md" ]; then
-            cp "release-notes/${GITHUB_REF_NAME}.md" notes.md
-          else
-            echo "VenGo ${GITHUB_REF_NAME}" > notes.md
-          fi
-
-      - name: Post the release
+      - name: Attach the zip and the notes
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          BODY: ${{ github.event.release.body }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" "VenGo-v${GITHUB_REF_NAME}.zip" \
-            --repo "${GITHUB_REPOSITORY}" --title "${GITHUB_REF_NAME}" --notes-file notes.md
+          gh release upload "$TAG" "VenGo-v${TAG}.zip" --clobber --repo "$GITHUB_REPOSITORY"
+          if [ -z "$(echo "$BODY" | tr -d '[:space:]')" ] && [ -f "release-notes/${TAG}.md" ]; then
+            gh release edit "$TAG" --notes-file "release-notes/${TAG}.md" --repo "$GITHUB_REPOSITORY"
+          fi
