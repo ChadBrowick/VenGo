@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.20';
+addon.version = '4.21';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -72,6 +72,8 @@ local config = {
     trail_glow = true,         -- its glow
     trail_color = 'pink',      -- the chevrons' colour
     trail_style = 'solid',     -- lines | bands | solid
+    theme = 'pink',            -- the window's accent colours (Settings > Colours)
+    bg = 'violet',             -- the window's background
     trail_size = 'medium',     -- small | medium | large
 };
 
@@ -148,7 +150,7 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_color', 'trail_style', 'trail_size' }) do
+    for _, k in ipairs({ 'transparent', 'minimized', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg' }) do
         local v = config[k];
         f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v)));
     end
@@ -1558,6 +1560,39 @@ local C = {
 local NEON  = { 0.86, 0.24, 0.86 };
 local NEON2 = { 1.00, 0.42, 0.72 };
 
+-- Colour themes (Settings > Colours). The colours are changed in place, so everything drawn with them follows.
+-- Accent: { main, second, soft }; background: { panel bg, frames, panel, wells }.
+C.accents = {
+    { 'pink',    'Pink & violet', { 1.00, 0.42, 0.72 }, { 0.62, 0.40, 1.00 }, { 0.74, 0.66, 0.95 } },
+    { 'ocean',   'Ocean',         { 0.35, 0.70, 1.00 }, { 0.25, 0.90, 0.85 }, { 0.66, 0.82, 0.98 } },
+    { 'emerald', 'Emerald',       { 0.40, 0.92, 0.60 }, { 0.25, 0.78, 0.92 }, { 0.70, 0.92, 0.80 } },
+    { 'sunset',  'Sunset',        { 1.00, 0.55, 0.25 }, { 1.00, 0.32, 0.45 }, { 1.00, 0.80, 0.66 } },
+    { 'gold',    'Gold',          { 0.98, 0.78, 0.30 }, { 0.95, 0.52, 0.20 }, { 0.98, 0.88, 0.66 } },
+    { 'crimson', 'Crimson',       { 1.00, 0.30, 0.36 }, { 0.72, 0.22, 0.50 }, { 0.98, 0.72, 0.76 } },
+    { 'ice',     'Ice',           { 0.80, 0.90, 1.00 }, { 0.50, 0.62, 0.85 }, { 0.82, 0.86, 0.94 } },
+};
+C.bgs = {
+    { 'violet',   'Violet black', { 0.068, 0.066, 0.088 }, { 0.165, 0.158, 0.205 }, { 0.090, 0.084, 0.115 }, { 0.060, 0.056, 0.080 } },
+    { 'black',    'Black',        { 0.045, 0.045, 0.048 }, { 0.140, 0.140, 0.150 }, { 0.065, 0.065, 0.070 }, { 0.035, 0.035, 0.040 } },
+    { 'navy',     'Navy',         { 0.045, 0.065, 0.105 }, { 0.130, 0.170, 0.240 }, { 0.065, 0.090, 0.140 }, { 0.035, 0.050, 0.085 } },
+    { 'charcoal', 'Charcoal',     { 0.105, 0.105, 0.115 }, { 0.210, 0.210, 0.230 }, { 0.130, 0.130, 0.142 }, { 0.080, 0.080, 0.090 } },
+    { 'plum',     'Plum',         { 0.090, 0.050, 0.085 }, { 0.215, 0.140, 0.205 }, { 0.120, 0.070, 0.112 }, { 0.070, 0.038, 0.066 } },
+    { 'forest',   'Forest',       { 0.045, 0.075, 0.060 }, { 0.130, 0.190, 0.160 }, { 0.065, 0.100, 0.082 }, { 0.035, 0.058, 0.046 } },
+};
+function C.find(list, key) for _, e in ipairs(list) do if e[1] == key then return e; end end return list[1]; end
+function C.apply()
+    local function set(dst, src, k) dst[1], dst[2], dst[3] = src[1] * (k or 1), src[2] * (k or 1), src[3] * (k or 1); end
+    local a = C.find(C.accents, config.theme);
+    local m, s2, soft = a[3], a[4], a[5];
+    set(NEON2, m);
+    set(C.hp, { math.min(1, m[1] * 1.0), m[2] * 0.86, m[3] * 0.86 });
+    set(C.mp2, s2);
+    set(NEON, { (m[1] + s2[1]) / 2 * 0.95, (m[2] + s2[2]) / 2 * 0.62, (m[3] + s2[3]) / 2 * 0.98 });
+    set(C.acc, soft); set(C.label, { soft[1] * 0.97, soft[2] * 0.99, soft[3] }); set(C.lav, { math.min(1, soft[1] * 1.03), math.min(1, soft[2] * 1.06), math.min(1, soft[3] * 1.03) });
+    local b = C.find(C.bgs, config.bg);
+    set(C.pbg, b[3]); set(C.pframe, b[4]); set(C.panel, b[5]); set(C.well, b[6]);
+end
+
 local SW, ROW_W, MARGIN = 200, 760, 8;
 local FULL_ROW = 760;                                   -- width the venture rows need
 local WIN_W = SW + 30 + MARGIN + FULL_ROW + 50;         -- starting size; the window can be resized
@@ -1964,7 +1999,7 @@ local function itemTooltip(name, meta)
         -- the bar down the left edge
         pcall(function ()
             dl:AddRectFilledMultiColor({ wx + 5, wy + 7 }, { wx + 8, wy + math.max(wh, 40) - 7 },
-                u32({ 1, 0.42, 0.70, 1 }), u32({ 1, 0.42, 0.70, 1 }), u32({ 0.40, 0.55, 1, 1 }), u32({ 0.40, 0.55, 1, 1 }));
+                u32({ NEON2[1], NEON2[2], NEON2[3], 1 }), u32({ NEON2[1], NEON2[2], NEON2[3], 1 }), u32({ C.mp2[1], C.mp2[2], C.mp2[3], 1 }), u32({ C.mp2[1], C.mp2[2], C.mp2[3], 1 }));
         end);
         -- icon, then name and races / level beside it
         local isz = 32;
@@ -2267,7 +2302,7 @@ local function sidebar(dl, x0, y0, sw)
                     u32({ 0.78, 0.25, 0.52, 0.55 }), u32({ 0.78, 0.25, 0.52, 0 }),
                     u32({ 0.78, 0.25, 0.52, 0 }), u32({ 0.78, 0.25, 0.52, 0.55 }));
             end);
-            dl:AddRectFilled({ x0, y + 2 }, { x0 + 3, y + ih - 2 }, u32({ 1, 0.45, 0.70, 1 }));
+            dl:AddRectFilled({ x0, y + 2 }, { x0 + 3, y + ih - 2 }, u32({ NEON2[1], NEON2[2], NEON2[3], 1 }));
             local ax, ay = x0 - 12, y + ih / 2;
             dl:AddTriangleFilled({ ax, ay - 5 }, { ax + 7, ay }, { ax, ay + 5 }, u32({ 0.85, 0.82, 0.95, 1 }));
         elseif over then
@@ -2362,7 +2397,7 @@ local function topButtons(dl, wx, wy, ww)
         saveSettings();
     end
     -- close
-    if iconButton(dl, '##vengo_x', xClose, by, bs, { 1, 0.36, 0.62, 0.30 },
+    if iconButton(dl, '##vengo_x', xClose, by, bs, { C.hp[1], C.hp[2], C.hp[3], 0.30 },
             'Close (type /vengo to open it again)', function (cx, cy, r, col)
                 dl:AddLine({ cx - r, cy - r }, { cx + r, cy + r }, col, 1.6);
                 dl:AddLine({ cx - r, cy + r }, { cx + r, cy - r }, col, 1.6);
@@ -2445,7 +2480,7 @@ local function ventureRow(v, z, at, showPool)
                     u32({ 0.78, 0.25, 0.52, 0.35 }), u32({ 0.78, 0.25, 0.52, 0 }),
                     u32({ 0.78, 0.25, 0.52, 0 }), u32({ 0.78, 0.25, 0.52, 0.35 }));
             end);
-            dl:AddRectFilled({ sx - 6, sy + 2 }, { sx - 3, sy + rh - 2 }, u32({ 1, 0.45, 0.70, 1 }));
+            dl:AddRectFilled({ sx - 6, sy + 2 }, { sx - 3, sy + rh - 2 }, u32({ NEON2[1], NEON2[2], NEON2[3], 1 }));
         end
     end
     goButton(v);
@@ -2487,8 +2522,8 @@ local function pillChoice(id, opts, cur)
         if imgui.InvisibleButton(id .. i, { w, h }) then picked = o[1]; end
         local on, hov = (o[1] == cur), imgui.IsItemHovered();
         if on then
-            dl:AddRectFilled({ x, y }, { x + w, y + h }, u32({ 0.40, 0.13, 0.30, 0.85 }), 6);
-            dl:AddRect({ x, y }, { x + w, y + h }, u32({ 1, 0.45, 0.70, 0.95 }), 6, C.rall, 1.3);
+            dl:AddRectFilled({ x, y }, { x + w, y + h }, u32({ NEON2[1] * 0.40, NEON2[2] * 0.31, NEON2[3] * 0.42, 0.85 }), 6);
+            dl:AddRect({ x, y }, { x + w, y + h }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.95 }), 6, C.rall, 1.3);
         else
             dl:AddRectFilled({ x, y }, { x + w, y + h }, u32(hov and { 0.16, 0.15, 0.21, 1 } or { 0.12, 0.11, 0.155, 1 }), 6);
             dl:AddRect({ x, y }, { x + w, y + h }, u32({ 1, 1, 1, hov and 0.22 or 0.10 }), 6, C.rall, 1);
@@ -3265,6 +3300,48 @@ local function tabSettings()
     end
     hint('Drag the bottom-right corner to resize. The  -  button at the top right shrinks VenGo to a small tag.');
 
+    section('Colours');
+    local function swatches(id, list, cur, draw)
+        local dl = imgui.GetWindowDrawList();
+        local picked = nil;
+        imgui.SameLine(ROW_W - #list * 34 + 6);
+        for i, e in ipairs(list) do
+            local x, y = imgui.GetCursorScreenPos();
+            local h = imgui.GetFrameHeight();
+            if imgui.InvisibleButton(id .. e[1], { 30, h }) then picked = e[1]; end
+            local cx, cy = x + 15, y + h / 2;
+            draw(dl, cx, cy, e);
+            if (cur or list[1][1]) == e[1] then dl:AddCircle({ cx, cy }, 12.5, u32({ 1, 1, 1, 0.9 }), 24, 1.5); end
+            if imgui.IsItemHovered() then imgui.SetTooltip(e[2]); end
+            if i < #list then imgui.SameLine(0, 4); end
+        end
+        return picked;
+    end
+    local function half(dl, cx, cy, r, a0, c)                -- half a circle, from angle a0
+        for s_ = 0, 7 do
+            local b0, b1 = a0 + s_ * math.pi / 8, a0 + (s_ + 1) * math.pi / 8;
+            dl:AddTriangleFilled({ cx, cy }, { cx + math.cos(b0) * r, cy + math.sin(b0) * r },
+                { cx + math.cos(b1) * r, cy + math.sin(b1) * r }, u32({ c[1], c[2], c[3], 1 }));
+        end
+    end
+    imgui.AlignTextToFramePadding();
+    imgui.TextColored(C.text, 'Accent');
+    local ac = swatches('##vengo_th_', C.accents, config.theme, function (dl, cx, cy, e)
+        dl:AddCircleFilled({ cx, cy }, 11, u32({ e[3][1], e[3][2], e[3][3], 0.22 }), 24);
+        half(dl, cx, cy, 8, math.pi * 0.75, e[3]);
+        half(dl, cx, cy, 8, math.pi * 1.75, e[4]);
+    end);
+    if ac then config.theme = ac; C.apply(); saveSettings(); end
+    imgui.AlignTextToFramePadding();
+    imgui.TextColored(C.text, 'Background');
+    local bgc = swatches('##vengo_bg_', C.bgs, config.bg, function (dl, cx, cy, e)
+        dl:AddCircleFilled({ cx, cy }, 9, u32({ e[4][1], e[4][2], e[4][3], 1 }), 24);
+        dl:AddCircleFilled({ cx, cy }, 6, u32({ e[3][1], e[3][2], e[3][3], 1 }), 24);
+        dl:AddCircle({ cx, cy }, 9, u32({ 1, 1, 1, 0.25 }), 24, 1);
+    end);
+    if bgc then config.bg = bgc; C.apply(); saveSettings(); end
+    hint('Accent: the edges, highlights, switches and bars. Background: the panel itself. See-through mode still works with every colour.');
+
     section('VNM Alerts');
     if rowSwitch('##vengo_alerts', 'Alert when a VNM is announced', config.alerts == true,
             'Watches chat for Populox announcing a VNM in Unity chat') then
@@ -3745,6 +3822,7 @@ end);
 ashita.events.register('load', 'vengo_load', function ()
     loadFonts();
     loadSettings();
+    pcall(C.apply);
     loadVentures();
     loadVnmDb(true);
     loadTrends();
