@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.21';
+addon.version = '4.22';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -2939,9 +2939,18 @@ function SL.find(z)
         SEAL_SCAN.x = nil;
         pcall(function ()
             local ent = mm():GetEntity();
-            for i = 1, 1023 do
+            -- (the Seal is spawned by the server, so it can sit anywhere in the list: e.g. 1832, past the zone's own NPCs;
+            --  the last slot it was in is looked at first)
+            local function isSeal(i)
                 local nm = ent:GetName(i);
-                if nm and nm ~= '' and nm:lower() == 'venture seal' then
+                return nm and nm ~= '' and nm:lower() == 'venture seal';
+            end
+            local order = {};
+            if SL.idx then order[1] = SL.idx; end
+            for i = 1, MAX_ENTITY_IDX do if i ~= SL.idx then order[#order + 1] = i; end end
+            for _, i in ipairs(order) do
+                if isSeal(i) then
+                    SL.idx = i;
                     local ex, ey, eh = entPos(i);
                     if ex then
                         SEAL_SCAN.x, SEAL_SCAN.y, SEAL_SCAN.h = ex, ey, eh;
