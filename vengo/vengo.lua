@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.22';
+addon.version = '4.23';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -73,6 +73,7 @@ local config = {
     trail_color = 'pink',      -- the chevrons' colour
     trail_style = 'solid',     -- lines | bands | solid
     theme = 'pink',            -- the window's accent colours (Settings > Colours)
+    lite = false,              -- Lightweight mode: the same features, less work each frame
     bg = 'violet',             -- the window's background
     trail_size = 'medium',     -- small | medium | large
 };
@@ -150,7 +151,7 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg' }) do
+    for _, k in ipairs({ 'transparent', 'minimized', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite' }) do
         local v = config[k];
         f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v)));
     end
@@ -2792,28 +2793,31 @@ pcall(ffi_.cdef, [[
 typedef struct { float m[16]; } VG_MAT;
 typedef int32_t (__stdcall *VG_GetTransform)(void* self, uint32_t state, VG_MAT* out);
 ]]);
-local CAM = { view = nil, proj = nil, cands = {}, tries = 0, mat = nil, pick = nil };
+local CAM = { view = nil, proj = nil, cands = {}, tries = 0, on = false, frame = 0, me = nil };
+-- (CAM.on: look at the game's draws this frame at all. It's off unless arrows are wanted, and it switches itself
+--  off the moment the world's camera has been seen, so most of the game's draws cost one check.)
 
-local function device()
-    local ok, d = pcall(function () return require('d3d8').get_device(); end);
-    if ok and d ~= nil then return d; end
-    return nil;
+-- The device and its GetTransform, found once
+function CAM.init()
+    local ok = pcall(function ()
+        local dev = require('d3d8').get_device();
+        if dev == nil then return; end
+        local p = ffi_.cast('void*', dev);
+        local vt = ffi_.cast('void**', ffi_.cast('void**', p)[0]);
+        CAM.dev, CAM.get = p, ffi_.cast('VG_GetTransform', vt[38]);      -- IDirect3DDevice8::GetTransform
+        CAM.mv, CAM.mp = ffi_.new('VG_MAT'), ffi_.new('VG_MAT');
+    end);
+    if not ok or CAM.get == nil then TRAIL.cam = 'no Direct3D device'; CAM.dead = true; end
 end
 
-local function readMatrix(dev, which)
-    local out = CAM.mat or ffi_.new('VG_MAT');
-    CAM.mat = out;
-    local p = ffi_.cast('void*', dev);
-    local vt = ffi_.cast('void**', ffi_.cast('void**', p)[0]);
-    local fn = ffi_.cast('VG_GetTransform', vt[38]);            -- IDirect3DDevice8::GetTransform
-    if fn(p, which, out) ~= 0 then return nil; end
-    local m = {};
+local function toTable(m)
+    local out = {};
     for i = 0, 15 do
-        local v = out.m[i];
+        local v = m.m[i];
         if v ~= v or v > 1e9 or v < -1e9 then return nil; end  -- (not a number)
-        m[i + 1] = v;
+        out[i + 1] = v;
     end
-    return m;
+    return out;
 end
 
 -- Is it a 3D camera (perspective), not the interface's flat one?
@@ -2829,23 +2833,43 @@ end
 
 -- Called for the game's draws: every different 3D camera of the frame is kept (the sky's, the world's, the
 -- equipment preview's...); the one standing a few yalms from you is picked when drawing
-local function camSample()
-    if CAM.tries > 3000 or #CAM.cands >= 8 then return; end
-    CAM.tries = CAM.tries + 1;
-    local ok = pcall(function ()
-        local dev = device();
-        if dev == nil then TRAIL.cam = 'no Direct3D device'; return; end
-        local vm = readMatrix(dev, 2);
-        if vm == nil then return; end
-        for _, c in ipairs(CAM.cands) do
-            if math.abs(c.view[13] - vm[13]) < 0.01 and math.abs(c.view[14] - vm[14]) < 0.01 and math.abs(c.view[15] - vm[15]) < 0.01
-                and math.abs(c.view[1] - vm[1]) < 0.001 then return; end
+local function camSampleInner()
+    if CAM.get == nil then CAM.init(); if CAM.get == nil then CAM.on = false; return; end end
+    local mv = CAM.mv;
+    if CAM.get(CAM.dev, 2, mv) ~= 0 then return; end
+    local m = mv.m;
+    for _, c in ipairs(CAM.cands) do                         -- (the same camera as one already kept: nothing to do)
+        local v = c.view;
+        if math.abs(v[13] - m[12]) < 0.01 and math.abs(v[14] - m[13]) < 0.01 and math.abs(v[15] - m[14]) < 0.01
+            and math.abs(v[1] - m[0]) < 0.001 then return; end
+    end
+    if CAM.get(CAM.dev, 3, CAM.mp) ~= 0 then return; end
+    local pm = toTable(CAM.mp);
+    if not perspective(pm) then return; end
+    local vm = toTable(mv);
+    if vm == nil then return; end
+    CAM.cands[#CAM.cands + 1] = { view = vm, proj = pm };
+    local me = CAM.me;                                       -- (the world's camera: a few yalms from you, looking at you. Done for this frame.)
+    if me then
+        local cx, cy, cz = camPos(vm);
+        if (cx - me[1]) ^ 2 + (cy - me[2]) ^ 2 + (cz - me[3]) ^ 2 < 3600 then
+            local x, y, z = me[1], me[2], me[3];
+            local vx = x * vm[1] + y * vm[5] + z * vm[9]  + vm[13];
+            local vy = x * vm[2] + y * vm[6] + z * vm[10] + vm[14];
+            local vz = x * vm[3] + y * vm[7] + z * vm[11] + vm[15];
+            local cxp = vx * pm[1] + vy * pm[5] + vz * pm[9]  + pm[13];
+            local cyp = vx * pm[2] + vy * pm[6] + vz * pm[10] + pm[14];
+            local cw  = vx * pm[4] + vy * pm[8] + vz * pm[12] + pm[16];
+            if cw > 0.05 and math.abs(cxp / cw) < 0.8 and math.abs(cyp / cw) < 0.9 then CAM.on = false; end
         end
-        local pm = readMatrix(dev, 3);
-        if not perspective(pm) then return; end
-        CAM.cands[#CAM.cands + 1] = { view = vm, proj = pm };
-    end);
-    if not ok then TRAIL.cam = 'could not be read'; end
+    end
+    if #CAM.cands >= 8 then CAM.on = false; end
+end
+local function camSample()
+    if not CAM.on then return; end
+    CAM.tries = CAM.tries + 1;
+    if CAM.tries > CAM.max then CAM.on = false; return; end
+    if not pcall(camSampleInner) then TRAIL.cam = 'could not be read'; CAM.on = false; end
 end
 
 -- World (x, y, z, D3D order) -> screen x, y and depth (nil if behind the camera)
@@ -2894,6 +2918,7 @@ local function calibrate(px, py, ph)
     end
     if best == nil then return false; end
     CAM.view, CAM.proj = best.c.view, best.c.proj;
+    CAM.me = best.me;
     TRAIL.order = best.ord;
     -- up: the camera is above you
     local vert = (best.ord == 1) and 2 or 3;
@@ -2933,9 +2958,28 @@ function SL.find(z)
     if SL.spots == nil then SL.load(); end
     local SEALS, SEAL_SCAN = SL.spots, SL;
     local now = os.clock();
-    if SEAL_SCAN.zone ~= z then SEAL_SCAN.zone, SEAL_SCAN.x = z, nil; SEAL_SCAN.at = 0; end
-    if now - SEAL_SCAN.at > 0.5 then
+    if SEAL_SCAN.zone ~= z then SEAL_SCAN.zone, SEAL_SCAN.x, SEAL_SCAN.idx, SEAL_SCAN.full = z, nil, nil, 0; SEAL_SCAN.at = 0; end
+    if now - SEAL_SCAN.at > (config.lite and 1.0 or 0.5) then
         SEAL_SCAN.at = now;
+        -- (where it was last time: just that slot; otherwise the whole list, every 2 s, or 4 s in Lightweight)
+        if SL.idx and SEAL_SCAN.x then
+            local ok_ = false;
+            pcall(function ()
+                local nm = mm():GetEntity():GetName(SL.idx);
+                if nm and nm:lower() == 'venture seal' then
+                    local ex, ey, eh = entPos(SL.idx);
+                    if ex then SEAL_SCAN.x, SEAL_SCAN.y, SEAL_SCAN.h = ex, ey, eh; ok_ = true; end
+                end
+            end);
+            if ok_ then return SEAL_SCAN.x, SEAL_SCAN.y, SEAL_SCAN.h, true; end
+        end
+        if now - (SEAL_SCAN.full or 0) < (config.lite and 4 or 2) then
+            SEAL_SCAN.x = nil;
+            local s0 = SEALS[z];
+            if s0 then return s0.x, s0.y, s0.h, false; end
+            return nil;
+        end
+        SEAL_SCAN.full = now;
         SEAL_SCAN.x = nil;
         pcall(function ()
             local ent = mm():GetEntity();
@@ -3017,11 +3061,20 @@ TRF.trailGo = function(v)
 end
 
 trailTick = function(now)
-    CAM.cands, CAM.tries = {}, 0;                            -- (fresh cameras next frame)
+    -- Look at the game's draws next frame only while arrows are up (Lightweight: one frame in three, the last
+    -- camera kept in between). Otherwise VenGo leaves the game's drawing alone.
+    CAM.frame = CAM.frame + 1;
+    local want = TRAIL.wanted and not CAM.dead;
+    if want and config.lite and CAM.view and CAM.frame % 3 ~= 0 then want = false; end
+    if want then CAM.cands, CAM.tries = {}, 0; end
+    CAM.max = config.lite and 250 or 800;
+    CAM.on = want;
 end
 
 local function glowLine(dl, a, b, col, w, glow)
-    if glow then
+    if glow and config.lite then                              -- (Lightweight: one soft pass)
+        dl:AddLine(a, b, u32({ col[1], col[2], col[3], col[4] * 0.18 }), w * 2.6);
+    elseif glow then
         dl:AddLine(a, b, u32({ col[1], col[2], col[3], col[4] * 0.10 }), w * 3.2);
         dl:AddLine(a, b, u32({ col[1], col[2], col[3], col[4] * 0.22 }), w * 1.9);
     end
@@ -3029,21 +3082,25 @@ local function glowLine(dl, a, b, col, w, glow)
 end
 
 drawTrail = function()
+    TRAIL.wanted = false;
     if not config.trail and TRAIL.forced == nil then return; end
     local v, tx, ty, kind, th = trailTarget();
     if v == nil or (not config.trail and TRAIL.forced ~= v.key) then TRAIL.v = nil; return; end
+    TRAIL.wanted = true;
     TRAIL.kind = kind;
     local px, py, ph = pos();
     if px == nil then return; end
-    if #CAM.cands == 0 then camSample(); end                 -- (no draw calls seen: try now)
     local now = os.clock();
-    if not calibrate(px, py, ph) then
+    local fresh = (#CAM.cands > 0);
+    if not fresh and CAM.view == nil then CAM.on, CAM.max, CAM.tries = true, 1, 0; camSample(); fresh = (#CAM.cands > 0); end   -- (no draws seen: try now)
+    if fresh and not calibrate(px, py, ph) then
         if TRAIL.cam == 'not read yet' or TRAIL.cam:find('^found') then
             TRAIL.cam = (#CAM.cands == 0) and 'no 3D camera seen (VanaCore may not pass the game\'s draws to addons)'
                 or ('%d cameras seen, none near you'):format(#CAM.cands);
         end
         return;
     end
+    if CAM.view == nil or TRAIL.order == nil then return; end
     TRAIL.v = v;
     local dist = dist2d(px, py, tx, ty);
     if dist < ((kind == 'grid') and TRAIL_NEAR or 2.5) then return; end
@@ -3063,7 +3120,7 @@ drawTrail = function()
         local col = trailColor();
         local glow = config.trail_glow ~= false;
         local ux, uy = (tx - px) / dist, (ty - py) / dist;    -- toward the VNM
-        local len = math.min(dist, TRAIL_LEN);
+        local len = math.min(dist, config.lite and 60 or TRAIL_LEN);   -- (Lightweight: arrows over the next 60 yalms)
 
         -- the chevrons, crawling toward the VNM, in the style and size picked in Settings
         local style = config.trail_style or 'solid';
@@ -3166,10 +3223,11 @@ drawTrail = function()
                                 local cc = { 0.6 + c[1] * 0.4, 0.6 + c[2] * 0.4, 0.6 + c[3] * 0.4, 0.95 * fade };
                                 for i = 1, 6 do glowLine(dl, P[i], P[i % 6 + 1], cc, wpx * 0.8, false); end
                                 if glow then
-                                    local gc = { c[1], c[2], c[3], 0.95 * fade };
+                                    local g1 = u32({ c[1], c[2], c[3], (config.lite and 0.16 or 0.10) * fade });
+                                    local g2 = u32({ c[1], c[2], c[3], 0.20 * fade });
                                     for i = 1, 6 do
-                                        dl:AddLine(P[i], P[i % 6 + 1], u32({ gc[1], gc[2], gc[3], 0.10 * fade }), wpx * 5);
-                                        dl:AddLine(P[i], P[i % 6 + 1], u32({ gc[1], gc[2], gc[3], 0.20 * fade }), wpx * 2.6);
+                                        dl:AddLine(P[i], P[i % 6 + 1], g1, wpx * (config.lite and 3.6 or 5));
+                                        if not config.lite then dl:AddLine(P[i], P[i % 6 + 1], g2, wpx * 2.6); end
                                     end
                                 end
                             else
@@ -3297,6 +3355,11 @@ end
 
 local function tabSettings()
     section('Window');
+    if rowSwitch('##vengo_lite', 'Lightweight mode', config.lite == true,
+            'The same features with less work each frame: the arrows read the camera one frame in three and reach 60 yalms ahead, the glow is one soft pass, and the Venture Seal is checked less often') then
+        config.lite = not config.lite;
+        saveSettings();
+    end
     if rowSwitch('##vengo_clear_sw', 'See-through window', config.transparent == true,
             'Lets the game show through the panel') then
         config.transparent = not config.transparent;
