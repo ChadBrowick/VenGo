@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.23';
+addon.version = '4.24';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -73,7 +73,15 @@ local config = {
     trail_color = 'pink',      -- the chevrons' colour
     trail_style = 'solid',     -- lines | bands | solid
     theme = 'pink',            -- the window's accent colours (Settings > Colours)
-    lite = false,              -- Lightweight mode: the same features, less work each frame
+    lite = false,              -- Lightweight mode: a quick preset for the sliders below
+    seal_check = 0.25,         -- seconds between looks at the Venture Seal's own slot
+    seal_scan = 0.5,           -- seconds between searches of the whole list for it
+    cam_every = 1,             -- read the camera every N frames (the last one is kept in between)
+    trail_range = 90,          -- yalms of arrows ahead of you
+    trail_scale = 1.0,         -- arrow size
+    trail_spacing = 1.0,       -- space between arrows
+    trail_speed = 5,           -- how fast they crawl (yalms a second)
+    glow_q = 2,                -- glow passes (1 lighter, 2 fuller)
     bg = 'violet',             -- the window's background
     trail_size = 'medium',     -- small | medium | large
 };
@@ -151,7 +159,8 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite' }) do
+    for _, k in ipairs({ 'transparent', 'minimized', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
+                           'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q' }) do
         local v = config[k];
         f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v)));
     end
@@ -2959,7 +2968,7 @@ function SL.find(z)
     local SEALS, SEAL_SCAN = SL.spots, SL;
     local now = os.clock();
     if SEAL_SCAN.zone ~= z then SEAL_SCAN.zone, SEAL_SCAN.x, SEAL_SCAN.idx, SEAL_SCAN.full = z, nil, nil, 0; SEAL_SCAN.at = 0; end
-    if now - SEAL_SCAN.at > (config.lite and 1.0 or 0.5) then
+    if now - SEAL_SCAN.at > (tonumber(config.seal_check) or 0.25) then
         SEAL_SCAN.at = now;
         -- (where it was last time: just that slot; otherwise the whole list, every 2 s, or 4 s in Lightweight)
         if SL.idx and SEAL_SCAN.x then
@@ -2973,7 +2982,7 @@ function SL.find(z)
             end);
             if ok_ then return SEAL_SCAN.x, SEAL_SCAN.y, SEAL_SCAN.h, true; end
         end
-        if now - (SEAL_SCAN.full or 0) < (config.lite and 4 or 2) then
+        if now - (SEAL_SCAN.full or 0) < (tonumber(config.seal_scan) or 0.5) then
             SEAL_SCAN.x = nil;
             local s0 = SEALS[z];
             if s0 then return s0.x, s0.y, s0.h, false; end
@@ -3041,6 +3050,106 @@ end
 
 TRF.trailPick = function(v) TRAIL.pick = v; end
 
+-- A slider row: name on the left, the slider at the right edge. Saved when you let go.
+function TRF.slider(id, text, key, lo, hi, fmt, tipText, int)
+    imgui.AlignTextToFramePadding();
+    imgui.TextColored(C.text, text);
+    if tipText and imgui.IsItemHovered() then imgui.SetTooltip(tipText); end
+    imgui.SameLine(ROW_W - 300);
+    imgui.PushItemWidth(300);
+    imgui.PushStyleColor(ImGuiCol_SliderGrab, { NEON2[1], NEON2[2], NEON2[3], 0.90 });
+    imgui.PushStyleColor(ImGuiCol_SliderGrabActive, { NEON2[1], NEON2[2], NEON2[3], 1.00 });
+    local val = { tonumber(config[key]) or lo };
+    local changed;
+    if int then changed = imgui.SliderInt(id, val, lo, hi, fmt);
+    else changed = imgui.SliderFloat(id, val, lo, hi, fmt); end
+    imgui.PopStyleColor(2);
+    imgui.PopItemWidth();
+    if tipText and imgui.IsItemHovered() then imgui.SetTooltip(tipText); end
+    if changed then
+        local v = val[1];
+        if int then v = math.floor(v + 0.5); end
+        config[key] = v;
+        TRF.dirty = true;
+        if key == 'trail_scale' then config.trail_size = 'custom'; end
+    end
+    if TRF.dirty and not imgui.IsAnyItemActive() then TRF.dirty = false; saveSettings(); end
+end
+
+TRF.sliders = function()
+    section('Arrows');
+    TRF.slider('##vengo_s_scale', 'Size', 'trail_scale', 0.4, 2.5, '%.2fx', 'How big each arrow is (Small 0.70, Medium 1.00, Large 1.40)');
+    TRF.slider('##vengo_s_space', 'Spacing', 'trail_spacing', 0.5, 3.0, '%.2fx', 'Space between arrows (or sets of three)');
+    TRF.slider('##vengo_s_speed', 'Speed', 'trail_speed', 0, 15, '%.1f yalms/s', 'How fast the arrows crawl toward the VNM (0: still)');
+    TRF.slider('##vengo_s_range', 'Reach', 'trail_range', 20, 150, '%.0f yalms', 'How far ahead of you arrows are drawn');
+    section('Performance');
+    TRF.slider('##vengo_s_seal', 'Venture Seal: check its spot', 'seal_check', 0.05, 2.0, 'every %.2f s', 'How often the Seal\'s own slot is looked at, once it\'s been found');
+    TRF.slider('##vengo_s_scan', 'Venture Seal: search for it', 'seal_scan', 0.1, 5.0, 'every %.2f s', 'How often the whole list is searched while the Seal hasn\'t been found yet (2,300 slots)');
+    TRF.slider('##vengo_s_cam', 'Camera: read it', 'cam_every', 1, 5, 'every %d frame(s)', 'Every frame is smoothest; every 2-5 frames costs less (the arrows may lag a fast camera spin a moment)', true);
+    TRF.slider('##vengo_s_glow', 'Glow passes', 'glow_q', 1, 2, '%d', '1: one soft pass (lighter)   2: fuller glow', true);
+    hint('Lower numbers for the Seal and camera are faster and smoother but cost a little more. Lightweight mode (under Window) sets these in one click.');
+end
+
+-- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
+local PRESET_KEYS = { 'transparent', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
+    'trail', 'trail_glow', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
+    'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q' };
+function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
+function TRF.loadPresets()
+    TRF.slots = {};
+    local chunk = loadfile(TRF.presetFile());
+    if chunk then local ok, t_ = pcall(chunk); if ok and type(t_) == 'table' then TRF.slots = t_; end end
+end
+function TRF.savePresets()
+    local f = io.open(TRF.presetFile(), 'w');
+    if f == nil then return; end
+    f:write('-- VenGo preset slots (written by VenGo)\nreturn {\n');
+    for i = 1, 3 do
+        local s = TRF.slots[i];
+        if s then
+            f:write(('  [%d] = { at = %q, cfg = {\n'):format(i, s.at or ''));
+            for _, k in ipairs(PRESET_KEYS) do
+                local v = s.cfg[k];
+                if v ~= nil then f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v))); end
+            end
+            f:write('  } },\n');
+        end
+    end
+    f:write('}\n');
+    f:close();
+end
+TRF.presets = function()
+    if TRF.slots == nil then TRF.loadPresets(); end
+    section('Presets');
+    for i = 1, 3 do
+        local s = TRF.slots[i];
+        imgui.AlignTextToFramePadding();
+        imgui.TextColored(C.text, ('Slot %d'):format(i));
+        imgui.SameLine(0, 14);
+        imgui.TextColored(C.muted, s and ('saved ' .. (s.at or '')) or 'empty');
+        imgui.SameLine(ROW_W - 250);
+        if button(('SAVE##vengo_ps%d'):format(i), { 120, 0 }, true, true) then
+            local c_ = {};
+            for _, k in ipairs(PRESET_KEYS) do c_[k] = config[k]; end
+            TRF.slots[i] = { at = os.date('%b %d  %I:%M %p'), cfg = c_ };
+            TRF.savePresets();
+            msg(('Settings saved to slot %d.'):format(i));
+        end
+        imgui.SameLine(0, 10);
+        if s then
+            if button(('LOAD##vengo_pl%d'):format(i), { 120, 0 }, false, true) then
+                for _, k in ipairs(PRESET_KEYS) do if s.cfg[k] ~= nil then config[k] = s.cfg[k]; end end
+                pcall(C.apply);
+                saveSettings();
+                msg(('Settings loaded from slot %d.'):format(i));
+            end
+        else
+            button(('LOAD##vengo_pl%d'):format(i), { 120, 0 }, true, true);
+        end
+    end
+    hint('SAVE keeps every setting (colours, arrows, performance, alerts, window) in that slot; LOAD puts them all back.');
+end
+
 -- Are the arrows up for this venture right now?
 TRF.trailShowing = function(v)
     return v ~= nil and TRAIL.v == v and TRAIL.stopped ~= v.key and zone() == v.zone and (config.trail or TRAIL.forced == v.key);
@@ -3065,14 +3174,15 @@ trailTick = function(now)
     -- camera kept in between). Otherwise VenGo leaves the game's drawing alone.
     CAM.frame = CAM.frame + 1;
     local want = TRAIL.wanted and not CAM.dead;
-    if want and config.lite and CAM.view and CAM.frame % 3 ~= 0 then want = false; end
+    local ce = math.max(1, math.floor(tonumber(config.cam_every) or 1));
+    if want and ce > 1 and CAM.view and CAM.frame % ce ~= 0 then want = false; end
     if want then CAM.cands, CAM.tries = {}, 0; end
-    CAM.max = config.lite and 250 or 800;
+    CAM.max = 800;
     CAM.on = want;
 end
 
 local function glowLine(dl, a, b, col, w, glow)
-    if glow and config.lite then                              -- (Lightweight: one soft pass)
+    if glow and (tonumber(config.glow_q) or 2) < 2 then       -- (one soft pass)
         dl:AddLine(a, b, u32({ col[1], col[2], col[3], col[4] * 0.18 }), w * 2.6);
     elseif glow then
         dl:AddLine(a, b, u32({ col[1], col[2], col[3], col[4] * 0.10 }), w * 3.2);
@@ -3120,20 +3230,22 @@ drawTrail = function()
         local col = trailColor();
         local glow = config.trail_glow ~= false;
         local ux, uy = (tx - px) / dist, (ty - py) / dist;    -- toward the VNM
-        local len = math.min(dist, config.lite and 60 or TRAIL_LEN);   -- (Lightweight: arrows over the next 60 yalms)
+        local RANGE = tonumber(config.trail_range) or TRAIL_LEN;
+        local len = math.min(dist, RANGE);
 
         -- the chevrons, crawling toward the VNM, in the style and size picked in Settings
         local style = config.trail_style or 'solid';
-        local SZ = ({ small = 0.7, medium = 1.0, large = 1.4 })[config.trail_size or 'medium'] or 1.0;
+        local SZ = tonumber(config.trail_scale) or 1.0;
+        local SP = tonumber(config.trail_spacing) or 1.0;
         local mix = (config.trail_color == 'neon');
         local NEON_MIX = { { 0.25, 0.65, 1.00 }, { 1.00, 0.55, 0.20 }, { 0.68, 0.42, 1.00 }, { 0.20, 0.92, 0.85 } };
         local SOLID_MIX = { { 1.00, 0.42, 0.18 }, { 0.15, 0.90, 0.85 }, { 0.30, 0.55, 1.00 } };   -- (orange, teal, blue)
         local nx, ny = -uy, ux;                                -- across the path
-        local phase = now * 5;
+        local phase = now * (tonumber(config.trail_speed) or 5);
 
         if style == 'lines' then
             -- the first look: two glowing lines meeting at a point, flat on the screen
-            local every = 4;
+            local every = 4 * SP;
             local off = phase % every;
             local first = math.floor(phase / every);
             local k = 0;
@@ -3148,7 +3260,7 @@ drawTrail = function()
                         dx, dy = dx / l, dy / l;
                         local c = mix and NEON_MIX[((k - first) % #NEON_MIX) + 1] or col;
                         local size = math.max(3, math.min(18, 260 / sw)) * SZ;
-                        local fade = 1 - (d / TRAIL_LEN) * 0.6;
+                        local fade = 1 - (d / RANGE) * 0.6;
                         local l1 = { sx - dx * size * 0.8 - dy * size * 0.6, sy - dy * size * 0.8 + dx * size * 0.6 };
                         local l2 = { sx - dx * size * 0.8 + dy * size * 0.6, sy - dy * size * 0.8 - dx * size * 0.6 };
                         local wpx = math.max(1.5, math.min(5, 60 / sw)) * math.sqrt(SZ);
@@ -3167,7 +3279,7 @@ drawTrail = function()
             local solid = (style == 'solid');
             local A, Wd, T = 1.1 * SZ, 1.4 * SZ, (solid and 0.8 or 0.6) * SZ;
             local TC, TS = math.cos(math.rad(35)), math.sin(math.rad(35));
-            local every = solid and 9 * SZ or 5 * SZ;              -- (a set of three, or one)
+            local every = (solid and 9 * SZ or 5 * SZ) * SP;       -- (a set of three, or one)
             local per = solid and 3 or 1;
             local gap = 1.55 * A;                                   -- (within a set)
             local off = phase % every;
@@ -3205,7 +3317,7 @@ drawTrail = function()
                             local c;
                             if solid then c = mix and SOLID_MIX[j + 1] or col;
                             else c = mix and NEON_MIX[((k - first) % #NEON_MIX) + 1] or col; end
-                            local fade = 1 - (d / TRAIL_LEN) * 0.6;
+                            local fade = 1 - (d / RANGE) * 0.6;
                             local wpx = math.max(1.2, math.min(3.5, 45 / P.w));
                             local function quads(Q, colr)
                                 dl:AddQuadFilled(Q[1], Q[2], Q[3], Q[4], colr);
@@ -3223,11 +3335,12 @@ drawTrail = function()
                                 local cc = { 0.6 + c[1] * 0.4, 0.6 + c[2] * 0.4, 0.6 + c[3] * 0.4, 0.95 * fade };
                                 for i = 1, 6 do glowLine(dl, P[i], P[i % 6 + 1], cc, wpx * 0.8, false); end
                                 if glow then
-                                    local g1 = u32({ c[1], c[2], c[3], (config.lite and 0.16 or 0.10) * fade });
+                                    local lightg = (tonumber(config.glow_q) or 2) < 2;
+                                    local g1 = u32({ c[1], c[2], c[3], (lightg and 0.16 or 0.10) * fade });
                                     local g2 = u32({ c[1], c[2], c[3], 0.20 * fade });
                                     for i = 1, 6 do
-                                        dl:AddLine(P[i], P[i % 6 + 1], g1, wpx * (config.lite and 3.6 or 5));
-                                        if not config.lite then dl:AddLine(P[i], P[i % 6 + 1], g2, wpx * 2.6); end
+                                        dl:AddLine(P[i], P[i % 6 + 1], g1, wpx * (lightg and 3.6 or 5));
+                                        if not lightg then dl:AddLine(P[i], P[i % 6 + 1], g2, wpx * 2.6); end
                                     end
                                 end
                             else
@@ -3300,8 +3413,10 @@ trailSettings = function()
     imgui.AlignTextToFramePadding();
     imgui.TextColored(C.text, 'Arrow size');
     imgui.SameLine(ROW_W - 400);
-    local szc = pillChoice('##vengo_tsize', { { 'small', 'SMALL' }, { 'medium', 'MEDIUM' }, { 'large', 'LARGE' } }, config.trail_size or 'medium');
-    if szc then config.trail_size = szc; saveSettings(); end
+    local sc_ = tonumber(config.trail_scale) or 1;
+    local szcur = (math.abs(sc_ - 0.7) < 0.01 and 'small') or (math.abs(sc_ - 1) < 0.01 and 'medium') or (math.abs(sc_ - 1.4) < 0.01 and 'large') or '';
+    local szc = pillChoice('##vengo_tsize', { { 'small', 'SMALL' }, { 'medium', 'MEDIUM' }, { 'large', 'LARGE' } }, szcur);
+    if szc then config.trail_size = szc; config.trail_scale = ({ small = 0.7, medium = 1.0, large = 1.4 })[szc]; saveSettings(); end
     imgui.AlignTextToFramePadding();
     imgui.TextColored(C.text, 'Arrow colour');
     imgui.SameLine(ROW_W - #TRAIL_COLORS * 30 + 4);
@@ -3356,8 +3471,11 @@ end
 local function tabSettings()
     section('Window');
     if rowSwitch('##vengo_lite', 'Lightweight mode', config.lite == true,
-            'The same features with less work each frame: the arrows read the camera one frame in three and reach 60 yalms ahead, the glow is one soft pass, and the Venture Seal is checked less often') then
+            'A quick preset for the Performance sliders: camera every 3 frames, arrows to 60 yalms, one glow pass, the Seal checked every 0.5 s. Off puts the normal values back. Move any slider after to fine-tune.') then
         config.lite = not config.lite;
+        local P_ = config.lite and { cam_every = 3, trail_range = 60, glow_q = 1, seal_check = 0.5, seal_scan = 1.0 }
+            or { cam_every = 1, trail_range = 90, glow_q = 2, seal_check = 0.25, seal_scan = 0.5 };
+        for k, v in pairs(P_) do config[k] = v; end
         saveSettings();
     end
     if rowSwitch('##vengo_clear_sw', 'See-through window', config.transparent == true,
@@ -3452,6 +3570,8 @@ local function tabSettings()
     hint('Stand at a Home Point, Survival Guide or Unity NPC and press GO. Pressed anywhere else, GO waits 3 minutes and warps the moment you walk up to one. It picks the warp that lands closest to the VNM.');
 
     trailSettings();
+    TRF.sliders();
+    TRF.presets();
 
     section('Ventures data');
     if rowSwitch('##vengo_cw', 'Crystal Warrior zones (CW)', config.mode == 'CW',
