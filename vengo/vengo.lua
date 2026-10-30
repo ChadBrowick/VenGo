@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.25';
+addon.version = '4.26';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1684,7 +1684,7 @@ local WIN_W = SW + 30 + MARGIN + FULL_ROW + 50;         -- starting size; the wi
 local WIN_H = 700;
 local MIN_W, MIN_H = 640, 460;
 
-local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'SETTINGS', 'SPECIAL THANKS' };
+local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'SETTINGS', 'SPECIAL THANKS' };
 ui.tab = ui.tab or 1;
 
 local function statusText()
@@ -2368,7 +2368,7 @@ end
 
 -- The menu: dots, the chosen one lit pink fading to the right with a bright
 -- left edge and a small arrow beside it
-local GROUPS = { [5] = true };          -- (a faint line before SETTINGS)
+local GROUPS = { [7] = true };          -- (a faint line before SETTINGS)
 
 local function sidebar(dl, x0, y0, sw)
     local y = y0;
@@ -2712,8 +2712,6 @@ local function tabVentures(z)
         imgui.TextColored(hcol or C.text, hlab);
         if h.loot and #h.loot > 0 then pills(h.loot, h.lootItems); end
     end
-
-    TRF.weekly();
 
     section('EXP Ventures');
     local p = pillChoice('##vengo_pool', { { 'all', 'ALL POOLS' }, { 'A', 'POOL A' }, { 'B', 'POOL B' } }, config.pool);
@@ -3153,44 +3151,88 @@ function TRF.slider(id, text, key, lo, hi, fmt, tipText, int)
     if TRF.dirty and not imgui.IsAnyItemActive() then TRF.dirty = false; saveSettings(); end
 end
 
--- Hunter of the week and Summit of the Stars (from catseyexi.com/events), on the Ventures tab
-TRF.weekly = function()
-    local X = SITE.x;
-    if not config.website or (X.hunter == nil and X.summit == nil) then return; end
-    section('This week');
+-- Hunter of the week and Summit of the Stars (from catseyexi.com/events): their own tabs
+function TRF.row(label, text, col, sub, lw)
     local dl = imgui.GetWindowDrawList();
-    local lw = 120;
-    local function row(label, text, col, sub)
-        local x0 = imgui.GetCursorPosX();
-        local sx, sy = imgui.GetCursorScreenPos();
-        spaced(dl, sx, sy + 1, label, u32(C.label), 1.5);
-        imgui.SetCursorPosX(x0 + lw);
-        imgui.TextColored(col or C.text, text);
-        if sub and sub ~= '' then imgui.SameLine(0, 10); imgui.TextColored(C.muted, sub); end
-    end
-    local H = X.hunter;
-    if H then
-        local cw = (config.mode == 'CW');
-        for _, m in ipairs({ { 'ace', 'HUNT  ACE', not cw }, { 'cw', 'HUNT  CW', cw } }) do
-            local e = H[m[1]];
-            if type(e) == 'table' and e.name then
-                row(m[2], tostring(e.name), m[3] and C.acc or C.muted,
-                    tostring(e.zone or '') .. (e.points and ('  ·  ' .. e.points .. ' pts') or ''));
-            end
+    local x0 = imgui.GetCursorPosX();
+    local sx, sy = imgui.GetCursorScreenPos();
+    spaced(dl, sx, sy + 1, label, u32(C.label), 1.5);
+    imgui.SetCursorPosX(x0 + (lw or 120));
+    imgui.TextColored(col or C.text, text);
+    if sub and sub ~= '' then imgui.SameLine(0, 10); imgui.TextColored(C.muted, sub); end
+end
+function TRF.dur(s)
+    s = math.max(0, math.floor(s));
+    if s >= 86400 then return ('%dd %dh %02dm'):fmt(math.floor(s / 86400), math.floor(s % 86400 / 3600), math.floor(s % 3600 / 60)); end
+    return ('%dh %02dm %02ds'):fmt(math.floor(s / 3600), math.floor(s % 3600 / 60), s % 60);
+end
+-- Conquest Tally: when catseyexi.com/events counts down to (Sunday 16:00 UTC)
+function TRF.tallyLeft()
+    local now = os.time();
+    local u = os.date('!*t', now);
+    local secs = ((u.wday - 1) * 86400) + u.hour * 3600 + u.min * 60 + u.sec;   -- (since Sunday 00:00 UTC)
+    local target = 16 * 3600;                                                   -- (Sunday 16:00 UTC)
+    local left = target - secs;
+    if left <= 0 then left = left + 7 * 86400; end
+    return left;
+end
+function TRF.noData(what)
+    if not config.website then hint('Turn on "Update from catseyexi.com/events" in Settings to see ' .. what .. '.');
+    elseif SITE.x.pending then hint('Getting ' .. what .. ' from catseyexi.com...');
+    else hint('No ' .. what .. ' from catseyexi.com yet. It\'s fetched in the background; check back in a moment.'); end
+end
+TRF.hunterTab = function()
+    section('Hunter of the week');
+    local H = SITE.x.hunter;
+    if not config.website or H == nil then TRF.noData('the hunt'); return; end
+    local cw = (config.mode == 'CW');
+    for _, m in ipairs({ { 'ace', 'ACE', not cw }, { 'cw', 'CRYSTAL WARRIOR', cw } }) do
+        local e = H[m[1]];
+        if type(e) == 'table' and e.name then
+            imgui.Spacing();
+            local dl = imgui.GetWindowDrawList();
+            local sx, sy = imgui.GetCursorScreenPos();
+            spaced(dl, sx, sy, m[2] .. (m[3] and '   (your mode)' or ''), u32(m[3] and C.acc or C.label), 2);
+            imgui.Dummy({ ROW_W, imgui.GetTextLineHeight() + 4 });
+            local big = pushFont(fonts.big, 24);
+            imgui.TextColored(m[3] and C.active or C.text, tostring(e.name));
+            if big then imgui.PopFont(); end
+            imgui.TextColored(C.muted, tostring(e.zone or '?') .. (e.points and ('   ·   ' .. e.points .. ' points') or ''));
+            imgui.Spacing();
         end
-        hint('Hunter of the week: the NM to hunt for points. Resets at ' .. tostring(H.resetsAt or 'Conquest Tally') .. '.');
     end
-    local S = X.summit;
-    if S and S.currentObjective then
-        local left = X.summitEnd and (X.summitEnd - os.time()) or nil;
-        local lt;
-        if left == nil then lt = '';
-        elseif left <= 0 then lt = 'changing now...';
-        else lt = ('%dh %02dm %02ds left'):fmt(math.floor(left / 3600), math.floor(left % 3600 / 60), left % 60); end
-        row('SUMMIT', tostring(S.currentObjective.familyName or '?'), C.active, lt);
-        local B = S.currentBuff;
-        if type(B) == 'table' and B.name then row('BUFF', tostring(B.name), C.seal, tostring(B.description or '')); end
-        hint('Summit of the Stars: defeat the target family for the server-wide buff.');
+    imgui.Spacing();
+    TRF.row('RESETS', 'Conquest Tally', C.text, 'in ' .. TRF.dur(TRF.tallyLeft()));
+    hint('Weekly NM hunting targets, different for ACE and Crystal Warrior. Defeat yours for points; both change at Conquest Tally.');
+    if SITE.x.at then hint('From catseyexi.com/events, updated ' .. (math.floor((os.time() - SITE.x.at) / 60)) .. ' min ago.'); end
+end
+TRF.summitTab = function()
+    section('Summit of the Stars');
+    local S = SITE.x.summit;
+    if not config.website or S == nil or S.currentObjective == nil then TRF.noData('the Summit'); return; end
+    local left = SITE.x.summitEnd and (SITE.x.summitEnd - os.time()) or nil;
+    local dl = imgui.GetWindowDrawList();
+    local sx, sy = imgui.GetCursorScreenPos();
+    spaced(dl, sx, sy, 'CURRENT TARGET', u32(C.label), 2);
+    imgui.Dummy({ ROW_W, imgui.GetTextLineHeight() + 4 });
+    local big = pushFont(fonts.big, 28);
+    imgui.TextColored(C.active, tostring(S.currentObjective.familyName or '?'));
+    if big then imgui.PopFont(); end
+    if left == nil then imgui.TextColored(C.muted, '');
+    elseif left <= 0 then imgui.TextColored(C.muted, 'Changing now...');
+    else imgui.TextColored(C.text, TRF.dur(left) .. ' left'); end
+    imgui.Spacing(); imgui.Spacing();
+    local B = S.currentBuff;
+    if type(B) == 'table' and B.name then
+        TRF.row('BUFF', tostring(B.name), C.seal, tostring(B.description or ''), 90);
+    end
+    hint('Defeat monsters of the target family together to earn the server-wide buff. The target changes every few hours; VenGo updates the moment it does.');
+    if type(S.allBuffs) == 'table' and #S.allBuffs > 0 then
+        section('All Summit buffs');
+        for _, b in ipairs(S.allBuffs) do
+            local on = type(B) == 'table' and b.id == B.id;
+            TRF.row(on and 'NOW' or '', tostring(b.name or '?'), on and C.seal or C.text, tostring(b.description or ''), 60);
+        end
     end
 end
 
@@ -3981,8 +4023,10 @@ local function drawUI()
             elseif ui.tab == 2 then tabHelm();
             elseif ui.tab == 3 then tabFishing();
             elseif ui.tab == 4 then tabDynamis();
-            elseif ui.tab == 5 then tabSettings();
-            elseif ui.tab == 6 then tabThanks();
+            elseif ui.tab == 5 then TRF.hunterTab();
+            elseif ui.tab == 6 then TRF.summitTab();
+            elseif ui.tab == 7 then tabSettings();
+            elseif ui.tab == 8 then tabThanks();
             end
         end);
         if not ok then imgui.TextColored({ C.hp[1], C.hp[2], C.hp[3], 1 }, 'Window error: ' .. tostring(err)); end
