@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.24';
+addon.version = '4.25';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1262,11 +1262,86 @@ siteTick = function(now)
     if now - siteTickAt < 1 then return; end
     siteTickAt = now;
     siteCheck(true);
+    pcall(SITE.xTick);
     if SITE.pending then return; end
     local now2 = os.time();
     if now2 >= (SITE.nextAt or 0) and (SITE.nextAt == 0 or siteDue()) then
         SITE.nextAt = now2 + 300;                                    -- (a failed try waits 5 minutes)
         siteAsk();
+    end
+end
+
+-- Hunter of the week and Summit of the Stars, from the same site (its Events page feeds): fetched together in the
+-- background at load, again the moment the Summit's target changes, and every 30 minutes
+SITE.x = { pending = false, at = nil, asked = nil, hunter = nil, summit = nil, summitEnd = nil, nextAt = 0 };
+local X_URLS = { hunter = 'https://catseyexi.com/api/events/hunter', summit = 'https://catseyexi.com/api/summit' };
+function SITE.xFile(k, tmp) return addon.path .. 'site_' .. k .. (tmp and '.tmp' or '.json'); end
+function SITE.xApply(k, data, at)
+    local X = SITE.x;
+    if k == 'hunter' and type(data) == 'table' and (data.ace or data.cw) then X.hunter = data; end
+    if k == 'summit' and type(data) == 'table' and data.currentObjective then
+        X.summit = data;
+        local tr = data.currentObjective.timeRemaining;
+        local secs = type(tr) == 'table' and tonumber(tr.total) or nil;
+        X.summitEnd = secs and (at + secs) or nil;
+    end
+end
+function SITE.xAsk()
+    local X = SITE.x;
+    if X.pending then return; end
+    os.remove(SITE.xFile('hunter', true)); os.remove(SITE.xFile('summit', true));
+    local ok = pcall(function ()
+        local ffi = require('ffi');
+        pcall(ffi.cdef, 'void* __stdcall ShellExecuteA(void* hwnd, const char* op, const char* file, const char* params, const char* dir, int show);');
+        local args = ('-s -f -L -m %d -A "VenGo/%s" -o "%s" "%s" -o "%s" "%s"'):format(SITE_WAIT - 2, addon.version,
+            SITE.xFile('hunter', true), X_URLS.hunter, SITE.xFile('summit', true), X_URLS.summit);
+        local r = ffi.load('shell32').ShellExecuteA(nil, 'open', 'curl.exe', args, nil, 0);
+        if tonumber(ffi.cast('intptr_t', r)) <= 32 then error('curl.exe could not be started'); end
+    end);
+    if ok then X.pending, X.asked = true, os.time(); end
+end
+function SITE.xCheck()
+    local X = SITE.x;
+    if not X.pending then return; end
+    local now = os.time();
+    local h = jsonDecode(readAll(SITE.xFile('hunter', true)));
+    local s = jsonDecode(readAll(SITE.xFile('summit', true)));
+    if (h and s) or now - (X.asked or 0) > SITE_WAIT then
+        X.pending = false;
+        for k, d in pairs({ hunter = h, summit = s }) do
+            if d then
+                SITE.xApply(k, d, now);
+                pcall(function ()
+                    local f = io.open(SITE.xFile(k), 'wb');
+                    if f then f:write(readAll(SITE.xFile(k, true)) or ''); f:close(); end
+                end);
+            end
+            os.remove(SITE.xFile(k, true));
+        end
+        if h or s then
+            X.at = now;
+            local f = io.open(addon.path .. 'site_x_meta.lua', 'w');
+            if f then f:write(('return { at = %d }\n'):format(now)); f:close(); end
+        end
+    end
+end
+function SITE.xLoadCache()
+    local at = os.time();
+    pcall(function () local m = loadfile(addon.path .. 'site_x_meta.lua'); if m then local t_ = m(); at = tonumber(t_.at) or at; end end);
+    for _, k in ipairs({ 'hunter', 'summit' }) do
+        local d = jsonDecode(readAll(SITE.xFile(k)));
+        if d then SITE.xApply(k, d, at); SITE.x.at = at; end
+    end
+end
+function SITE.xTick()
+    local X = SITE.x;
+    SITE.xCheck();
+    if X.pending then return; end
+    local now = os.time();
+    local due = (X.at == nil) or (now - X.at >= 1800) or (X.summitEnd and now >= X.summitEnd + 20 and now - X.at > 60);
+    if due and now >= (X.nextAt or 0) then
+        X.nextAt = now + 60;                                         -- (a failed try waits a minute)
+        SITE.xAsk();
     end
 end
 
@@ -2638,6 +2713,8 @@ local function tabVentures(z)
         if h.loot and #h.loot > 0 then pills(h.loot, h.lootItems); end
     end
 
+    TRF.weekly();
+
     section('EXP Ventures');
     local p = pillChoice('##vengo_pool', { { 'all', 'ALL POOLS' }, { 'A', 'POOL A' }, { 'B', 'POOL B' } }, config.pool);
     if p then config.pool = p; saveSettings(); end
@@ -3074,6 +3151,47 @@ function TRF.slider(id, text, key, lo, hi, fmt, tipText, int)
         if key == 'trail_scale' then config.trail_size = 'custom'; end
     end
     if TRF.dirty and not imgui.IsAnyItemActive() then TRF.dirty = false; saveSettings(); end
+end
+
+-- Hunter of the week and Summit of the Stars (from catseyexi.com/events), on the Ventures tab
+TRF.weekly = function()
+    local X = SITE.x;
+    if not config.website or (X.hunter == nil and X.summit == nil) then return; end
+    section('This week');
+    local dl = imgui.GetWindowDrawList();
+    local lw = 120;
+    local function row(label, text, col, sub)
+        local x0 = imgui.GetCursorPosX();
+        local sx, sy = imgui.GetCursorScreenPos();
+        spaced(dl, sx, sy + 1, label, u32(C.label), 1.5);
+        imgui.SetCursorPosX(x0 + lw);
+        imgui.TextColored(col or C.text, text);
+        if sub and sub ~= '' then imgui.SameLine(0, 10); imgui.TextColored(C.muted, sub); end
+    end
+    local H = X.hunter;
+    if H then
+        local cw = (config.mode == 'CW');
+        for _, m in ipairs({ { 'ace', 'HUNT  ACE', not cw }, { 'cw', 'HUNT  CW', cw } }) do
+            local e = H[m[1]];
+            if type(e) == 'table' and e.name then
+                row(m[2], tostring(e.name), m[3] and C.acc or C.muted,
+                    tostring(e.zone or '') .. (e.points and ('  ·  ' .. e.points .. ' pts') or ''));
+            end
+        end
+        hint('Hunter of the week: the NM to hunt for points. Resets at ' .. tostring(H.resetsAt or 'Conquest Tally') .. '.');
+    end
+    local S = X.summit;
+    if S and S.currentObjective then
+        local left = X.summitEnd and (X.summitEnd - os.time()) or nil;
+        local lt;
+        if left == nil then lt = '';
+        elseif left <= 0 then lt = 'changing now...';
+        else lt = ('%dh %02dm %02ds left'):fmt(math.floor(left / 3600), math.floor(left % 3600 / 60), left % 60); end
+        row('SUMMIT', tostring(S.currentObjective.familyName or '?'), C.active, lt);
+        local B = S.currentBuff;
+        if type(B) == 'table' and B.name then row('BUFF', tostring(B.name), C.seal, tostring(B.description or '')); end
+        hint('Summit of the Stars: defeat the target family for the server-wide buff.');
+    end
 end
 
 TRF.sliders = function()
@@ -4022,6 +4140,7 @@ ashita.events.register('load', 'vengo_load', function ()
     loadLive();
     applyLive(false);
     siteLoadCache();
+    pcall(SITE.xLoadCache);
     if not loadWarps() then
         msg('Uberwarp\'s warp list wasn\'t found, so GO can\'t warp yet. See Settings > Warping.');
     end
