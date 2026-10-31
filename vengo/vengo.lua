@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.26';
+addon.version = '4.27';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1684,7 +1684,7 @@ local WIN_W = SW + 30 + MARGIN + FULL_ROW + 50;         -- starting size; the wi
 local WIN_H = 700;
 local MIN_W, MIN_H = 640, 460;
 
-local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'SETTINGS', 'SPECIAL THANKS' };
+local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'VNM ARMOR', 'SETTINGS', 'SPECIAL THANKS' };
 ui.tab = ui.tab or 1;
 
 local function statusText()
@@ -2368,7 +2368,7 @@ end
 
 -- The menu: dots, the chosen one lit pink fading to the right with a bright
 -- left edge and a small arrow beside it
-local GROUPS = { [7] = true };          -- (a faint line before SETTINGS)
+local GROUPS = { [8] = true };          -- (a faint line before SETTINGS)
 
 local function sidebar(dl, x0, y0, sw)
     local y = y0;
@@ -2829,6 +2829,7 @@ local THANKS = {
     { 'Commandobill, Seekey and Phatty', 'the ventures addon: the live venture board and the VNM list (drops, grid squares, notes)' },
     { 'Thorny', 'Uberwarp: the warps behind GO' },
     { 'GUST', 'the TeX Gyre Adventor font' },
+    { 'Loxley (Trove)', 'the VNM Armor collection data: the sets, tiers, drop zones and Storage Slip 01 (MIT licence, LICENSE-trove.txt)' },
 };
 
 local function tabThanks()
@@ -2857,7 +2858,6 @@ end
 local TRAIL, trailTick, drawTrail, trailSettings;
 do
 local TRAIL_LEN  = 90;         -- yalms of path drawn ahead of you
-local TRAIL_NEAR = 5;          -- yalms from the square's middle: the trail is done
 
 TRAIL = { pick = nil, v = nil, cam = 'not read yet', order = nil, up = nil, last = 0 };
 
@@ -2894,7 +2894,7 @@ function CAM.init()
     if not ok or CAM.get == nil then TRAIL.cam = 'no Direct3D device'; CAM.dead = true; end
 end
 
-local function toTable(m)
+function CAM.toTable(m)
     local out = {};
     for i = 0, 15 do
         local v = m.m[i];
@@ -2905,12 +2905,12 @@ local function toTable(m)
 end
 
 -- Is it a 3D camera (perspective), not the interface's flat one?
-local function perspective(pm)
+function CAM.perspective(pm)
     return pm and math.abs(pm[16]) < 0.001 and math.abs(math.abs(pm[12]) - 1) < 0.01;
 end
 
 -- Where a view matrix's camera stands in the world
-local function camPos(v)
+function CAM.camPos(v)
     local t1, t2, t3 = v[13], v[14], v[15];
     return -(t1 * v[1] + t2 * v[2] + t3 * v[3]), -(t1 * v[5] + t2 * v[6] + t3 * v[7]), -(t1 * v[9] + t2 * v[10] + t3 * v[11]);
 end
@@ -2928,14 +2928,14 @@ local function camSampleInner()
             and math.abs(v[1] - m[0]) < 0.001 then return; end
     end
     if CAM.get(CAM.dev, 3, CAM.mp) ~= 0 then return; end
-    local pm = toTable(CAM.mp);
-    if not perspective(pm) then return; end
-    local vm = toTable(mv);
+    local pm = CAM.toTable(CAM.mp);
+    if not CAM.perspective(pm) then return; end
+    local vm = CAM.toTable(mv);
     if vm == nil then return; end
     CAM.cands[#CAM.cands + 1] = { view = vm, proj = pm };
     local me = CAM.me;                                       -- (the world's camera: a few yalms from you, looking at you. Done for this frame.)
     if me then
-        local cx, cy, cz = camPos(vm);
+        local cx, cy, cz = CAM.camPos(vm);
         if (cx - me[1]) ^ 2 + (cy - me[2]) ^ 2 + (cz - me[3]) ^ 2 < 3600 then
             local x, y, z = me[1], me[2], me[3];
             local vx = x * vm[1] + y * vm[5] + z * vm[9]  + vm[13];
@@ -2986,7 +2986,7 @@ local function calibrate(px, py, ph)
     local W, H = (ds and ds.x) or 1920, (ds and ds.y) or 1080;
     local best = nil;
     for _, c in ipairs(CAM.cands) do
-        local cx, cy, cz = camPos(c.view);
+        local cx, cy, cz = CAM.camPos(c.view);
         for _, ord in ipairs({ 1, 2 }) do
             local x, y, z;
             if ord == 1 then x, y, z = px, ph, py; else x, y, z = px, py, ph; end
@@ -3236,6 +3236,294 @@ TRF.summitTab = function()
     end
 end
 
+------------------------------------------------------------------------
+-- VNM ARMOR: the five VNM armour sets, each tier and slot, coloured by whether you have it (green), have
+-- finished it (blue), and outlined when it drops from today's ventures (pulsing when a VNM is up).
+-- Set, tier, drop-zone and Storage Slip 01 data from Trove's VNM Armor plugin by Loxley (MIT licence,
+-- LICENSE-trove.txt).
+------------------------------------------------------------------------
+TRF.AR = { owned = {}, scanAt = 0 };
+TRF.AR.SETS = {
+    { name = 'Ares', crest = 'Mountain', color = { 0.90, 0.55, 0.20, 1 }, jobs = 'WAR DRK PLD DRG RUN',
+      final = { head = 16084, body = 14546, hands = 14961, legs = 15625, feet = 15711 },
+      tiers = { { prefix = "Enyo's",   head = 16085, body = 14547, hands = 14962, legs = 15626, feet = 15712 },
+                { prefix = "Phobos's", head = 16086, body = 14548, hands = 14963, legs = 15627, feet = 15713 },
+                { prefix = "Deimos's", head = 16087, body = 14549, hands = 14964, legs = 15628, feet = 15714 } } },
+    { name = 'Skadi', crest = 'Forest', color = { 0.20, 0.75, 0.20, 1 }, jobs = 'THF RNG BST COR DNC',
+      final = { head = 16088, body = 14550, hands = 14965, legs = 15629, feet = 15715 },
+      tiers = { { prefix = "Njord's", head = 16089, body = 14551, hands = 14966, legs = 15630, feet = 15716 },
+                { prefix = "Freyr's", head = 16090, body = 14552, hands = 14967, legs = 15631, feet = 15717 },
+                { prefix = "Freya's", head = 16091, body = 14553, hands = 14968, legs = 15632, feet = 15718 } } },
+    { name = 'Usukane', crest = 'Desert', color = { 0.85, 0.75, 0.30, 1 }, jobs = 'MNK NIN SAM PUP',
+      final = { head = 16092, body = 14554, hands = 14969, legs = 15633, feet = 15719 },
+      tiers = { { prefix = 'Hoshikazu', head = 16093, body = 14555, hands = 14970, legs = 15634, feet = 15720 },
+                { prefix = 'Tsukikazu', head = 16094, body = 14556, hands = 14971, legs = 15635, feet = 15721 },
+                { prefix = 'Hikazu',    head = 16095, body = 14557, hands = 14972, legs = 15636, feet = 15722 } } },
+    { name = 'Marduk', crest = 'Ocean', color = { 0.30, 0.55, 0.90, 1 }, jobs = 'WHM BRD SMN SCH',
+      final = { head = 16096, body = 14558, hands = 14973, legs = 15637, feet = 15723 },
+      tiers = { { prefix = "Anu's",   head = 16097, body = 14559, hands = 14974, legs = 15638, feet = 15724 },
+                { prefix = "Ea's",    head = 16098, body = 14560, hands = 14975, legs = 15639, feet = 15725 },
+                { prefix = "Enlil's", head = 16099, body = 14561, hands = 14976, legs = 15640, feet = 15726 } } },
+    { name = 'Morrigan', crest = 'Tundra', color = { 0.65, 0.45, 0.80, 1 }, jobs = 'BLM RDM BLU GEO',
+      final = { head = 16100, body = 14562, hands = 14977, legs = 15641, feet = 15727 },
+      tiers = { { prefix = "Nemain's", head = 16101, body = 14563, hands = 14978, legs = 15642, feet = 15728 },
+                { prefix = "Bodb's",   head = 16102, body = 14564, hands = 14979, legs = 15643, feet = 15729 },
+                { prefix = "Macha's",  head = 16103, body = 14565, hands = 14980, legs = 15644, feet = 15730 } } },
+};
+TRF.AR.SLOTS = { 'head', 'body', 'hands', 'legs', 'feet' };
+TRF.AR.SLOT_LABELS = { 'Head', 'Body', 'Hands', 'Legs', 'Feet' };
+TRF.AR.HNM = {
+    { head = 'Cerberus', body = 'Tiamat',     hands = 'Nidhogg',       legs = 'Medusa',                 feet = 'Escha Suzaku' },
+    { head = 'Hydra',    body = 'Jormungand', hands = 'Aspidochelone', legs = 'Gulool Ja Ja',           feet = 'Escha Seiryu' },
+    { head = 'Khimaira', body = 'Vrtra',      hands = 'Escha Genbu',   legs = 'Gurfurlur the Menacing', feet = 'Escha Byakko' },
+};
+TRF.AR.DROPS = {
+    { 'Valkurm Dunes', 1, 'head', 'Ocean' }, { 'Buburimu Peninsula', 1, 'body', 'Mountain' },
+    { 'Maze of Shakhrami', 1, 'hands', 'Tundra' }, { 'Jugner Forest', 1, 'legs', 'Forest' },
+    { 'Pashhow Marshlands', 1, 'feet', 'Ocean' }, { 'Meriphataud Mountains', 1, 'hands', 'Mountain' },
+    { 'Korroloka Tunnel', 2, 'body', 'Mountain' }, { 'Batallia Downs', 1, 'legs', 'Desert' },
+    { 'Rolanberry Fields', 1, 'feet', 'Ocean' }, { 'Sauromugue Champaign', 1, 'head', 'Desert' },
+    { 'Qufim Island', 1, 'legs', 'Tundra' }, { 'Yuhtunga Jungle', 1, 'body', 'Forest' },
+    { 'Yhoator Jungle', 2, 'hands', 'Forest' }, { 'Sea Serpent Grotto', 2, 'legs', 'Ocean' },
+    { "The Sanctuary of Zi'Tah", 2, 'head', 'Forest' }, { 'Eastern Altepa Desert', 2, 'body', 'Desert' },
+    { 'Garlaige Citadel', 2, 'feet', 'Mountain' }, { "Crawler's Nest", 2, 'legs', 'Desert' },
+    { 'Western Altepa Desert', 2, 'hands', 'Desert' }, { 'Labyrinth of Onzozo', 2, 'head', 'Tundra' },
+    { 'Gustav Tunnel', 3, 'hands', 'Desert' }, { 'Toraimarai Canal', 2, 'body', 'Ocean' },
+    { 'Misareaux Coast', 2, 'feet', 'Tundra' }, { 'Bostaunieux Oubliette', 3, 'feet', 'Tundra' },
+    { 'Uleguerand Range', 3, 'head', 'Tundra' }, { 'Kuftal Tunnel', 3, 'legs', 'Mountain' },
+    { 'The Boyahda Tree', 3, 'head', 'Mountain' }, { 'Cape Teriggan', 3, 'body', 'Desert' },
+    { "Ro'Maeve", 3, 'hands', 'Forest' }, { 'Bibiki Bay', 3, 'body', 'Ocean' },
+    { 'East Ronfaure [S]', 1, 'head', 'Forest', 'G-9' }, { 'West Sarutabaruta [S]', 1, 'hands', 'Forest' },
+    { 'North Gustaberg [S]', 1, 'feet', 'Mountain' }, { 'Wajaom Woodlands', 1, 'body', 'Tundra', 'I-6' },
+    { 'Bhaflau Thickets', 1, 'hands', 'Desert', 'H-9' }, { 'Alzadaal Undersea Ruins', 1, 'legs', 'Ocean', 'I-8', 3 },
+    { 'Grauberg [S]', 2, 'head', 'Mountain' }, { 'Vunkerl Inlet [S]', 2, 'hands', 'Ocean' },
+    { 'Fort Karugo-Narugo [S]', 2, 'feet', 'Forest' }, { 'East Ronfaure [S]', 2, 'body', 'Forest', 'H-9' },
+    { 'Garlaige Citadel [S]', 3, 'legs', 'Forest' }, { 'Rolanberry Fields [S]', 3, 'hands', 'Ocean' },
+    { 'Bhaflau Thickets', 3, 'feet', 'Desert', 'H-7' }, { 'Wajaom Woodlands', 3, 'body', 'Tundra', 'I-8' },
+    { 'Aydeewa Subterrane', 3, 'legs', 'Mountain' }, { 'Caedarva Mire', 3, 'legs', 'Tundra' },
+    { 'Mount Zhayolm', 3, 'feet', 'Desert' }, { 'Alzadaal Undersea Ruins', 3, 'head', 'Ocean', 'I-8', 2 },
+};
+TRF.AR.CREST_IDS = { Mountain = 3047, Forest = 3045, Desert = 3049, Ocean = 3046, Tundra = 3050 };
+TRF.AR.SLIP_ID = 29312;
+TRF.AR.SLIP_ITEMS = {
+    16084, 14546, 14961, 15625, 15711, 16085, 14547, 14962, 15626, 15712, 16086, 14548, 14963, 15627, 15713,
+    16087, 14549, 14964, 15628, 15714, 16088, 14550, 14965, 15629, 15715, 16089, 14551, 14966, 15630, 15716,
+    16090, 14552, 14967, 15631, 15717, 16091, 14553, 14968, 15632, 15718, 16092, 14554, 14969, 15633, 15719,
+    16093, 14555, 14970, 15634, 15720, 16094, 14556, 14971, 15635, 15721, 16095, 14557, 14972, 15636, 15722,
+    16096, 14558, 14973, 15637, 15723, 16097, 14559, 14974, 15638, 15724, 16098, 14560, 14975, 15639, 15725,
+    16099, 14561, 14976, 15640, 15726, 16100, 14562, 14977, 15641, 15727, 16101, 14563, 14978, 15642, 15728,
+    16102, 14564, 14979, 15643, 15729, 16103, 14565, 14980, 15644, 15730,
+};
+TRF.AR.BAGS = { { 0, 'Inventory' }, { 1, 'Safe' }, { 2, 'Storage' }, { 4, 'Locker' }, { 5, 'Satchel' }, { 6, 'Sack' },
+    { 7, 'Case' }, { 8, 'Wardrobe' }, { 9, 'Safe 2' }, { 10, 'Wardrobe 2' }, { 11, 'Wardrobe 3' }, { 12, 'Wardrobe 4' },
+    { 13, 'Wardrobe 5' }, { 14, 'Wardrobe 6' }, { 15, 'Wardrobe 7' }, { 16, 'Wardrobe 8' } };
+
+-- the zones each piece drops in (in a function: its loop counters would count against the file's 200 locals)
+(function ()
+    TRF.AR.itemZones = {};
+    for _, d in ipairs(TRF.AR.DROPS) do
+        for _, set in ipairs(TRF.AR.SETS) do
+            local id = set.tiers[d[2]][d[3]];
+            TRF.AR.itemZones[id] = TRF.AR.itemZones[id] or {};
+            local label = d[1] .. (d[5] and (' (' .. (d[6] and ('Map ' .. d[6] .. ' ') or '') .. d[5] .. ')') or '');
+            table.insert(TRF.AR.itemZones[id], { label = label, zone = d[1], grid = d[5] });
+        end
+    end
+end)();
+
+-- What you have, in every bag and in Storage Slip 01 (every 2 s while the tab is open)
+function TRF.AR.scan()
+    local now = os.clock();
+    if now - TRF.AR.scanAt < 2 then return; end
+    TRF.AR.scanAt = now;
+    local watch = {};
+    for _, set in ipairs(TRF.AR.SETS) do
+        for t_ = 1, 3 do for _, sl in ipairs(TRF.AR.SLOTS) do watch[set.tiers[t_][sl]] = true; end end
+        for _, sl in ipairs(TRF.AR.SLOTS) do watch[set.final[sl]] = true; end
+    end
+    local found = {};
+    pcall(function ()
+        local inv = mm():GetInventory();
+        for _, bag in ipairs(TRF.AR.BAGS) do
+            local max = inv:GetContainerCountMax(bag[1]) or 0;
+            for j = 0, max do
+                local it = inv:GetContainerItem(bag[1], j);
+                if it == nil then break; end
+                local id = it.Id;
+                if id ~= 0 and id ~= 65535 then
+                    if watch[id] then found[id] = bag[2]; end
+                    if id == TRF.AR.SLIP_ID then
+                        local ex = it.Extra;
+                        local function byte(i)
+                            if type(ex) == 'string' then return ex:byte(i) or 0; end
+                            local ok, b = pcall(function () return ex[i - 1]; end);
+                            return (ok and tonumber(b)) or 0;
+                        end
+                        for k, sid in ipairs(TRF.AR.SLIP_ITEMS) do
+                            local b = byte(math.floor((k - 1) / 8) + 1);
+                            if b < 0 then b = b + 256; end
+                            if bit.band(b, bit.lshift(1, (k - 1) % 8)) ~= 0 then found[sid] = found[sid] or 'Storage Slip 01'; end
+                        end
+                    end
+                end
+            end
+        end
+    end);
+    TRF.AR.owned = found;
+end
+
+-- Pieces that drop from today's ventures: 1 on the board, 2 at 100% or announced
+function TRF.AR.hot()
+    local hot, why = {}, {};
+    for _, v in ipairs(ventures) do
+        if v.key ~= 'hvnm' and v.zone_name then
+            local zk = zoneKey(v.zone_name);
+            local lvl = ((v.progress or 0) >= 100 or (ALERT and ALERT.v == v)) and 2 or 1;
+            local matches = {};
+            for _, d in ipairs(TRF.AR.DROPS) do if zoneKey(d[1]) == zk then matches[#matches + 1] = d; end end
+            if #matches > 1 and v.grid then                       -- (a zone listed twice: the one at the VNM's square)
+                local m2 = {};
+                for _, d in ipairs(matches) do if d[5] and d[5]:upper() == tostring(v.grid):upper() then m2[#m2 + 1] = d; end end
+                if #m2 > 0 then matches = m2; end
+            end
+            for _, d in ipairs(matches) do
+                for _, set in ipairs(TRF.AR.SETS) do
+                    local id = set.tiers[d[2]][d[3]];
+                    if lvl > (hot[id] or 0) then hot[id] = lvl; end
+                    why[id] = why[id] or {};
+                    table.insert(why[id], ('%s  (%s, %d%%)'):fmt(v.nm or '?', v.zone_name, v.progress or 0));
+                end
+            end
+        end
+    end
+    return hot, why;
+end
+
+function TRF.AR.name(id)
+    local n = nil;
+    pcall(function () local r = AshitaCore:GetResourceManager():GetItemById(id); n = r and r.Name[1]; end);
+    return n or ('Item ' .. id);
+end
+
+TRF.armorTab = function()
+    TRF.AR.scan();
+    local hot, why = TRF.AR.hot();
+    local owned = TRF.AR.owned;
+    local have, total = 0, 0;
+    for _, set in ipairs(TRF.AR.SETS) do
+        for t_ = 1, 3 do for _, sl in ipairs(TRF.AR.SLOTS) do
+            total = total + 1;
+            if owned[set.tiers[t_][sl]] or owned[set.final[sl]] then have = have + 1; end
+        end end
+    end
+    section(('VNM Armor  %d / %d'):fmt(have, total));
+
+    local dl = imgui.GetWindowDrawList();
+    local x0, y0 = imgui.GetCursorScreenPos();
+    local labelW = 58;
+    local setGap = 10;
+    local cell = math.floor(math.max(30, math.min(48, ((ROW_W - labelW - setGap * 4) / 5 - 4) / 3)));
+    local setW = cell * 3 + 4;
+    local lh = imgui.GetTextLineHeight();
+    local now = os.clock();
+    local function setX(si) return x0 + labelW + (si - 1) * (setW + setGap); end
+
+    -- set names (hover: crest, jobs and crest zones) and T1 T2 T3
+    for si, set in ipairs(TRF.AR.SETS) do
+        local tw = imgui.CalcTextSize(set.name);
+        local sx = setX(si) + (setW - tw) / 2;
+        imgui.SetCursorScreenPos({ setX(si), y0 });
+        imgui.InvisibleButton('##vengo_arset' .. si, { setW, lh + 2 });
+        dl:AddText({ sx, y0 }, u32(set.color), set.name);
+        if imgui.IsItemHovered() then
+            imgui.BeginTooltip();
+            local ci = itemIcon(TRF.AR.CREST_IDS[set.crest]);
+            if ci then imgui.Image(ci.ptr, { 20, 20 }); imgui.SameLine(0, 6); end
+            imgui.TextColored(set.color, set.name .. ' (' .. set.crest .. ' Crest)');
+            imgui.TextColored(C.muted, set.jobs);
+            imgui.Separator();
+            imgui.TextColored(C.text, 'Crest zones:');
+            local seen = {};
+            for _, d in ipairs(TRF.AR.DROPS) do
+                if d[4] == set.crest and not seen[d[1]] then seen[d[1]] = true; imgui.TextColored(C.muted, '  ' .. d[1]); end
+            end
+            imgui.EndTooltip();
+        end
+        for t_ = 1, 3 do
+            local tl = 'T' .. t_;
+            local tx = setX(si) + (t_ - 1) * (cell + 2) + (cell - imgui.CalcTextSize(tl)) / 2;
+            dl:AddText({ tx, y0 + lh + 4 }, u32(C.label), tl);
+        end
+    end
+    local gy = y0 + lh * 2 + 10;
+    local hoverInfo = nil;
+    for r, sl in ipairs(TRF.AR.SLOTS) do
+        local ry = gy + (r - 1) * (cell + 2);
+        dl:AddText({ x0, ry + (cell - lh) / 2 }, u32(C.text), TRF.AR.SLOT_LABELS[r]);
+        for si, set in ipairs(TRF.AR.SETS) do
+            local complete = owned[set.final[sl]] ~= nil;
+            for t_ = 1, 3 do
+                local id = set.tiers[t_][sl];
+                local cx = setX(si) + (t_ - 1) * (cell + 2);
+                local bg = complete and { 0.18, 0.28, 0.48, 1 } or (owned[id] and { 0.18, 0.38, 0.18, 1 }) or { C.well[1], C.well[2], C.well[3], 1 };
+                dl:AddRectFilled({ cx, ry }, { cx + cell, ry + cell }, u32(bg), 4);
+                local ic = itemIcon(id);
+                if ic then pcall(function () dl:AddImage(ic.ptr, { cx + 3, ry + 3 }, { cx + cell - 3, ry + cell - 3 }); end); end
+                local h = hot[id];
+                if h == 2 then
+                    local pulse = math.abs(math.sin(now * 3));
+                    dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ 1, 0.85 + pulse * 0.15, 0.2, 0.6 + pulse * 0.4 }), 4, C.rall, 2.5);
+                elseif h == 1 then
+                    dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ 1, 0.85, 0.3, 0.75 }), 4, C.rall, 1.5);
+                end
+                imgui.SetCursorScreenPos({ cx, ry });
+                imgui.InvisibleButton(('##vengo_ar%d'):format(id), { cell, cell });
+                if imgui.IsItemHovered() then
+                    dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ 1, 1, 1, 0.5 }), 4, C.rall, 1);
+                    hoverInfo = { id = id, set = set, tier = t_, slot = sl, complete = complete };
+                end
+            end
+        end
+    end
+    imgui.SetCursorScreenPos({ x0, gy + 5 * (cell + 2) + 6 });
+    imgui.Dummy({ ROW_W, 1 });
+
+    if hoverInfo then
+        local H_ = hoverInfo;
+        imgui.BeginTooltip();
+        imgui.TextColored(C.text, TRF.AR.name(H_.id));
+        if H_.complete then imgui.TextColored({ 0.45, 0.65, 1, 1 }, '  Completed: ' .. TRF.AR.name(H_.set.final[H_.slot]));
+        elseif owned[H_.id] then imgui.TextColored(C.green, '  Owned (' .. tostring(owned[H_.id]) .. ')');
+        else imgui.TextColored(C.muted, '  Not owned'); end
+        imgui.Separator();
+        imgui.TextColored(C.muted, 'Drop zones:');
+        for _, z in ipairs(TRF.AR.itemZones[H_.id] or {}) do imgui.TextColored(C.text, '  ' .. z.label); end
+        if why[H_.id] then
+            imgui.Separator();
+            imgui.TextColored({ 1, 0.85, 0.3, 1 }, 'On today\'s board:');
+            for _, w in ipairs(why[H_.id]) do imgui.TextColored(C.text, '  ' .. w); end
+        end
+        local hn = TRF.AR.HNM[H_.tier] and TRF.AR.HNM[H_.tier][H_.slot];
+        if hn then imgui.Separator(); imgui.TextColored(C.muted, 'Also drops from:'); imgui.TextColored(C.gold, '  ' .. hn); end
+        imgui.EndTooltip();
+    end
+
+    -- legend
+    local lx, ly = imgui.GetCursorScreenPos();
+    local function key(x, col, outline, text)
+        dl:AddRectFilled({ x, ly + 2 }, { x + 14, ly + 16 }, u32(col), 3);
+        if outline then dl:AddRect({ x, ly + 2 }, { x + 14, ly + 16 }, u32(outline), 3, C.rall, 1.5); end
+        dl:AddText({ x + 20, ly + 1 }, u32(C.muted), text);
+        return x + 20 + imgui.CalcTextSize(text) + 22;
+    end
+    local kx = key(lx, { 0.18, 0.38, 0.18, 1 }, nil, 'Owned');
+    kx = key(kx, { 0.18, 0.28, 0.48, 1 }, nil, 'Completed');
+    kx = key(kx, { C.well[1], C.well[2], C.well[3], 1 }, { 1, 0.85, 0.3, 0.75 }, 'Drops from today\'s ventures');
+    key(kx, { C.well[1], C.well[2], C.well[3], 1 }, { 1, 0.95, 0.2, 1 }, 'VNM up (pulsing)');
+    imgui.Dummy({ ROW_W, 20 });
+    hint('Hover a piece for its drop zones, today\'s ventures that drop it, and the HNM that also drops it. Hover a set name for its crest and jobs. Counts every bag and Storage Slip 01.');
+end
+
 TRF.sliders = function()
     section('Arrows');
     TRF.slider('##vengo_s_scale', 'Size', 'trail_scale', 0.4, 2.5, '%.2fx', 'How big each arrow is (Small 0.70, Medium 1.00, Large 1.40)');
@@ -3251,7 +3539,7 @@ TRF.sliders = function()
 end
 
 -- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
-local PRESET_KEYS = { 'transparent', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
+TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
     'trail', 'trail_glow', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q' };
 function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
@@ -3268,7 +3556,7 @@ function TRF.savePresets()
         local s = TRF.slots[i];
         if s then
             f:write(('  [%d] = { at = %q, cfg = {\n'):format(i, s.at or ''));
-            for _, k in ipairs(PRESET_KEYS) do
+            for _, k in ipairs(TRF.PRESET_KEYS) do
                 local v = s.cfg[k];
                 if v ~= nil then f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v))); end
             end
@@ -3290,7 +3578,7 @@ TRF.presets = function()
         imgui.SameLine(ROW_W - 250);
         if button(('SAVE##vengo_ps%d'):format(i), { 120, 0 }, true, true) then
             local c_ = {};
-            for _, k in ipairs(PRESET_KEYS) do c_[k] = config[k]; end
+            for _, k in ipairs(TRF.PRESET_KEYS) do c_[k] = config[k]; end
             TRF.slots[i] = { at = os.date('%b %d  %I:%M %p'), cfg = c_ };
             TRF.savePresets();
             msg(('Settings saved to slot %d.'):format(i));
@@ -3298,7 +3586,7 @@ TRF.presets = function()
         imgui.SameLine(0, 10);
         if s then
             if button(('LOAD##vengo_pl%d'):format(i), { 120, 0 }, false, true) then
-                for _, k in ipairs(PRESET_KEYS) do if s.cfg[k] ~= nil then config[k] = s.cfg[k]; end end
+                for _, k in ipairs(TRF.PRESET_KEYS) do if s.cfg[k] ~= nil then config[k] = s.cfg[k]; end end
                 pcall(C.apply);
                 saveSettings();
                 msg(('Settings loaded from slot %d.'):format(i));
@@ -3373,7 +3661,7 @@ drawTrail = function()
     if CAM.view == nil or TRAIL.order == nil then return; end
     TRAIL.v = v;
     local dist = dist2d(px, py, tx, ty);
-    if dist < ((kind == 'grid') and TRAIL_NEAR or 2.5) then return; end
+    if dist < ((kind == 'grid') and 5 or 2.5) then return; end
     local gh = th or ph;                                      -- (the ground at the end: the seal's own height when known)
 
     local ds = imgui.GetIO().DisplaySize;
@@ -3613,14 +3901,14 @@ trailSettings = function()
 end
 
 -- the camera is read while the world is being drawn
-local hooked = false;
+CAM.hooked = false;
 if rawget(_G, 'vana') and type(vana.on) == 'function' then
-    hooked = pcall(function ()
+    CAM.hooked = pcall(function ()
         vana.on('d3d_dip', function () camSample(); end);
         vana.on('d3d_dp', function () camSample(); end);
     end);
 end
-if not hooked then
+if not CAM.hooked then
     pcall(function ()
         ashita.events.register('d3d_dip', 'vengo_cam_dip', function () camSample(); end);
         ashita.events.register('d3d_dp', 'vengo_cam_dp', function () camSample(); end);
@@ -4025,8 +4313,9 @@ local function drawUI()
             elseif ui.tab == 4 then tabDynamis();
             elseif ui.tab == 5 then TRF.hunterTab();
             elseif ui.tab == 6 then TRF.summitTab();
-            elseif ui.tab == 7 then tabSettings();
-            elseif ui.tab == 8 then tabThanks();
+            elseif ui.tab == 7 then TRF.armorTab();
+            elseif ui.tab == 8 then tabSettings();
+            elseif ui.tab == 9 then tabThanks();
             end
         end);
         if not ok then imgui.TextColored({ C.hp[1], C.hp[2], C.hp[3], 1 }, 'Window error: ' .. tostring(err)); end
