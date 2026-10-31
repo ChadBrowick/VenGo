@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.34';
+addon.version = '4.35';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -5438,9 +5438,13 @@ trailTick = function(now)
     local want = TRAIL.wanted and not CAM.dead;
     local ce = math.max(1, math.floor(tonumber(config.cam_every) or 1));
     if want and ce > 1 and CAM.view and CAM.frame % ce ~= 0 then want = false; end
+    if CAM.listening['d3d_dip'] and not CAM.listening['d3d_dp'] then                      -- (did the indexed draws show a camera?)
+        if #CAM.cands == 0 then CAM.dipEmpty = (CAM.dipEmpty or 0) + 1; else CAM.dipEmpty = 0; end
+    end
     if want then CAM.cands, CAM.tries = {}, 0; end
     CAM.max = 800;
     CAM.on = want;
+    CAM.setListening(want);
 end
 
 local function glowLine(dl, a, b, col, w, glow)
@@ -5715,18 +5719,30 @@ trailSettings = function()
 end
 
 -- the camera is read while the world is being drawn
-CAM.hooked = false;
-if rawget(_G, 'vana') and type(vana.on) == 'function' then
-    CAM.hooked = pcall(function ()
-        vana.on('d3d_dip', function () camSample(); end);
-        vana.on('d3d_dp', function () camSample(); end);
-    end);
+-- The game's draw calls (thousands a frame) are listened to ONLY on the frames the camera is read, and only while
+-- arrows are wanted: just being listened to costs a call into VenGo per draw, which was what cost FPS all the time.
+-- Indexed draws first (the world is drawn with them); the other kind too only if those show no camera.
+CAM.listening = {};
+function CAM.listen(name, on)
+    if (CAM.listening[name] or false) == on then return; end
+    local key = 'vengo_cam_' .. name;
+    local ok = false;
+    if rawget(_G, 'vana') and type(vana.on) == 'function' and type(vana.off) == 'function' then
+        ok = pcall(function ()
+            if on then vana.on(name, function () camSample(); end, key); else vana.off(name, key); end
+        end);
+    end
+    if not ok then
+        pcall(function ()
+            if on then ashita.events.register(name, key, function () camSample(); end);
+            else ashita.events.unregister(name, key); end
+        end);
+    end
+    CAM.listening[name] = on;
 end
-if not CAM.hooked then
-    pcall(function ()
-        ashita.events.register('d3d_dip', 'vengo_cam_dip', function () camSample(); end);
-        ashita.events.register('d3d_dp', 'vengo_cam_dp', function () camSample(); end);
-    end);
+function CAM.setListening(on)
+    CAM.listen('d3d_dip', on);
+    CAM.listen('d3d_dp', on and (CAM.dipEmpty or 0) >= 30);   -- (30 frames of indexed draws with no camera: try the others)
 end
 end
 
