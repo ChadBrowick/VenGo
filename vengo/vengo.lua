@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.39';
+addon.version = '4.40';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1696,7 +1696,7 @@ local WIN_W = SW + 30 + MARGIN + FULL_ROW + 50;         -- starting size; the wi
 local WIN_H = 700;
 local MIN_W, MIN_H = 640, 460;
 
-local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'DAILIES', 'VNM ARMOR', 'ULTIMATES', 'LUMORIA', 'ODIOUS CODEX', 'SETTINGS', 'SPECIAL THANKS' };
+local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'DAILIES', 'CATSEYEXI POINTS', 'VNM ARMOR', 'ULTIMATES', 'LUMORIA', 'ODIOUS CODEX', 'SETTINGS', 'SPECIAL THANKS' };
 ui.tab = ui.tab or 1;
 
 local function statusText()
@@ -2380,7 +2380,7 @@ end
 
 -- The menu: dots, the chosen one lit pink fading to the right with a bright
 -- left edge and a small arrow beside it
-local GROUPS = { [8] = true, [12] = true };   -- (faint lines before the collections and before SETTINGS)
+local GROUPS = { [9] = true, [13] = true };   -- (faint lines before the collections and before SETTINGS)
 
 local function sidebar(dl, x0, y0, sw)
     local y = y0;
@@ -2406,7 +2406,7 @@ local function sidebar(dl, x0, y0, sw)
             dl:AddRectFilled({ x0, y }, { x0 + sw, y + ih }, u32({ 1, 1, 1, 0.04 }), 4);
         end
         local _, nh = imgui.CalcTextSize(n);
-        local label = n:sub(1, 1) .. n:sub(2):lower();
+        local label = (n == 'CATSEYEXI POINTS') and 'CatsEyeXI points' or (n:sub(1, 1) .. n:sub(2):lower());
         if not on then dl:AddCircleFilled({ x0 + 10, y + ih / 2 + 1 }, 1.6, u32(C.muted), 8); end
         dl:AddText({ x0 + (on and 14 or 18), y + (ih - nh) / 2 }, u32(on and { 1, 1, 1, 1 } or (over and { 1, 1, 1, 1 } or C.text)), label);
         imgui.SetCursorScreenPos({ x0, y });
@@ -2697,6 +2697,8 @@ local function tabVentures(z)
         if button('NOT UNLOCKED? TRY NEXT CLOSEST##vengo_next', { 0, 0 }, false, true) then warpNext(); end
     end
 
+    TRF.PT.block('ventures', 'Venture points', 4);
+
     if #ventures == 0 then
         section('Ventures');
         hint('No ventures loaded. Check ventures.lua, then RELOAD in Settings.');
@@ -2845,7 +2847,7 @@ local THANKS = {
     { 'Thorny', 'Uberwarp: the warps behind GO' },
     { 'GUST', 'the TeX Gyre Adventor font' },
     { 'Dewin (Goldilox)', 'the DAILIES tab: the goblin and Palalumin dailies and how to read them from chat (MIT licence, LICENSE-goldilox.txt)' },
-    { 'Loxley (Trove)', 'the VNM Armor, Ultimates, Lumoria and Odious Codex data, and how to ask the CatsEyeXI server for currency and Lumoria progress (MIT licence, LICENSE-trove.txt)' },
+    { 'Loxley (Trove)', 'the VNM Armor, Ultimates, Lumoria and Odious Codex data, and how to ask the CatsEyeXI server for currency, points and Lumoria progress (MIT licence, LICENSE-trove.txt)' },
 };
 
 local function tabThanks()
@@ -3225,7 +3227,7 @@ end
 TRF.summitTab = function()
     section('Summit of the Stars');
     local S = SITE.x.summit;
-    if not config.website or S == nil or S.currentObjective == nil then TRF.noData('the Summit'); return; end
+    if not config.website or S == nil or S.currentObjective == nil then TRF.noData('the Summit'); TRF.PT.block('summit', 'Summit points', 4); return; end
     local left = SITE.x.summitEnd and (SITE.x.summitEnd - os.time()) or nil;
     local dl = imgui.GetWindowDrawList();
     local sx, sy = imgui.GetCursorScreenPos();
@@ -3243,6 +3245,7 @@ TRF.summitTab = function()
         TRF.row('BUFF', tostring(B.name), C.seal, tostring(B.description or ''), 90);
     end
     hint('Defeat monsters of the target family together to earn the server-wide buff. The target changes every few hours; VenGo updates the moment it does.');
+    TRF.PT.block('summit', 'Summit points', 4);
     if type(S.allBuffs) == 'table' and #S.allBuffs > 0 then
         section('All Summit buffs');
         for _, b in ipairs(S.allBuffs) do
@@ -3647,6 +3650,7 @@ function TRF.TV.askCurrency(force)
     local T = TRF.TV;
     local now = os.clock();
     if T.curPending and now - T.curPending < 5 then return; end
+    if TRF.PT and TRF.PT.pending and now - TRF.PT.pending < 5 then return; end
     if not force and T.curAt and now - T.curAt < 60 then return; end
     T.curPending = now;
     T.ask(7);                                                    -- (GET_CURRENCY)
@@ -3679,6 +3683,16 @@ function TRF.TV.packet(d)
         if name ~= '' then
             T.cur[name] = { total = i32(0x30), icon = u16(0x06), section = str(0x08, 15), breakdown = str(0x34, 71) };
         end
+    elseif action == 7 and TRF.PT.pending then                  -- (a points line)
+        local P = TRF.PT;
+        P.buf = P.buf or {};
+        local label = str(0x1C, 23);
+        if label ~= '' then P.buf[#P.buf + 1] = { group = str(0x08, 19), label = label, value = i32(0x34) }; end
+    elseif action == 0 and TRF.PT.pending then                  -- (the server starts the list again)
+        TRF.PT.buf = {};
+    elseif action == 2 and TRF.PT.pending then                  -- (the end of the points)
+        local P = TRF.PT;
+        P.list, P.buf, P.at, P.pending = P.buf or {}, nil, os.clock(), nil;
     elseif action == 2 and T.curPending then                     -- (the end of the list)
         T.curAt, T.curPending = os.clock(), nil;
     elseif action == 17 and u8(0x05) == 0 then                   -- (Lumoria)
@@ -3697,6 +3711,79 @@ end
 function TRF.TV.total(name)
     local e = TRF.TV.cur[name];
     return e and e.total or nil;
+end
+
+-- Points (asked of the server the way Trove's Points tab by Loxley asks, MIT licence): the server sends
+-- them grouped (CatsEyeXI, Dailies, Ventures, Summit); each group is shown on its own tab
+TRF.PT = { list = nil, buf = nil, at = nil, pending = nil, triedAt = nil,
+    COLS = { catseyexi = { 0.55, 0.75, 1.00 }, dailies = { 0.76, 0.62, 1.00 }, ventures = { 0.50, 0.88, 0.50 }, summit = { 1.00, 0.78, 0.35 } } };
+function TRF.PT.ask(force)
+    local P, T = TRF.PT, TRF.TV;
+    local now = os.clock();
+    if P.pending and now - P.pending < 5 then return; end
+    if T.curPending and now - T.curPending < 5 then return; end  -- (one list at a time: both end the same way)
+    if not force and P.at and now - P.at < 60 then return; end
+    if not force and P.at == nil and P.triedAt and now - P.triedAt < 15 then return; end
+    P.pending, P.triedAt, P.buf = now, now, {};
+    T.ask(8);                                                    -- (GET_POINTS)
+end
+-- One group's points: { { label, value }, ... } (nil until the server has answered)
+function TRF.PT.group(name)
+    local P = TRF.PT;
+    if P.list == nil then return nil; end
+    local out = {};
+    for _, e in ipairs(P.list) do if e.group:lower() == name then out[#out + 1] = e; end end
+    return out;
+end
+-- The groups that aren't shown on a tab of their own (they go on CATSEYEXI POINTS)
+function TRF.PT.others()
+    local P = TRF.PT;
+    local seen, order = {}, {};
+    for _, e in ipairs(P.list or {}) do
+        local g = e.group:lower();
+        if g ~= 'catseyexi' and g ~= 'dailies' and g ~= 'ventures' and g ~= 'summit' and not seen[g] then
+            seen[g] = true; order[#order + 1] = e.group;
+        end
+    end
+    return order;
+end
+-- Cards in a row: the name small and dim, the number big under it
+function TRF.PT.cards(list, col, per)
+    local dl = imgui.GetWindowDrawList();
+    local lh = imgui.GetTextLineHeight();
+    local x0, y0 = imgui.GetCursorScreenPos();
+    per = math.max(1, math.min(per or 4, #list));
+    local gap = 8;
+    local cw = (ROW_W - (per - 1) * gap) / per;
+    local ch = lh + 46;                                          -- (the name, then the number in the big font)
+    local mx, my = imgui.GetMousePos();
+    for i, e in ipairs(list) do
+        local cx, cy = x0 + ((i - 1) % per) * (cw + gap), y0 + math.floor((i - 1) / per) * (ch + gap);
+        local hov = imgui.IsWindowHovered() and mx >= cx and mx < cx + cw and my >= cy and my < cy + ch;
+        TRF.card(dl, cx, cy, cw, ch, nil, hov, 8);
+        dl:AddRectFilled({ cx + 1, cy + 8 }, { cx + 3, cy + ch - 8 }, u32({ col[1], col[2], col[3], 0.85 }), 1);
+        dl:AddText({ cx + 14, cy + 7 }, u32(C.muted), e.label);
+        local big = pushFont(fonts.big, 22);
+        dl:AddText({ cx + 14, cy + lh + 9 }, u32({ math.min(1, col[1] * 0.6 + 0.4), math.min(1, col[2] * 0.6 + 0.4), math.min(1, col[3] * 0.6 + 0.4), 1 }), TRF.num(e.value));
+        if big then imgui.PopFont(); end
+    end
+    local rows = math.ceil(#list / per);
+    imgui.Dummy({ ROW_W, rows * ch + (rows - 1) * gap + 2 });
+end
+-- A group as a block on its tab: header, then the cards (or a line saying they're on the way)
+function TRF.PT.block(name, title, per)
+    local P = TRF.PT;
+    P.ask(false);
+    local list = P.group(name);
+    local col = P.COLS[name] or { 0.76, 0.70, 0.98 };
+    TRF.header(imgui.GetWindowDrawList(), title, col, list and #list > 0 and TRF.num(#list) or nil);
+    if list == nil then
+        hint(P.pending and 'Asking the CatsEyeXI server for your points...' or 'Your points haven\'t come back from the server yet.');
+    elseif #list == 0 then
+        hint('The server sent no ' .. title:lower() .. '.');
+    else
+        P.cards(list, col, per);
+    end
 end
 
 -- Your bags: which of a set of items you have, and how many (every 2 s while a tab is open)
@@ -5278,7 +5365,7 @@ function TRF.UP.notice()
     imgui.SetCursorScreenPos({ x + ROW_W - 270, y + 5 });
     if button('INSTALL##vengo_up_i', { 120, h - 10 }, false, true) then TRF.UP.installNow(); end
     imgui.SameLine(0, 8);
-    if button('WHAT\'S NEW##vengo_up_n', { 130, h - 10 }, true, true) then ui.tab = 12; end
+    if button('WHAT\'S NEW##vengo_up_n', { 130, h - 10 }, true, true) then ui.tab = 13; end
     imgui.SetCursorScreenPos({ x, y + h + 8 });
     imgui.Dummy({ ROW_W, 1 });
 end
@@ -5760,6 +5847,7 @@ TRF.dlTab = function()
     end
     if S == nil then hint('Waiting for your character to load...'); return; end
     local dl = imgui.GetWindowDrawList();
+    TRF.PT.block('dailies', 'Daily points', 3);
 
     -- the goblins
     local n = 0;
@@ -5796,6 +5884,16 @@ TRF.dlTab = function()
 
     imgui.Spacing();
     hint('Talk to each goblin in Lower Jeuno (and Palalumin in the Grand Palace of Hu\'Xzoi) to pick up today\'s task; VenGo reads it from chat and follows your kills and the items in your inventory. If a finished Sea quest is missed, talk to Palalumin again. Click a name in violet to look it up on catseyexi.com.');
+end
+
+TRF.ptTab = function()
+    local P = TRF.PT;
+    section('CatsEyeXI points');
+    TRF.refreshRow('Points', P.at, P.pending, function () P.ask(true); end);
+    P.block('catseyexi', 'CatsEyeXI', 3);
+    for _, g in ipairs(P.others()) do P.block(g:lower(), g, 3); end
+    imgui.Spacing();
+    hint('Your Dailies, Ventures and Summit points are on those tabs. Updated from the CatsEyeXI server every minute while one of these tabs is open.');
 end
 
 TRF.sliders = function()
@@ -6646,12 +6744,13 @@ local function drawUI()
             elseif ui.tab == 5 then TRF.hunterTab();
             elseif ui.tab == 6 then TRF.summitTab();
             elseif ui.tab == 7 then TRF.dlTab();
-            elseif ui.tab == 8 then TRF.armorTab();
-            elseif ui.tab == 9 then TRF.ulTab();
-            elseif ui.tab == 10 then TRF.luTab();
-            elseif ui.tab == 11 then TRF.cxTab();
-            elseif ui.tab == 12 then tabSettings();
-            elseif ui.tab == 13 then tabThanks();
+            elseif ui.tab == 8 then TRF.ptTab();
+            elseif ui.tab == 9 then TRF.armorTab();
+            elseif ui.tab == 10 then TRF.ulTab();
+            elseif ui.tab == 11 then TRF.luTab();
+            elseif ui.tab == 12 then TRF.cxTab();
+            elseif ui.tab == 13 then tabSettings();
+            elseif ui.tab == 14 then tabThanks();
             end
         end);
         if not ok then imgui.TextColored({ C.hp[1], C.hp[2], C.hp[3], 1 }, 'Window error: ' .. tostring(err)); end
@@ -6712,9 +6811,11 @@ ashita.events.register('command', 'vengo_command', function (e)
             ui.open[1] = not ui.open[1];
         end
     elseif cmd == 'help' then
-        msg('Usage: /vengo (window) | <nm|zone|shorthand> (warp there) | current | next | cancel | ventures | mode ace|cw | update | reload | testalert | where | dailies | pad (controller) | upgrade (install a new VenGo)');
+        msg('Usage: /vengo (window) | <nm|zone|shorthand> (warp there) | current | next | cancel | ventures | mode ace|cw | update | reload | testalert | where | dailies | points | pad (controller) | upgrade (install a new VenGo)');
     elseif cmd == 'dailies' then
         ui.open[1], ui.tab = true, 7;
+    elseif cmd == 'points' then
+        ui.open[1], ui.tab = true, 8;
     elseif cmd == 'cancel' or cmd == 'stop' then
         ARMED = nil;
         msg('Cancelled.');

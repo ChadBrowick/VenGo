@@ -46,6 +46,13 @@ NPC to pick up the day's task; VenGo reads it from chat and shows its state (not
 the zone, kills, and how many of the wanted items you carry. Click a name in violet to look it up on the catseyexi.com
 database. Everything resets at JP midnight and is kept per character (`dailies_<id>.lua`).
 
+## Points
+
+VenGo asks the CatsEyeXI server for your points the way Trove's Points tab does, and shows each group where it belongs:
+Venture points (EXP, Battle) on VENTURES, Summit points on SUMMIT, Daily points on DAILIES, and the CatsEyeXI group
+(Domain Shards, Dynamis RP, DKP, Gob Scraps, Muiridian Favor and so on) on its own **CATSEYEXI POINTS** tab
+(`/vengo points`). They update every minute while one of those tabs is open; REFRESH asks again straight away.
+
 ## Live data
 
 The server sends the venture board (packet 0x1A3) on its own. VenGo reads it as it
@@ -75,7 +82,7 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 - **Thorny** for Uberwarp, which does the warps behind GO
 - **GUST** for the TeX Gyre Adventor font
 - **Dewin** for Goldilox: the DAILIES tab (MIT licence, `LICENSE-goldilox.txt`)
-- **Loxley** for Trove: the VNM Armor, Ultimates, Lumoria and Odious Codex data (MIT licence, `LICENSE-trove.txt`)
+- **Loxley** for Trove: the VNM Armor, Ultimates, Lumoria and Odious Codex data, and how to ask for points (MIT licence, `LICENSE-trove.txt`)
 
 ## Credits and licence
 
