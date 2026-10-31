@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.33';
+addon.version = '4.34';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -3346,55 +3346,104 @@ TRF.AR.BAGS = { { 0, 'Inventory' }, { 1, 'Safe' }, { 2, 'Storage' }, { 4, 'Locke
 end)();
 
 -- What you have, in every bag and in Storage Slip 01 (every 2 s while the tab is open)
-function TRF.AR.scan()
-    local now = os.clock();
-    if now - TRF.AR.scanAt < 2 then return; end
-    TRF.AR.scanAt = now;
-    local watch = {};
-    for _, set in ipairs(TRF.AR.SETS) do
-        for t_ = 1, 3 do for _, sl in ipairs(TRF.AR.SLOTS) do watch[set.tiers[t_][sl]] = true; end end
-        for _, sl in ipairs(TRF.AR.SLOTS) do watch[set.final[sl]] = true; end
+-- Your bags, read a little each frame (about two bags a frame, every 2 s, only while a collection tab is open)
+-- and shared by VNM ARMOR, ULTIMATES and ODIOUS CODEX. Reading all 1,300-odd slots at once made a stutter.
+TRF.BAG = { ids = { 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 },
+            names = { [0] = 'Inventory', 'Safe', 'Storage', nil, 'Locker', 'Satchel', 'Sack', 'Case', 'Wardrobe', 'Safe 2',
+                      'Wardrobe 2', 'Wardrobe 3', 'Wardrobe 4', 'Wardrobe 5', 'Wardrobe 6', 'Wardrobe 7', 'Wardrobe 8' },
+            bi = 1, slot = 0, max = nil, cur = nil, ready = nil, gen = 0, wantAt = -1e9, restAt = -1e9,
+            EXTRA = { [29312] = true, [30840] = true } };   -- (Storage Slip 01 and the Odious Codex: their bits are read too)
+function TRF.BAG.want() TRF.BAG.wantAt = os.clock(); end
+function TRF.BAG.bytes(ex, n)                                    -- (an item's extra data as a string, whatever form it comes in)
+    if type(ex) == 'string' then return ex:sub(1, n); end
+    local out = {};
+    for i = 0, n - 1 do
+        local ok, v = pcall(function () return ex[i]; end);
+        v = (ok and tonumber(v)) or 0;
+        if v < 0 then v = v + 256; end
+        out[#out + 1] = string.char(v % 256);
     end
-    local found = {};
+    return table.concat(out);
+end
+function TRF.BAG.step()
+    local B = TRF.BAG;
+    local now = os.clock();
+    if now - B.wantAt > 3 then return; end                      -- (no collection tab open: nothing to do)
+    if B.cur == nil then
+        if now < B.restAt then return; end
+        B.cur, B.bi, B.slot, B.max = { count = {}, where = {}, extra = {} }, 1, 0, nil;
+    end
+    local budget = 170;                                          -- (slots per frame)
     pcall(function ()
         local inv = mm():GetInventory();
-        for _, bag in ipairs(TRF.AR.BAGS) do
-            local max = inv:GetContainerCountMax(bag[1]) or 0;
-            for j = 0, max do
-                local it = inv:GetContainerItem(bag[1], j);
-                if it == nil then break; end
+        while budget > 0 and B.bi <= #B.ids do
+            local bag = B.ids[B.bi];
+            if B.max == nil then B.max = inv:GetContainerCountMax(bag) or 0; end
+            local it = (B.slot <= B.max) and inv:GetContainerItem(bag, B.slot) or nil;
+            if it == nil then
+                B.bi, B.slot, B.max = B.bi + 1, 0, nil;
+            else
                 local id = it.Id;
                 if id ~= 0 and id ~= 65535 then
-                    if watch[id] then found[id] = bag[2]; end
-                    if id == TRF.AR.SLIP_ID then
-                        local ex = it.Extra;
-                        local function byte(i)
-                            if type(ex) == 'string' then return ex:byte(i) or 0; end
-                            local ok, b = pcall(function () return ex[i - 1]; end);
-                            return (ok and tonumber(b)) or 0;
-                        end
-                        for k, sid in ipairs(TRF.AR.SLIP_ITEMS) do
-                            local b = byte(math.floor((k - 1) / 8) + 1);
-                            if b < 0 then b = b + 256; end
-                            if bit.band(b, bit.lshift(1, (k - 1) % 8)) ~= 0 then found[sid] = found[sid] or 'Storage Slip 01'; end
-                        end
-                    end
+                    B.cur.count[id] = (B.cur.count[id] or 0) + (tonumber(it.Count) or 1);
+                    B.cur.where[id] = B.cur.where[id] or B.names[bag] or 'Bag';
+                    if B.EXTRA[id] and B.cur.extra[id] == nil then B.cur.extra[id] = B.bytes(it.Extra, 24); end
                 end
+                B.slot = B.slot + 1;
+                budget = budget - 1;
             end
         end
     end);
+    if B.bi > #B.ids then                                        -- (a full pass: publish it, rest 2 s)
+        B.ready, B.cur = B.cur, nil;
+        B.gen = B.gen + 1;
+        B.restAt = now + 2;
+    end
+end
+
+function TRF.AR.scan()
+    local B = TRF.BAG;
+    B.want();
+    if B.ready == nil or TRF.AR.gen == B.gen then return; end
+    TRF.AR.gen = B.gen;
+    local found = {};
+    local watch = TRF.AR.watch;
+    if watch == nil then
+        watch = {};
+        for _, set in ipairs(TRF.AR.SETS) do
+            for t_ = 1, 3 do for _, sl in ipairs(TRF.AR.SLOTS) do watch[set.tiers[t_][sl]] = true; end end
+            for _, sl in ipairs(TRF.AR.SLOTS) do watch[set.final[sl]] = true; end
+        end
+        TRF.AR.watch = watch;
+    end
+    for id in pairs(watch) do if B.ready.where[id] then found[id] = B.ready.where[id]; end end
+    local ex = B.ready.extra[TRF.AR.SLIP_ID];
+    if ex then
+        for k, sid in ipairs(TRF.AR.SLIP_ITEMS) do
+            local b = ex:byte(math.floor((k - 1) / 8) + 1) or 0;
+            if bit.band(b, bit.lshift(1, (k - 1) % 8)) ~= 0 then found[sid] = found[sid] or 'Storage Slip 01'; end
+        end
+    end
     TRF.AR.owned = found;
 end
 
 -- Pieces that drop from today's ventures: 1 on the board, 2 at 100% or announced
 function TRF.AR.hot()
+    local H = TRF.AR.hotCache;
+    local sig = #ventures .. (ALERT and tostring(ALERT.v) or '');
+    for _, v in ipairs(ventures) do sig = sig .. '|' .. tostring(v.zone) .. (v.grid or '') .. (v.progress or 0); end
+    if H and H.sig == sig then return H.hot, H.why; end
+    if TRF.AR.dropZK == nil then
+        TRF.AR.dropZK = {};
+        for i, d in ipairs(TRF.AR.DROPS) do TRF.AR.dropZK[i] = zoneKey(d[1]); end
+    end
     local hot, why = {}, {};
     for _, v in ipairs(ventures) do
         if v.key ~= 'hvnm' and v.zone_name then
             local zk = zoneKey(v.zone_name);
             local lvl = ((v.progress or 0) >= 100 or (ALERT and ALERT.v == v)) and 2 or 1;
             local matches = {};
-            for _, d in ipairs(TRF.AR.DROPS) do if zoneKey(d[1]) == zk then matches[#matches + 1] = d; end end
+            for i, d in ipairs(TRF.AR.DROPS) do if TRF.AR.dropZK[i] == zk then matches[#matches + 1] = d; end end
             if #matches > 1 and v.grid then                       -- (a zone listed twice: the one at the VNM's square)
                 local m2 = {};
                 for _, d in ipairs(matches) do if d[5] and d[5]:upper() == tostring(v.grid):upper() then m2[#m2 + 1] = d; end end
@@ -3410,13 +3459,19 @@ function TRF.AR.hot()
             end
         end
     end
+    TRF.AR.hotCache = { sig = sig, hot = hot, why = why };
     return hot, why;
 end
 
+TRF.AR.names = {};
 function TRF.AR.name(id)
+    local c = TRF.AR.names[id];
+    if c then return c; end
     local n = nil;
     pcall(function () local r = AshitaCore:GetResourceManager():GetItemById(id); n = r and r.Name[1]; end);
-    return n or ('Item ' .. id);
+    n = n or ('Item ' .. id);
+    TRF.AR.names[id] = n;
+    return n;
 end
 
 TRF.armorTab = function()
@@ -3644,34 +3699,23 @@ end
 
 -- Your bags: which of a set of items you have, and how many (every 2 s while a tab is open)
 TRF.BAGS = { 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
-function TRF.scanBags(watch, fn)
+function TRF.scanBags(watch, fn)                                 -- (from the shared reading above)
+    local B = TRF.BAG;
+    B.want();
     local have, count = {}, {};
-    pcall(function ()
-        local inv = mm():GetInventory();
-        for _, b in ipairs(TRF.BAGS) do
-            local max = inv:GetContainerCountMax(b) or 0;
-            for j = 0, max do
-                local it = inv:GetContainerItem(b, j);
-                if it == nil then break; end
-                local id = it.Id;
-                if id ~= 0 and id ~= 65535 then
-                    if watch == nil or watch[id] then
-                        have[id] = true;
-                        count[id] = (count[id] or 0) + (tonumber(it.Count) or 1);
-                    end
-                    if fn then fn(id, it); end
-                end
-            end
-        end
-    end);
-    return have, count;
+    if B.ready == nil then return have, count, false; end
+    for id, n in pairs(B.ready.count) do
+        if watch == nil or watch[id] then have[id] = true; count[id] = n; end
+    end
+    if fn then for id, ex in pairs(B.ready.extra) do fn(id, { Extra = ex }); end end
+    return have, count, true;
 end
 
 -- Small drawing pieces shared by the three tabs
 function TRF.icon(dl, id, x, y, sz, alpha)
     local ic = itemIcon(id);
     if ic then
-        pcall(function () dl:AddImage(ic.ptr, { x, y }, { x + sz, y + sz }, { 0, 0 }, { 1, 1 }, u32({ 1, 1, 1, alpha or 1 })); end);
+        pcall(dl.AddImage, dl, ic.ptr, { x, y }, { x + sz, y + sz }, { 0, 0 }, { 1, 1 }, u32({ 1, 1, 1, alpha or 1 }));
     else
         dl:AddRectFilled({ x, y }, { x + sz, y + sz }, u32({ 1, 1, 1, 0.06 * (alpha or 1) }), 3);
     end
@@ -3773,8 +3817,9 @@ end
 TRF.CX = { open = {}, at = -1e9, masks = nil, has = false, ID = 30840 };
 function TRF.CX.scan()
     local X = TRF.CX;
-    if os.clock() - X.at < 2 then return; end
-    X.at = os.clock();
+    TRF.BAG.want();
+    if TRF.BAG.ready == nil or X.gen == TRF.BAG.gen then return; end
+    X.gen = TRF.BAG.gen;
     X.has, X.masks = false, { A = 0, B = 0, C = 0, D = 0 };
     TRF.scanBags({ [X.ID] = true }, function (id, it)
         if id ~= X.ID or X.has then return; end
@@ -3872,8 +3917,9 @@ TRF.UL.CUR_NAME = { BYNE = 'Byne Bills', SHELL = 'Whiteshells', BRONZE = 'Bronze
 TRF.UL.BAR_ICONS = { ['Alexandrite'] = 2488, ['H-P Bayld'] = 8798 };
 function TRF.UL.scan()
     local U = TRF.UL;
-    if os.clock() - U.at < 2 then return; end
-    U.at = os.clock();
+    TRF.BAG.want();
+    if TRF.BAG.ready == nil or U.gen == TRF.BAG.gen then return; end
+    U.gen = TRF.BAG.gen;
     if U.watch == nil then
         local w = {};
         for _, r in ipairs(U.RELICS) do w[r.finalId] = true; for _, s in ipairs(r.stages) do w[s.weaponId] = true; end end
@@ -4896,22 +4942,35 @@ TRF.LU.BUFFS = {
 -- starred piece, gets chat and sound warnings at 90%, at 100%, and a minute before the pop.
 ------------------------------------------------------------------------
 TRF.ST = { seen = {}, ready = false, at = 0 };
-function TRF.ST.set(key)                                         -- (kept in the settings as "a,b,c")
+TRF.ST.parsed = {};
+function TRF.ST.set(key)                                         -- (kept in the settings as "a,b,c"; read again only when it changes)
+    local raw = tostring(config[key] or '');
+    local P = TRF.ST.parsed[key];
+    if P and P.raw == raw then return P.set; end
     local s = {};
-    for part in tostring(config[key] or ''):gmatch('[^,]+') do s[part] = true; end
+    for part in raw:gmatch('[^,]+') do s[part] = true; end
+    TRF.ST.parsed[key] = { raw = raw, set = s };
     return s;
 end
 function TRF.ST.save(key, s)
+    TRF.ST.pieces = {};
     local list = {};
     for k in pairs(s) do list[#list + 1] = k; end
     table.sort(list);
     config[key] = table.concat(list, ',');
     saveSettings();
 end
-function TRF.ST.zoneStarred(v) return v and v.zone_name and TRF.ST.set('star_zones')[zoneKey(v.zone_name)] or false; end
+function TRF.ST.zk(v)                                          -- (a venture's zone key, worked out once per zone name)
+    local c = TRF.ST.zkc or {};
+    TRF.ST.zkc = c;
+    local n = v.zone_name or '';
+    if c[n] == nil then c[n] = zoneKey(n); end
+    return c[n];
+end
+function TRF.ST.zoneStarred(v) return v and v.zone_name and TRF.ST.set('star_zones')[TRF.ST.zk(v)] or false; end
 function TRF.ST.toggleZone(v)
     local s = TRF.ST.set('star_zones');
-    local k = zoneKey(v.zone_name);
+    local k = TRF.ST.zk(v);
     if s[k] then s[k] = nil; msg(('Unstarred %s.'):fmt(v.zone_name)); else s[k] = true; msg(('Starred %s: VenGo will warn you at 90%%, 100%% and before the pop.'):fmt(v.zone_name)); end
     TRF.ST.save('star_zones', s);
 end
@@ -4924,13 +4983,23 @@ function TRF.ST.toggleItem(id)
     TRF.ST.save('star_items', s);
 end
 -- The starred pieces a venture drops (the zone's armour drops, matched by grid square where a zone is listed twice)
+TRF.ST.pieces = {};
+TRF.ST.NONE = {};
 function TRF.ST.piecesOf(v)
-    local out = {};
     local items = TRF.ST.set('star_items');
-    if next(items) == nil or v == nil or v.zone_name == nil then return out; end
-    local zk = zoneKey(v.zone_name);
+    if next(items) == nil or v == nil or v.zone_name == nil then return TRF.ST.NONE; end
+    local ck = (v.zone_name or '') .. '|' .. tostring(v.grid) .. '|' .. tostring(config.star_items);
+    local hit = TRF.ST.pieces[ck];
+    if hit then return hit; end
+    local out = {};
+    TRF.ST.pieces[ck] = out;
+    if TRF.AR.dropZK == nil then
+        TRF.AR.dropZK = {};
+        for i, d in ipairs(TRF.AR.DROPS) do TRF.AR.dropZK[i] = zoneKey(d[1]); end
+    end
+    local zk = TRF.ST.zk(v);
     local m = {};
-    for _, d in ipairs(TRF.AR.DROPS) do if zoneKey(d[1]) == zk then m[#m + 1] = d; end end
+    for i, d in ipairs(TRF.AR.DROPS) do if TRF.AR.dropZK[i] == zk then m[#m + 1] = d; end end
     if #m > 1 and v.grid then
         local m2 = {};
         for _, d in ipairs(m) do if d[5] and d[5]:upper() == tostring(v.grid):upper() then m2[#m2 + 1] = d; end end
@@ -5117,6 +5186,9 @@ end
 function TRF.UP.tick()
     local U = TRF.UP;
     if config.check_updates == false then return; end
+    local c = os.clock();
+    if c - (U.tickAt or -1) < 0.5 then return; end
+    U.tickAt = c;
     local now = os.time();
     if U.pending then
         local f = io.open(U.file('update_check.tmp'), 'rb');
@@ -6100,6 +6172,7 @@ ashita.events.register('d3d_present', 'vengo_present', function ()
     drawTrail();
     pcall(TRF.ST.tick);
     pcall(TRF.UP.tick);
+    pcall(TRF.BAG.step);
     drawUI();
     drawAlert();
     trailTick(now);
