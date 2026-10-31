@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.29';
+addon.version = '4.30';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -3420,22 +3420,42 @@ TRF.armorTab = function()
 
     local dl = imgui.GetWindowDrawList();
     local x0, y0 = imgui.GetCursorScreenPos();
-    local labelW = 58;
-    local setGap = 10;
-    local cell = math.floor(math.max(30, math.min(48, ((ROW_W - labelW - setGap * 4) / 5 - 4) / 3)));
-    local setW = cell * 3 + 4;
+    -- Each set in its own panel (its colour along the top, its name and T1 T2 T3 inside), with a clear gap between
+    -- sets and a small one between tiers. The cells fill the width: a wider window gives bigger icons.
     local lh = imgui.GetTextLineHeight();
+    local labelW = 44;
+    local setGap = 10;
+    local pad = 4;
+    local tg = 2;                                                -- (between tiers)
+    local cell = math.floor(math.max(32, math.min(58, (ROW_W - labelW - setGap * 4 - 5 * (pad * 2 + tg * 2)) / 15)));
+    local setW = cell * 3 + tg * 2 + pad * 2;
+    local headH = lh * 2 + 14;
+    local gridH = 5 * cell + 4 * tg;
+    local panelH = headH + gridH + pad + 2;
     local now = os.clock();
     local function setX(si) return x0 + labelW + (si - 1) * (setW + setGap); end
+    local function cellX(si, t_) return setX(si) + pad + (t_ - 1) * (cell + tg); end
+    local gy = y0 + headH;
+    local mx_, my_ = imgui.GetMousePos();
 
-    -- set names (hover: crest, jobs and crest zones) and T1 T2 T3
     for si, set in ipairs(TRF.AR.SETS) do
+        local px = setX(si);
+        local c_ = set.color;
+        local over = mx_ >= px and mx_ < px + setW and my_ >= y0 and my_ < y0 + panelH;
+        dl:AddRectFilled({ px, y0 }, { px + setW, y0 + panelH }, u32({ C.panel[1], C.panel[2], C.panel[3], 0.95 }), 10);
+        dl:AddRectFilled({ px, y0 }, { px + setW, y0 + 22 }, u32({ c_[1], c_[2], c_[3], 0.10 }), 10);
+        dl:AddLine({ px + 10, y0 + 1 }, { px + setW - 10, y0 + 1 }, u32({ c_[1], c_[2], c_[3], 0.9 }), 2);
+        dl:AddRect({ px, y0 }, { px + setW, y0 + panelH }, u32({ 1, 1, 1, over and 0.12 or 0.06 }), 10, C.rall, 1);
+        -- the name (hover: crest, jobs and crest zones), how many of its 15 you have, and T1 T2 T3
+        local n_ = 0;
+        for t_ = 1, 3 do for _, sl in ipairs(TRF.AR.SLOTS) do if owned[set.tiers[t_][sl]] or owned[set.final[sl]] then n_ = n_ + 1; end end end
+        local cnt = ('%d/15'):fmt(n_);
         local tw = imgui.CalcTextSize(set.name);
-        local sx = setX(si) + (setW - tw) / 2;
-        imgui.SetCursorScreenPos({ setX(si), y0 });
-        imgui.InvisibleButton('##vengo_arset' .. si, { setW, lh + 2 });
-        dl:AddCircleFilled({ sx - 9, y0 + lh / 2 + 1 }, 3.5, u32(set.color), 12);
-        dl:AddText({ sx, y0 }, u32(C.text), set.name);
+        dl:AddCircleFilled({ px + pad + 5, y0 + 6 + lh / 2 }, 3.5, u32(c_), 12);
+        dl:AddText({ px + pad + 14, y0 + 6 }, u32(C.text), set.name);
+        dl:AddText({ px + setW - pad - imgui.CalcTextSize(cnt), y0 + 6 }, u32(n_ >= 15 and C.green or C.lav), cnt);
+        imgui.SetCursorScreenPos({ px, y0 });
+        imgui.InvisibleButton('##vengo_arset' .. si, { setW, lh + 10 });
         if imgui.IsItemHovered() then
             imgui.BeginTooltip();
             local ci = itemIcon(TRF.AR.CREST_IDS[set.crest]);
@@ -3452,24 +3472,22 @@ TRF.armorTab = function()
         end
         for t_ = 1, 3 do
             local tl = 'T' .. t_;
-            local tx = setX(si) + (t_ - 1) * (cell + 2) + (cell - imgui.CalcTextSize(tl)) / 2;
-            spaced(dl, tx, y0 + lh + 4, tl, u32(C.label), 1);
+            local tx = cellX(si, t_) + (cell - spacedW(tl, 1)) / 2;
+            spaced(dl, tx, y0 + lh + 12, tl, u32(C.label), 1);
         end
     end
-    local gy = y0 + lh * 2 + 10;
     local hoverInfo = nil;
     for r, sl in ipairs(TRF.AR.SLOTS) do
-        local ry = gy + (r - 1) * (cell + 2);
-        spaced(dl, x0, ry + (cell - lh) / 2, TRF.AR.SLOT_LABELS[r]:upper(), u32(C.label), 1.5);
+        local ry = gy + (r - 1) * (cell + tg);
+        spaced(dl, x0, ry + (cell - lh) / 2, TRF.AR.SLOT_LABELS[r]:upper(), u32(C.label), 1);
         for si, set in ipairs(TRF.AR.SETS) do
             local complete = owned[set.final[sl]] ~= nil;
             for t_ = 1, 3 do
                 local id = set.tiers[t_][sl];
-                local cx = setX(si) + (t_ - 1) * (cell + 2);
-                local mx_, my_ = imgui.GetMousePos();
+                local cx = cellX(si, t_);
                 local over = mx_ >= cx and mx_ < cx + cell and my_ >= ry and my_ < ry + cell;
                 TRF.card(dl, cx, ry, cell, cell, complete and 'on' or (owned[id] and 'own') or nil, over, 6);
-                TRF.icon(dl, id, cx + 3, ry + 3, cell - 6, (complete or owned[id]) and 1 or 0.55);
+                TRF.icon(dl, id, cx + 1, ry + 1, cell - 2, (complete or owned[id]) and 1 or 0.55);
                 local h = hot[id];
                 if h == 2 then
                     local pulse = math.abs(math.sin(now * 3));
@@ -3486,7 +3504,7 @@ TRF.armorTab = function()
             end
         end
     end
-    imgui.SetCursorScreenPos({ x0, gy + 5 * (cell + 2) + 6 });
+    imgui.SetCursorScreenPos({ x0, y0 + panelH + 10 });
     imgui.Dummy({ ROW_W, 1 });
 
     if hoverInfo then
