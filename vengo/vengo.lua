@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.38';
+addon.version = '4.39';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -5409,12 +5409,16 @@ end
 -- progress(data) -> killed, total
 TRF.DL.GOB = {
     Fishstix = {
-        talk = function (d) d.zone = d.message:match('Go to (.-),'); end,
+        talk = function (d) d.zone = d.message:match('Go to (.-),') or d.message:match('^Find .-chest in (.-)[%.!]?$'); end,
         describe = function (d) if d.zone then return 'Find and open the Secret Treasure Chest', d.zone; end end,
     },
     Murdox = {
         talk = function (d, prev)
             d.zone, d.count, d.target = d.message:match('Go to (.+) and kill (%d+) (.+)!');
+            if not d.count then                                    -- (the short form: "Kill 16 Evil Weapons in Xarcabard")
+                local n_, t_, z_ = d.message:match('^[Kk]ill (%d+) (.-) in (.-)[%.!]?$');
+                if n_ then d.count, d.target, d.zone = n_, t_, z_; end
+            end
             if prev and prev.message == d.message then d.remaining, d.mob = prev.remaining, prev.mob; end
         end,
         describe = function (d)
@@ -5435,7 +5439,7 @@ TRF.DL.GOB = {
         end,
     },
     Mistrix = {
-        talk = function (d) d.item = d.message:match('Craft me up %a+ signed (.+) and trade it to me!'); end,
+        talk = function (d) d.item = d.message:match('Craft me up %a+ signed (.+) and trade it to me!') or d.message:match('^[Cc]raft a signed (.-)[%.!]?$'); end,
         describe = function (d)
             if d.item then
                 local name = d.item:gsub('^[Ss]erving of ', '');
@@ -5444,12 +5448,18 @@ TRF.DL.GOB = {
         end,
     },
     Saltlix = {
-        talk = function (d) d.zone, d.target = d.message:match('Go to (.+) and kill (.+)!'); end,
+        talk = function (d)
+            d.zone, d.target = d.message:match('Go to (.+) and kill (.+)!');
+            if not d.target then local t_, z_ = d.message:match('^[Kk]ill (.-) in (.-)[%.!]?$'); if t_ then d.target, d.zone = t_, z_; end end
+        end,
         describe = function (d) if d.target then return 'Kill ' .. d.target, d.zone, { label = d.target, query = d.target }; end end,
         progress = function () return 0, 1; end,
     },
     Beetrix = {
-        talk = function (d) d.zone, d.item = d.message:match('Go to (.+), get %a+ (.+) and trade it to me!'); end,
+        talk = function (d)
+            d.zone, d.item = d.message:match('Go to (.+), get %a+ (.+) and trade it to me!');
+            if not d.item then local i_, z_ = d.message:match('^[Cc]ollect (.-) from (.-)[%.!]?$'); if i_ then d.item, d.zone = i_, z_; end end
+        end,
         describe = function (d)
             if d.item then return 'Get ' .. d.item .. ' and trade it to Beetrix', d.zone, { label = d.item, query = d.item }, { { name = d.item, count = 1 } }; end
         end,
@@ -5464,6 +5474,10 @@ function TRF.DL.describe(npc)
     if d.status == 'complete' then return { state = 'done', task = 'Completed for today' }; end
     if d.status == 'return' then return { state = 'return', task = 'Return to ' .. npc .. ' to claim your reward' }; end
     local h = D.GOB[npc];
+    if h.talk and d.message and not d.parsed_ then                -- (a day saved before this version: read its line again)
+        d.parsed_ = true;
+        pcall(h.talk, d, d);
+    end
     local task, where, link, items = h.describe(d);
     local r = { state = 'active', task = task or d.message or '?', where = where, link = link, items = items };
     if h.progress then r.killed, r.total = h.progress(d); end
