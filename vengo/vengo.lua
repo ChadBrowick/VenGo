@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.36';
+addon.version = '4.37';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -5305,7 +5305,10 @@ TRF.extraSettings = function()
     section('Controller');
     if button((TRF.PAD.on and 'GIVE CONTROLLER BACK' or 'USE CONTROLLER') .. '##vengo_pad', { 320, 0 }) then TRF.PAD.set(not TRF.PAD.on); end
     hint('VenGo takes the controller: the d-pad moves between buttons and tabs, A presses. Back / Select gives it back to the game. Put /vengo pad in a macro to switch from the game.');
+end
 
+-- Settings: Updates (at the top of the tab)
+TRF.updateSettings = function()
     section('Updates');
     if rowSwitch('##vengo_upd', 'Check GitHub for new versions', config.check_updates ~= false,
             'Looks at github.com/' .. TRF.UP.REPO .. ' 30 seconds after loading and every 6 hours') then
@@ -5747,6 +5750,8 @@ end
 end
 
 local function tabSettings()
+    TRF.updateSettings();
+
     section('Window');
     if rowSwitch('##vengo_lite', 'Lightweight mode', config.lite == true,
             'A quick preset for the Performance sliders: camera every 3 frames, arrows to 60 yalms, one glow pass, the Seal checked every 0.5 s. Off puts the normal values back. Move any slider after to fine-tune.') then
