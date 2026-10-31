@@ -21,11 +21,12 @@
   Adventor by GUST (GUST Font License). The venture board layout and VNM list
   come from the ventures addon (Commandobill, Seekey, Phatty). Warps go through
   Uberwarp by Thorny, which is installed separately. VanaCore is Vekien's project.
+  The DAILIES tab is ported from Goldilox by Dewin (MIT, LICENSE-goldilox.txt).
 ]]
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.37';
+addon.version = '4.38';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1695,7 +1696,7 @@ local WIN_W = SW + 30 + MARGIN + FULL_ROW + 50;         -- starting size; the wi
 local WIN_H = 700;
 local MIN_W, MIN_H = 640, 460;
 
-local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'VNM ARMOR', 'ULTIMATES', 'LUMORIA', 'ODIOUS CODEX', 'SETTINGS', 'SPECIAL THANKS' };
+local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'DAILIES', 'VNM ARMOR', 'ULTIMATES', 'LUMORIA', 'ODIOUS CODEX', 'SETTINGS', 'SPECIAL THANKS' };
 ui.tab = ui.tab or 1;
 
 local function statusText()
@@ -2379,7 +2380,7 @@ end
 
 -- The menu: dots, the chosen one lit pink fading to the right with a bright
 -- left edge and a small arrow beside it
-local GROUPS = { [7] = true, [11] = true };   -- (faint lines before the collections and before SETTINGS)
+local GROUPS = { [8] = true, [12] = true };   -- (faint lines before the collections and before SETTINGS)
 
 local function sidebar(dl, x0, y0, sw)
     local y = y0;
@@ -2843,6 +2844,7 @@ local THANKS = {
     { 'Commandobill, Seekey and Phatty', 'the ventures addon: the live venture board and the VNM list (drops, grid squares, notes)' },
     { 'Thorny', 'Uberwarp: the warps behind GO' },
     { 'GUST', 'the TeX Gyre Adventor font' },
+    { 'Dewin (Goldilox)', 'the DAILIES tab: the goblin and Palalumin dailies and how to read them from chat (MIT licence, LICENSE-goldilox.txt)' },
     { 'Loxley (Trove)', 'the VNM Armor, Ultimates, Lumoria and Odious Codex data, and how to ask the CatsEyeXI server for currency and Lumoria progress (MIT licence, LICENSE-trove.txt)' },
 };
 
@@ -5276,7 +5278,7 @@ function TRF.UP.notice()
     imgui.SetCursorScreenPos({ x + ROW_W - 270, y + 5 });
     if button('INSTALL##vengo_up_i', { 120, h - 10 }, false, true) then TRF.UP.installNow(); end
     imgui.SameLine(0, 8);
-    if button('WHAT\'S NEW##vengo_up_n', { 130, h - 10 }, true, true) then ui.tab = 11; end
+    if button('WHAT\'S NEW##vengo_up_n', { 130, h - 10 }, true, true) then ui.tab = 12; end
     imgui.SetCursorScreenPos({ x, y + h + 8 });
     imgui.Dummy({ ROW_W, 1 });
 end
@@ -5338,6 +5340,448 @@ TRF.updateSettings = function()
         end
     end
     hint('INSTALL downloads that release\'s zip from github.com/' .. TRF.UP.REPO .. ' only, unpacks it over the vengo folder (your settings, stars and presets aren\'t in it), then you type /addon reload vengo.');
+end
+
+------------------------------------------------------------------------
+-- DAILIES: the CatsEyeXI goblin dailies in Lower Jeuno (and Goldilox's dice), plus Palalumin's three Sea dailies.
+-- Read from chat as you talk to them and work on them; kept per character until JP midnight.
+-- Ported from Goldilox 3.10 by Dewin (Daniel Grace), MIT licence (LICENSE-goldilox.txt). Palalumin's chat formats
+-- follow seekey13's Goldilox-UI (MIT).
+------------------------------------------------------------------------
+TRF.DL = { st = nil, cid = nil, inv = { at = -10, ok = false, names = {}, ids = {}, counts = {} }, tradeAt = nil,
+    ORDER = { 'Fishstix', 'Murdox', 'Mistrix', 'Saltlix', 'Beetrix' },
+    SEA = { 'Find flux', 'Item request', 'Defeat mobs' },
+    SEA_TITLE = { ['Find flux'] = 'Find the Flux', ['Item request'] = 'Item request', ['Defeat mobs'] = 'Defeat mobs' },
+    TAG = { new = 'NOT STARTED', active = 'IN PROGRESS', ['return'] = 'TURN IN', done = 'DONE' },
+    QUICK = { 'Fishstix', 'Murdox', 'Mistrix', 'Saltlix', 'Beetrix', 'please return to', 'Daily Quest', 'Dice roll',
+              'Find flux', 'Item request', 'Defeat mobs', 'Defeat Mobs', 'Quest Completed' },
+    -- the diamonds before Palalumin's quest lines (Shift-JIS, and UTF-8 in case chat is re-encoded): open = not done
+    DIAMONDS = { { '\129\158', false }, { '\129\159', true }, { '\226\151\135', false }, { '\226\151\134', true } },
+};
+function TRF.DL.trim(s) return (s:match('^%s*(.-)%s*$')); end
+function TRF.DL.deadline()                                        -- (the next midnight in Japan, when dailies reset)
+    local J = 9 * 3600;
+    return 86400 + math.floor((os.time() + J) / 86400) * 86400 - J;
+end
+function TRF.DL.file(cid) return addon.path .. 'dailies_' .. tostring(cid) .. '.lua'; end
+function TRF.DL.ser(v, ind)
+    local t = type(v);
+    if t == 'string' then return ('%q'):format(v); end
+    if t == 'number' or t == 'boolean' then return tostring(v); end
+    if t ~= 'table' then return 'nil'; end
+    local out = {};
+    for k, x in pairs(v) do
+        local key = (type(k) == 'string' and k:match('^[%a_][%w_]*$')) and k or ('[' .. TRF.DL.ser(k) .. ']');
+        out[#out + 1] = ind .. '  ' .. key .. ' = ' .. TRF.DL.ser(x, ind .. '  ') .. ',';
+    end
+    return '{\n' .. table.concat(out, '\n') .. '\n' .. ind .. '}';
+end
+function TRF.DL.save()
+    local D = TRF.DL;
+    if D.st == nil or D.cid == nil then return; end
+    local f = io.open(D.file(D.cid), 'w');
+    if f == nil then return; end
+    f:write('-- Today\'s dailies (rewritten by VenGo)\nreturn ' .. D.ser(D.st, '') .. '\n');
+    f:close();
+end
+-- Today's state for the character you're on (loaded when you change character; emptied at JP midnight)
+function TRF.DL.status()
+    local D = TRF.DL;
+    local cid = 0;
+    pcall(function () cid = mm():GetParty():GetMemberServerId(0) or 0; end);
+    if cid == 0 then return D.st; end
+    if D.st == nil or cid ~= D.cid then
+        D.cid = cid;
+        D.st = loadTable(D.file(cid)) or {};
+    end
+    local dl_ = D.deadline();
+    if D.st.deadline ~= dl_ then
+        D.st.deadline, D.st.dailies, D.st.sea = dl_, {}, {};
+        if D.st.goldilox ~= dl_ then D.st.goldilox = 0; end
+        D.save();
+    end
+    D.st.dailies = D.st.dailies or {};
+    D.st.sea = D.st.sea or {};
+    return D.st;
+end
+
+-- What each goblin says, read into the day's entry: talk(data, prev); describe(data) -> task, zone, link, items;
+-- progress(data) -> killed, total
+TRF.DL.GOB = {
+    Fishstix = {
+        talk = function (d) d.zone = d.message:match('Go to (.-),'); end,
+        describe = function (d) if d.zone then return 'Find and open the Secret Treasure Chest', d.zone; end end,
+    },
+    Murdox = {
+        talk = function (d, prev)
+            d.zone, d.count, d.target = d.message:match('Go to (.+) and kill (%d+) (.+)!');
+            if prev and prev.message == d.message then d.remaining, d.mob = prev.remaining, prev.mob; end
+        end,
+        describe = function (d)
+            if d.count and d.target then
+                local q = d.mob;                                   -- ("Treants" is "Olden Treant" in the database)
+                if not q then
+                    q = d.target;
+                    if tonumber(d.count) ~= 1 then q = q:gsub('s$', ''); end
+                end
+                return 'Kill ' .. d.count .. ' ' .. d.target, d.zone, { label = d.target, query = q };
+            end
+        end,
+        progress = function (d)
+            local total = tonumber(d.count);
+            if not total or total <= 0 then return nil; end
+            local left = tonumber(d.remaining) or total;
+            return math.max(0, math.min(total, total - left)), total;
+        end,
+    },
+    Mistrix = {
+        talk = function (d) d.item = d.message:match('Craft me up %a+ signed (.+) and trade it to me!'); end,
+        describe = function (d)
+            if d.item then
+                local name = d.item:gsub('^[Ss]erving of ', '');
+                return 'Craft a signed ' .. name .. ' and trade it to Mistrix', nil, { label = name, query = name }, { { name = name, count = 1 } };
+            end
+        end,
+    },
+    Saltlix = {
+        talk = function (d) d.zone, d.target = d.message:match('Go to (.+) and kill (.+)!'); end,
+        describe = function (d) if d.target then return 'Kill ' .. d.target, d.zone, { label = d.target, query = d.target }; end end,
+        progress = function () return 0, 1; end,
+    },
+    Beetrix = {
+        talk = function (d) d.zone, d.item = d.message:match('Go to (.+), get %a+ (.+) and trade it to me!'); end,
+        describe = function (d)
+            if d.item then return 'Get ' .. d.item .. ' and trade it to Beetrix', d.zone, { label = d.item, query = d.item }, { { name = d.item, count = 1 } }; end
+        end,
+    },
+};
+
+-- A goblin's row: state ('new', 'active', 'return', 'done'), task, zone, link, items, killed / total
+function TRF.DL.describe(npc)
+    local D = TRF.DL;
+    local d = D.st and D.st.dailies[npc];
+    if d == nil then return { state = 'new', task = 'Talk to ' .. npc .. ' in Lower Jeuno' }; end
+    if d.status == 'complete' then return { state = 'done', task = 'Completed for today' }; end
+    if d.status == 'return' then return { state = 'return', task = 'Return to ' .. npc .. ' to claim your reward' }; end
+    local h = D.GOB[npc];
+    local task, where, link, items = h.describe(d);
+    local r = { state = 'active', task = task or d.message or '?', where = where, link = link, items = items };
+    if h.progress then r.killed, r.total = h.progress(d); end
+    return r;
+end
+
+-- "Ancient Beastcoin x3, Cosmo-Coin" -> { { name = 'Ancient Beastcoin', count = 3 }, { name = 'Cosmo-Coin', count = 1 } }
+function TRF.DL.items(text)
+    local out = {};
+    for e in text:gmatch('([^,]+)') do
+        e = TRF.DL.trim(e);
+        local name, n = e:match('^(.-)%s+x(%d+)$');
+        if name then out[#out + 1] = { name = name, count = tonumber(n) };
+        elseif e ~= '' then out[#out + 1] = { name = e, count = 1 }; end
+    end
+    return out;
+end
+function TRF.DL.describeSea(key)
+    local D = TRF.DL;
+    local q = D.st and D.st.sea[key];
+    local title = D.SEA_TITLE[key];
+    if q == nil then return { state = 'new', title = title, task = 'Talk to Palalumin in the Grand Palace of Hu\'Xzoi' }; end
+    if q.completed then return { state = 'done', title = title, task = 'Completed for today' }; end
+    if key == 'Find flux' then return { state = 'active', title = title, task = 'Find the Lumorian Flux', where = q.zone }; end
+    if key == 'Item request' then
+        if q.items and #q.items > 0 then return { state = 'active', title = title, task = 'Trade these to Palalumin', items = q.items }; end
+        return { state = 'active', title = title, task = 'Trade ' .. ((q.message and q.message ~= '') and q.message or 'the requested items') };
+    end
+    if q.total and q.killed then
+        if q.killed >= q.total then return { state = 'return', title = title, task = 'Return to Palalumin to claim your reward' }; end
+        return { state = 'active', title = title, where = q.zone, killed = math.max(0, q.killed), total = q.total,
+                 task = q.target and ('Kill ' .. q.target) or 'Defeat the mobs',
+                 link = q.target and { label = q.target, query = q.target } or nil };
+    end
+    return { state = 'active', title = title, task = (q.message and q.message ~= '') and q.message or 'Defeat the mobs' };
+end
+
+-- How many of each item you carry (main bag only: that's all you can trade from). Once a second, only while the tab is open.
+function TRF.DL.scanInv()
+    local I = TRF.DL.inv;
+    local now = os.clock();
+    if now - I.at < 1 then return; end
+    I.at = now;
+    I.ok = pcall(function ()
+        local inv = mm():GetInventory();
+        local counts = {};
+        for i = 0, inv:GetContainerCountMax(0) or 0 do
+            local it = inv:GetContainerItem(0, i);
+            local id = it and it.Id;
+            if id and id ~= 0 and id ~= 65535 then
+                local n = I.names[id];
+                if n == nil then
+                    n = TRF.AR.name(id);
+                    n = (type(n) == 'string' and n ~= '' and not n:find('^Item ')) and n:lower() or false;
+                    I.names[id] = n;
+                    if n then I.ids[n] = id; end
+                end
+                if n then counts[n] = (counts[n] or 0) + (tonumber(it.Count) or 1); end
+            end
+        end
+        I.counts = counts;
+    end);
+end
+-- An exact name wins; otherwise one containing the other counts ("serving of goblin stir-fry" finds "Goblin Stir-fry")
+function TRF.DL.have(name)
+    local I = TRF.DL.inv;
+    local key = (name or ''):lower();
+    if I.counts[key] then return I.counts[key], I.ids[key]; end
+    local sum, id = 0, nil;
+    if #key >= 4 then
+        for k, v in pairs(I.counts) do
+            if #k >= 4 and (k:find(key, 1, true) or key:find(k, 1, true)) then sum = sum + v; id = id or I.ids[k]; end
+        end
+    end
+    return sum, id;
+end
+
+-- Chat: every line is checked cheaply first, so combat spam costs almost nothing
+function TRF.DL.text(m)
+    local D = TRF.DL;
+    local hit = false;
+    for _, n in ipairs(D.QUICK) do if m:find(n, 1, true) then hit = true; break; end end
+    if not hit then return; end
+    m = m:gsub('[\30\31\127].', ''):gsub('[\1-\6\8\9\11-\31]', '');
+    for line in (m .. '\n'):gmatch('([^\n\7]*)[\n\7]') do
+        line = D.trim(line);
+        if line ~= '' and not line:find('^%[VenGo%]') then pcall(D.line, line); end
+    end
+end
+function TRF.DL.seaLine(line)                                     -- (one of Palalumin's quest lines? key, finished, objective)
+    local low = line:lower();
+    for _, key in ipairs(TRF.DL.SEA) do
+        local s, e = low:find(key:lower() .. '%s*:');
+        if s then
+            local before = line:sub(math.max(1, s - 4), s - 1);
+            for _, d in ipairs(TRF.DL.DIAMONDS) do
+                if before:find(d[1], 1, true) then
+                    local obj = TRF.DL.trim(line:sub(e + 1));
+                    if obj ~= '' then return key, d[2], obj; end
+                end
+            end
+        end
+    end
+end
+function TRF.DL.line(line)
+    local D = TRF.DL;
+    local S = D.status();
+    if S == nil then return; end
+    -- Palalumin
+    local key, fin, obj = D.seaLine(line);
+    if key then
+        local q = { message = obj, completed = fin or nil };
+        if key == 'Find flux' then q.zone = obj;
+        elseif key == 'Item request' then q.items = D.items(obj);
+        elseif not fin then
+            local t, z, k, n = obj:match('(.+)%s+%((.+)%)%s+(%d+)/(%d+)');
+            if t then q.target, q.zone, q.killed, q.total = t, z, tonumber(k), tonumber(n); end
+        end
+        S.sea[key] = q;
+        return D.save();
+    end
+    local k, n, mob, z = line:match('Defeat Mobs (%d+)/(%d+) %((.+) in (.+)%)');
+    if k then
+        local q = S.sea['Defeat mobs'] or { message = '' };
+        q.killed, q.total, q.target, q.zone = tonumber(k), tonumber(n), mob, z;
+        S.sea['Defeat mobs'] = q;
+        return D.save();
+    end
+    if line:find('Quest Completed', 1, true) then              -- (which one: worked out from who you're facing)
+        local t = nil;
+        pcall(function ()
+            local tg = mm():GetTarget();
+            local idx = tg:GetTargetIndex(tg:GetIsSubTargetActive() == 1 and 1 or 0);
+            if idx and idx > 0 then t = mm():GetEntity():GetName(idx); end
+        end);
+        local function finish(key_) local q = S.sea[key_]; if q and not q.completed then q.completed = true; D.save(); end end
+        if t == 'Lumorian Flux' then finish('Find flux');
+        elseif t == 'Palalumin' then
+            local kills = S.sea['Defeat mobs'];
+            if D.tradeAt and os.clock() - D.tradeAt < 60 then finish('Item request');
+            elseif kills and kills.killed and kills.total and kills.killed >= kills.total then finish('Defeat mobs'); end
+        end
+        return;
+    end
+    -- "Fishstix : Go to Yughott Grotto, ..."
+    for _, npc in ipairs(D.ORDER) do
+        local said = line:match('%f[%a]' .. npc .. '%s*:%s*(.+)$');
+        if said then
+            said = D.trim(said);
+            local d = { message = said };
+            if said:find('completed') then d.status = 'complete'; else D.GOB[npc].talk(d, S.dailies[npc]); end
+            S.dailies[npc] = d;
+            return D.save();
+        end
+    end
+    -- "You've killed enough Olden Treants, please return to Murdox to claim your reward!"
+    local who = line:match('please return to (%a+) to claim your reward');
+    if who and D.GOB[who] then
+        S.dailies[who] = S.dailies[who] or { message = '' };
+        S.dailies[who].status = 'return';
+        return D.save();
+    end
+    -- "Daily Quest: 19 kills remain. (Olden Treant in Bhaflau Thickets)"
+    local left = line:match('Daily Quest: (%d+) kills? remain');
+    if left then
+        local M = S.dailies.Murdox;
+        if M then
+            M.remaining = left;
+            local exact = line:match('kills? remain.-%((.-) in ');
+            if exact and exact ~= '' then M.mob = exact; end
+            D.save();
+        end
+        return;
+    end
+    if line:match('Dice roll!.*rolls.*%(.*%)') then S.goldilox = S.deadline; D.save(); end
+end
+
+function TRF.DL.open(query)                                       -- (catseyexi.com's database, searched for the name)
+    local url = 'https://catseyexi.com/database?q=' .. query:gsub('[^%w%-%._~]', function (c) return ('%%%02X'):format(c:byte()); end);
+    if not TRF.UP.shell(url, '') then msg('Could not open your browser. Link: ' .. url); end
+end
+
+-- One quest card: state dot, name, zone and pill on top; the task under it (the NM or item is a link); then a bar
+-- for kills and one per item you have to bring
+TRF.DL.COL = { new = 'muted', active = 'seal', ['return'] = 'gold', done = 'green' };
+TRF.DL.KIND = { active = 'on', ['return'] = 'done', done = 'own' };
+function TRF.DL.card(dl, id, name, r)
+    local D = TRF.DL;
+    local lh = imgui.GetTextLineHeight();
+    local bars = {};
+    if r.total and r.state == 'active' then bars[#bars + 1] = { have = r.killed or 0, need = r.total, label = 'Killed' }; end
+    if r.items and r.state == 'active' then
+        for _, it in ipairs(r.items) do
+            local have, iid = D.have(it.name);
+            bars[#bars + 1] = { have = have, need = it.count, label = it.name, id = iid, link = it.name };
+        end
+    end
+    local x, y = imgui.GetCursorScreenPos();
+    local w = ROW_W;
+    local h = 14 + lh + 6 + lh + 12 + #bars * (lh + 8);
+    local mx0, my0 = imgui.GetMousePos();                          -- (no hover button: the links inside take the clicks)
+    local hov = imgui.IsWindowHovered() and mx0 >= x and mx0 < x + w and my0 >= y and my0 < y + h;
+    TRF.card(dl, x, y, w, h, D.KIND[r.state], hov, 8);
+    local col = C[D.COL[r.state]] or C.muted;
+    local done = r.state == 'done';
+
+    -- top line
+    local ty = y + 10;
+    dl:AddCircleFilled({ x + 16, ty + lh / 2 }, 4, u32({ col[1], col[2], col[3], 1 }), 12);
+    if r.state == 'active' or r.state == 'return' then
+        dl:AddCircle({ x + 16, ty + lh / 2 }, 7, u32({ col[1], col[2], col[3], 0.35 }), 16, 1.5);
+    end
+    dl:AddText({ x + 30, ty }, u32(done and C.muted or C.text), name);
+    local nx = x + 30 + imgui.CalcTextSize(name);
+    if r.where and r.where ~= '' and not done then dl:AddText({ nx + 12, ty }, u32(C.lav), r.where); end
+    local tag = D.TAG[r.state];
+    imgui.SetWindowFontScale(0.82);
+    local pw, ph = spacedW(tag, 1.5) + 20, imgui.GetTextLineHeight() + 6;
+    local px, py = x + w - pw - 12, ty + (lh - ph) / 2;
+    dl:AddRectFilled({ px, py }, { px + pw, py + ph }, u32({ col[1], col[2], col[3], 0.14 }), ph / 2);
+    dl:AddRect({ px, py }, { px + pw, py + ph }, u32({ col[1], col[2], col[3], 0.55 }), ph / 2, C.rall, 1);
+    spaced(dl, px + 10, py + 3, tag, u32({ col[1], col[2], col[3], 1 }), 1.5);
+    imgui.SetWindowFontScale(1);
+
+    -- the task, with the NM or item as a link
+    local tx, tyy = x + 30, ty + lh + 6;
+    local task, L = r.task or '', r.link;
+    local s_, e_ = nil, nil;
+    if L and not done and r.state ~= 'return' then s_, e_ = task:find(L.label, 1, true); end
+    if s_ then
+        local pre, mid, post = task:sub(1, s_ - 1), task:sub(s_, e_), task:sub(e_ + 1);
+        dl:AddText({ tx, tyy }, u32(C.text), pre);
+        local mx_ = tx + imgui.CalcTextSize(pre);
+        local mw = imgui.CalcTextSize(mid);
+        local lhov, lclick = TRF.hot('##vengo_dll' .. id, mx_, tyy, mw, lh);
+        local lc = lhov and { NEON2[1], NEON2[2], NEON2[3], 1 } or C.acc;
+        dl:AddText({ mx_, tyy }, u32(lc), mid);
+        dl:AddLine({ mx_, tyy + lh }, { mx_ + mw, tyy + lh }, u32({ lc[1], lc[2], lc[3], lhov and 0.9 or 0.4 }), 1);
+        dl:AddText({ mx_ + mw, tyy }, u32(C.text), post);
+        if lhov then imgui.SetTooltip('Look up ' .. L.query .. ' on catseyexi.com/database'); end
+        if lclick then D.open(L.query); end
+    else
+        dl:AddText({ tx, tyy }, u32(done and C.muted or C.text), task);
+    end
+
+    -- bars
+    local by = tyy + lh + 10;
+    for i, b in ipairs(bars) do
+        local bx = tx;
+        if b.id then TRF.icon(dl, b.id, bx, by - 1, lh + 2, 1); end
+        local lx = bx + (b.id and lh + 8 or 0);
+        local label = b.label;
+        local lw = math.min(imgui.CalcTextSize(label), 260);
+        dl:AddText({ lx, by }, u32(b.have >= b.need and C.green or C.muted), label);
+        if b.link then
+            local ih, ic = TRF.hot(('##vengo_dli%s%d'):format(id, i), lx, by, lw, lh);
+            if ih then imgui.SetTooltip('Look up ' .. b.link .. ' on catseyexi.com/database'); end
+            if ic then D.open(b.link); end
+        end
+        local barX = x + 30 + 280;
+        TRF.bar(dl, barX, by, x + w - 16 - barX, lh, b.have, b.need);
+        by = by + lh + 8;
+    end
+    imgui.Dummy({ w, h + 6 });
+end
+
+TRF.dlTab = function()
+    local D = TRF.DL;
+    local S = D.status();
+    D.scanInv();
+    section('Dailies');
+    local left = TRF.DL.deadline() - os.time();
+    imgui.TextColored(C.muted, 'Resets at JP midnight, in');
+    imgui.SameLine(0, 6);
+    imgui.TextColored(C.gold, TRF.dur(left));
+    imgui.SameLine(ROW_W - 150);
+    if button('CLEAR TODAY##vengo_dlclr', { 150, 0 }, true, true) and S then
+        S.dailies, S.sea, S.goldilox = {}, {}, 0;
+        D.save();
+    end
+    if S == nil then hint('Waiting for your character to load...'); return; end
+    local dl = imgui.GetWindowDrawList();
+
+    -- the goblins
+    local n = 0;
+    for _, npc in ipairs(D.ORDER) do if S.dailies[npc] and S.dailies[npc].status == 'complete' then n = n + 1; end end
+    TRF.header(dl, 'Goblins of Lower Jeuno', { 0.96, 0.76, 0.32 }, ('%d / 5 done'):fmt(n));
+    for i, npc in ipairs(D.ORDER) do D.card(dl, 'g' .. i, npc, D.describe(npc)); end
+
+    -- Goldilox's dice
+    local got = S.goldilox == S.deadline;
+    local x, y = imgui.GetCursorScreenPos();
+    local lh = imgui.GetTextLineHeight();
+    local h = lh + 20;
+    TRF.card(dl, x, y, ROW_W, h, got and 'own' or nil, false, 8);
+    local gc = got and C.green or (n > 0 and C.gold or C.muted);
+    dl:AddCircleFilled({ x + 16, y + h / 2 }, 4, u32({ gc[1], gc[2], gc[3], 1 }), 12);
+    dl:AddText({ x + 30, y + 10 }, u32(C.text), 'Goldilox');
+    dl:AddText({ x + 30 + imgui.CalcTextSize('Goldilox') + 12, y + 10 }, u32(C.muted),
+        got and 'Reward collected today' or (n > 0 and 'Reward waiting: talk to Goldilox and roll the dice' or 'Finish a goblin daily, then roll Goldilox\'s dice'));
+    local tag = got and 'COLLECTED' or 'NOT YET';
+    imgui.SetWindowFontScale(0.82);
+    local pw, ph = spacedW(tag, 1.5) + 20, imgui.GetTextLineHeight() + 6;
+    local px, py = x + ROW_W - pw - 12, y + (h - ph) / 2;
+    dl:AddRectFilled({ px, py }, { px + pw, py + ph }, u32({ gc[1], gc[2], gc[3], 0.14 }), ph / 2);
+    dl:AddRect({ px, py }, { px + pw, py + ph }, u32({ gc[1], gc[2], gc[3], 0.55 }), ph / 2, C.rall, 1);
+    spaced(dl, px + 10, py + 3, tag, u32({ gc[1], gc[2], gc[3], 1 }), 1.5);
+    imgui.SetWindowFontScale(1);
+    imgui.Dummy({ ROW_W, h + 6 });
+
+    -- Palalumin
+    local ns = 0;
+    for _, key in ipairs(D.SEA) do if S.sea[key] and S.sea[key].completed then ns = ns + 1; end end
+    TRF.header(dl, 'Palalumin (Sea)', { 0.45, 0.62, 1.0 }, ('%d / 3 done'):fmt(ns));
+    for i, key in ipairs(D.SEA) do local r = D.describeSea(key); D.card(dl, 's' .. i, r.title, r); end
+
+    imgui.Spacing();
+    hint('Talk to each goblin in Lower Jeuno (and Palalumin in the Grand Palace of Hu\'Xzoi) to pick up today\'s task; VenGo reads it from chat and follows your kills and the items in your inventory. If a finished Sea quest is missed, talk to Palalumin again. Click a name in violet to look it up on catseyexi.com.');
 end
 
 TRF.sliders = function()
@@ -6187,12 +6631,13 @@ local function drawUI()
             elseif ui.tab == 4 then tabDynamis();
             elseif ui.tab == 5 then TRF.hunterTab();
             elseif ui.tab == 6 then TRF.summitTab();
-            elseif ui.tab == 7 then TRF.armorTab();
-            elseif ui.tab == 8 then TRF.ulTab();
-            elseif ui.tab == 9 then TRF.luTab();
-            elseif ui.tab == 10 then TRF.cxTab();
-            elseif ui.tab == 11 then tabSettings();
-            elseif ui.tab == 12 then tabThanks();
+            elseif ui.tab == 7 then TRF.dlTab();
+            elseif ui.tab == 8 then TRF.armorTab();
+            elseif ui.tab == 9 then TRF.ulTab();
+            elseif ui.tab == 10 then TRF.luTab();
+            elseif ui.tab == 11 then TRF.cxTab();
+            elseif ui.tab == 12 then tabSettings();
+            elseif ui.tab == 13 then tabThanks();
             end
         end);
         if not ok then imgui.TextColored({ C.hp[1], C.hp[2], C.hp[3], 1 }, 'Window error: ' .. tostring(err)); end
@@ -6253,7 +6698,9 @@ ashita.events.register('command', 'vengo_command', function (e)
             ui.open[1] = not ui.open[1];
         end
     elseif cmd == 'help' then
-        msg('Usage: /vengo (window) | <nm|zone|shorthand> (warp there) | current | next | cancel | ventures | mode ace|cw | update | reload | testalert | where | pad (controller) | upgrade (install a new VenGo)');
+        msg('Usage: /vengo (window) | <nm|zone|shorthand> (warp there) | current | next | cancel | ventures | mode ace|cw | update | reload | testalert | where | dailies | pad (controller) | upgrade (install a new VenGo)');
+    elseif cmd == 'dailies' then
+        ui.open[1], ui.tab = true, 7;
     elseif cmd == 'cancel' or cmd == 'stop' then
         ARMED = nil;
         msg('Cancelled.');
@@ -6346,6 +6793,12 @@ ashita.events.register('text_in', 'vengo_text', function (e)
     local mode = bit.band(tonumber(e.mode) or 0, 0xFF);
     pcall(checkAnnouncement, mode, e.message);
     pcall(checkSealText, mode, e.message);
+    pcall(TRF.DL.text, e.message);                                  -- (DAILIES)
+end);
+
+-- DAILIES: when you last handed something over, to tell Palalumin's item turn-in from his other quests
+ashita.events.register('packet_out', 'vengo_dl_out', function (e)
+    if e ~= nil and e.id == 0x0036 then TRF.DL.tradeAt = os.clock(); end
 end);
 
 pcall(function ()

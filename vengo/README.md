@@ -38,6 +38,14 @@ as you turn. It's a straight line: it shows the way, not the route round walls, 
 - **Updates:** VenGo checks github.com/ChadBrowick/VenGo for new releases. Settings > Updates (or `/vengo upgrade`)
   downloads the new zip from that repository only and unpacks it over the vengo folder; then `/addon reload vengo`.
 
+## Dailies
+
+The DAILIES tab (under SUMMIT, or `/vengo dailies`) tracks the CatsEyeXI goblin dailies in Lower Jeuno
+(Fishstix, Murdox, Mistrix, Saltlix, Beetrix), Goldilox's dice reward, and Palalumin's three Sea dailies. Talk to each
+NPC to pick up the day's task; VenGo reads it from chat and shows its state (not started, in progress, turn in, done),
+the zone, kills, and how many of the wanted items you carry. Click a name in violet to look it up on the catseyexi.com
+database. Everything resets at JP midnight and is kept per character (`dailies_<id>.lua`).
+
 ## Live data
 
 The server sends the venture board (packet 0x1A3) on its own. VenGo reads it as it
@@ -66,6 +74,7 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 - **Commandobill, Seekey and Phatty** for the ventures addon: the venture board and the VNM list
 - **Thorny** for Uberwarp, which does the warps behind GO
 - **GUST** for the TeX Gyre Adventor font
+- **Dewin** for Goldilox: the DAILIES tab (MIT licence, `LICENSE-goldilox.txt`)
 - **Loxley** for Trove: the VNM Armor, Ultimates, Lumoria and Odious Codex data (MIT licence, `LICENSE-trove.txt`)
 
 ## Credits and licence
