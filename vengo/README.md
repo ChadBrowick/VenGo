@@ -29,6 +29,15 @@ showing the name and distance. It uses the game's own camera, so it sits on the 
 as you turn. It's a straight line: it shows the way, not the route round walls, and ends
 5 yalms from the square's middle. Settings: on/off, glow, and the chevrons' colour.
 
+## Stars, controller and updates
+
+- **Stars:** the star beside a venture's GO button watches that zone; clicking a piece on the VNM ARMOR tab watches
+  every venture that drops it. Watched VNMs get a chat line and a sound at 90%, at 100% and a minute before the pop.
+- **Controller:** `/vengo pad` (or Settings > Controller) gives VenGo the controller: d-pad to move, A to press.
+  Back / Select gives it back to the game.
+- **Updates:** VenGo checks github.com/ChadBrowick/VenGo for new releases. Settings > Updates (or `/vengo upgrade`)
+  downloads the new zip from that repository only and unpacks it over the vengo folder; then `/addon reload vengo`.
+
 ## Live data
 
 The server sends the venture board (packet 0x1A3) on its own. VenGo reads it as it

@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.32';
+addon.version = '4.33';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -74,6 +74,11 @@ local config = {
     trail_style = 'solid',     -- lines | bands | solid
     theme = 'pink',            -- the window's accent colours (Settings > Colours)
     lite = false,              -- Lightweight mode: a quick preset for the sliders below
+    star_zones = '',           -- starred venture zones
+    star_items = '',           -- starred VNM armour pieces (item ids)
+    star_chat = true,          -- chat warnings for starred VNMs
+    star_sound = true,         -- and a sound
+    check_updates = true,      -- look for new VenGo versions on GitHub
     seal_check = 0.25,         -- seconds between looks at the Venture Seal's own slot
     seal_scan = 0.5,           -- seconds between searches of the whole list for it
     cam_every = 1,             -- read the camera every N frames (the last one is kept in between)
@@ -85,6 +90,10 @@ local config = {
     bg = 'violet',             -- the window's background
     trail_size = 'medium',     -- small | medium | large
 };
+
+-- VenGo's shared helpers and features (stars, controller, updates, the trail's GO / STOP, the collection tabs):
+-- one table, so they don't count against LuaJIT's 200 locals
+local TRF = {};
 
 ------------------------------------------------------------------------
 -- State
@@ -160,7 +169,8 @@ local function saveSettings()
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
     for _, k in ipairs({ 'transparent', 'minimized', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
-                           'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q' }) do
+                           'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
+                           'star_zones', 'star_items', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
         f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v)));
     end
@@ -354,6 +364,7 @@ local function playAlertSound()
         ffi.load('winmm').PlaySoundA(file, nil, 0x00020001);   -- SND_FILENAME | SND_ASYNC
     end);
 end
+TRF.playAlertSound = playAlertSound;
 
 -- Which venture a chat line is about: an NM name first, then a zone name
 local function ventureInLine(line)
@@ -1019,6 +1030,7 @@ local function jsonDecode(text)
     if ok and type(t) == 'table' then return t; end
     return nil;
 end
+TRF.jsonDecode = jsonDecode;
 
 -- zone name -> zone id, from the game's own zone list
 local ZONE_IDS = nil;
@@ -1365,7 +1377,6 @@ local function pickCurrent()
 end
 
 local SYSTEMS, SYS_NAME, WARPS, WARPS_FROM, loadWarps, nearSystem, warpOptions, LASTWARP, ARMED, warpTo, warpNext, tickArm;
-local TRF = {};                  -- the trail's GO / STOP and its venture (filled in by the trail module below)
 do
 ------------------------------------------------------------------------
 -- Warping, through the Uberwarp plugin (/uw). GO picks the warp that lands
@@ -2505,7 +2516,7 @@ local function rowTier(v, showPool)
 end
 
 local function measureCols(list, showPool)
-    local w = { go = 80, tier = 0, zone = 0, nm = 0, grid = 0, bar = 78, pct = math.max(imgui.CalcTextSize('100%'), imgui.CalcTextSize('10:00')) };
+    local w = { go = 80 + 28, tier = 0, zone = 0, nm = 0, grid = 0, bar = 78, pct = math.max(imgui.CalcTextSize('100%'), imgui.CalcTextSize('10:00')) };
     for _, v in ipairs(list) do
         w.tier = math.max(w.tier, imgui.CalcTextSize(rowTier(v, showPool)));
         w.zone = math.max(w.zone, imgui.CalcTextSize(v.zone_name or ''));
@@ -2568,6 +2579,8 @@ local function ventureRow(v, z, at, showPool)
             dl:AddRectFilled({ sx - 6, sy + 2 }, { sx - 3, sy + rh - 2 }, u32({ NEON2[1], NEON2[2], NEON2[3], 1 }));
         end
     end
+    TRF.ST.button(v);
+    imgui.SameLine(0, 6);
     goButton(v);
     warpTip(v);
     imgui.SameLine(x0 + at.tier);
@@ -2638,6 +2651,7 @@ local function sortedList()
 end
 
 local function tabVentures(z)
+    pcall(TRF.UP.notice);
     -- the one-click GO: the 100% venture, or the one in your zone
     local pick = pickCurrent();
     local bigPushed = pushFont(fonts.big, 24);
@@ -3501,8 +3515,12 @@ TRF.armorTab = function()
                 elseif h == 1 then
                     dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ C.gold[1], C.gold[2], C.gold[3], 0.65 }), 6, C.rall, 1.2);
                 end
+                if TRF.ST.itemStarred(id) then
+                    dl:AddCircleFilled({ cx + cell - 8, ry + 8 }, 7, u32({ 0, 0, 0, 0.55 }), 14);
+                    TRF.ST.draw(dl, cx + cell - 8, ry + 8, 6, C.gold, true);
+                end
                 imgui.SetCursorScreenPos({ cx, ry });
-                imgui.InvisibleButton(('##vengo_ar%d'):format(id), { cell, cell });
+                if imgui.InvisibleButton(('##vengo_ar%d'):format(id), { cell, cell }) then TRF.ST.toggleItem(id); end
                 if imgui.IsItemHovered() then
                     hoverInfo = { id = id, set = set, tier = t_, slot = sl, complete = complete };
                 end
@@ -3529,6 +3547,10 @@ TRF.armorTab = function()
         end
         local hn = TRF.AR.HNM[H_.tier] and TRF.AR.HNM[H_.tier][H_.slot];
         if hn then imgui.Separator(); imgui.TextColored(C.muted, 'Also drops from:'); imgui.TextColored(C.gold, '  ' .. hn); end
+        imgui.Separator();
+        imgui.TextColored(TRF.ST.itemStarred(H_.id) and C.gold or C.lav, TRF.ST.itemStarred(H_.id)
+            and 'Starred: you\'re warned when a venture that drops it is up. Click to unstar.'
+            or 'Click to star: VenGo warns you when a venture that drops it is up.');
         imgui.EndTooltip();
     end
 
@@ -3545,7 +3567,7 @@ TRF.armorTab = function()
     kx = key(kx, nil, { C.gold[1], C.gold[2], C.gold[3], 0.8 }, 'Drops from today\'s ventures');
     key(kx, nil, { NEON2[1], NEON2[2], NEON2[3], 1 }, 'VNM up (pulsing)');
     imgui.Dummy({ ROW_W, 20 });
-    hint('Hover a piece for its drop zones, today\'s ventures that drop it, and the HNM that also drops it. Hover a set name for its crest and jobs. Counts every bag and Storage Slip 01.');
+    hint('Click a piece to star it: VenGo warns you (chat and sound) at 90%, 100% and before the pop whenever a venture that drops it is up. Hover a piece for its drop zones; hover a set name for its crest and jobs.');
 end
 
 ------------------------------------------------------------------------
@@ -4869,6 +4891,380 @@ TRF.LU.BUFFS = {
     { name = "Braver's Bulwark",      desc = 'DEF+15, Phys. Dmg. Taken-8%',                nm = 'Hope Warden',     zone = "Al'Taieu",                pos = '(E-9)',  chip = 2127, chipName = 'Metal Chip',   jobs = 'All Jobs' },
 };
 
+------------------------------------------------------------------------
+-- STARS: ventures (by zone) and VNM armour pieces you care about. A starred zone, or a venture that drops a
+-- starred piece, gets chat and sound warnings at 90%, at 100%, and a minute before the pop.
+------------------------------------------------------------------------
+TRF.ST = { seen = {}, ready = false, at = 0 };
+function TRF.ST.set(key)                                         -- (kept in the settings as "a,b,c")
+    local s = {};
+    for part in tostring(config[key] or ''):gmatch('[^,]+') do s[part] = true; end
+    return s;
+end
+function TRF.ST.save(key, s)
+    local list = {};
+    for k in pairs(s) do list[#list + 1] = k; end
+    table.sort(list);
+    config[key] = table.concat(list, ',');
+    saveSettings();
+end
+function TRF.ST.zoneStarred(v) return v and v.zone_name and TRF.ST.set('star_zones')[zoneKey(v.zone_name)] or false; end
+function TRF.ST.toggleZone(v)
+    local s = TRF.ST.set('star_zones');
+    local k = zoneKey(v.zone_name);
+    if s[k] then s[k] = nil; msg(('Unstarred %s.'):fmt(v.zone_name)); else s[k] = true; msg(('Starred %s: VenGo will warn you at 90%%, 100%% and before the pop.'):fmt(v.zone_name)); end
+    TRF.ST.save('star_zones', s);
+end
+function TRF.ST.itemStarred(id) return TRF.ST.set('star_items')[tostring(id)] or false; end
+function TRF.ST.toggleItem(id)
+    local s = TRF.ST.set('star_items');
+    local k = tostring(id);
+    if s[k] then s[k] = nil; msg(('Unstarred %s.'):fmt(TRF.AR.name(id)));
+    else s[k] = true; msg(('Starred %s: VenGo will warn you when a venture that drops it is up.'):fmt(TRF.AR.name(id))); end
+    TRF.ST.save('star_items', s);
+end
+-- The starred pieces a venture drops (the zone's armour drops, matched by grid square where a zone is listed twice)
+function TRF.ST.piecesOf(v)
+    local out = {};
+    local items = TRF.ST.set('star_items');
+    if next(items) == nil or v == nil or v.zone_name == nil then return out; end
+    local zk = zoneKey(v.zone_name);
+    local m = {};
+    for _, d in ipairs(TRF.AR.DROPS) do if zoneKey(d[1]) == zk then m[#m + 1] = d; end end
+    if #m > 1 and v.grid then
+        local m2 = {};
+        for _, d in ipairs(m) do if d[5] and d[5]:upper() == tostring(v.grid):upper() then m2[#m2 + 1] = d; end end
+        if #m2 > 0 then m = m2; end
+    end
+    for _, d in ipairs(m) do
+        for _, set in ipairs(TRF.AR.SETS) do
+            local id = set.tiers[d[2]][d[3]];
+            if items[tostring(id)] then out[#out + 1] = id; end
+        end
+    end
+    return out;
+end
+function TRF.ST.watched(v) return TRF.ST.zoneStarred(v) or #TRF.ST.piecesOf(v) > 0; end
+function TRF.ST.why(v)
+    local p = TRF.ST.piecesOf(v);
+    if #p == 0 then return ''; end
+    local n = {};
+    for i, id in ipairs(p) do if i <= 3 then n[#n + 1] = TRF.AR.name(id); end end
+    return ' (drops ' .. table.concat(n, ', ') .. ((#p > 3) and ', ...' or '') .. ')';
+end
+function TRF.ST.ping(text)
+    if config.star_chat ~= false then msg('[Star] ' .. text); end
+    if config.star_sound ~= false then
+        local was = config.alert_sound;
+        config.alert_sound = true;                               -- (its own switch, not the alert one)
+        pcall(TRF.playAlertSound);
+        config.alert_sound = was;
+    end
+end
+-- Once a second: 90%, 100%, and a minute before the pop, once each per venture and zone
+function TRF.ST.tick()
+    local ST = TRF.ST;
+    local now = os.clock();
+    if now - ST.at < 1 then return; end
+    ST.at = now;
+    for _, v in ipairs(ventures) do
+        if v.key and v.zone_name and TRF.ST.watched(v) then
+            local id = v.key .. '|' .. tostring(v.zone);
+            local s = ST.seen[id];
+            local p = v.progress or 0;
+            if s == nil then
+                s = { p90 = p >= 90, p100 = p >= 100, pop = false };   -- (what's already true when VenGo starts: no ping)
+                if not ST.ready then ST.seen[id] = s; else ST.seen[id] = { p90 = false, p100 = false, pop = false }; s = ST.seen[id]; end
+            end
+            if p < 90 then s.p90, s.p100, s.pop = false, false, false; end
+            if p >= 90 and p < 100 and not s.p90 then
+                s.p90 = true;
+                ST.ping(('%s (%s, %s) is at %d%%%s.'):fmt(v.nm or 'The VNM', v.zone_name, v.grid or '?', p, ST.why(v)));
+            end
+            if p >= 100 and not s.p100 then
+                s.p90, s.p100 = true, true;
+                local left = popLeft(v);
+                ST.ping(('%s (%s, %s) is at 100%%%s%s.'):fmt(v.nm or 'The VNM', v.zone_name, v.grid or '?',
+                    left and left > 0 and (', pops ' .. popWords(left)) or '', ST.why(v)));
+            end
+            local left = popLeft(v);
+            if left and left > 0 and left <= 60 and not s.pop then
+                s.pop = true;
+                if not (ALERT and ALERT.v == v and ALERT.warned) then
+                    ST.ping(('%s pops in about a minute (%s, %s).'):fmt(v.nm or 'The VNM', v.zone_name, v.grid or '?'));
+                end
+            end
+        end
+    end
+    ST.ready = true;
+end
+-- A star (5 points), filled or outlined
+function TRF.ST.draw(dl, cx, cy, r, col, filled)
+    local pts = {};
+    for i = 0, 9 do
+        local a = -math.pi / 2 + i * math.pi / 5;
+        local rr = (i % 2 == 0) and r or r * 0.45;
+        pts[#pts + 1] = { cx + math.cos(a) * rr, cy + math.sin(a) * rr };
+    end
+    if filled then
+        for i = 0, 4 do
+            dl:AddTriangleFilled({ cx, cy }, pts[i * 2 + 1], pts[(i * 2 + 1) % 10 + 1], u32(col));
+            dl:AddTriangleFilled({ cx, cy }, pts[(i * 2 + 1) % 10 + 1], pts[(i * 2 + 2) % 10 + 1], u32(col));
+        end
+    else
+        for i = 1, 10 do dl:AddLine(pts[i], pts[i % 10 + 1], u32(col), 1.3); end
+    end
+end
+-- The star button on a venture row: gold when the zone is starred, violet when it's watched for a starred piece
+function TRF.ST.button(v)
+    local h = imgui.GetFrameHeight();
+    local x, y = imgui.GetCursorScreenPos();
+    local clicked = imgui.InvisibleButton('##vengo_star' .. tostring(v.key), { 22, h });
+    local hov = imgui.IsItemHovered();
+    local dl = imgui.GetWindowDrawList();
+    local zs = TRF.ST.zoneStarred(v);
+    local pieces = TRF.ST.piecesOf(v);
+    local col = zs and C.gold or (#pieces > 0 and C.mp2 or { 1, 1, 1, hov and 0.7 or 0.3 });
+    if zs or #pieces > 0 then dl:AddCircleFilled({ x + 11, y + h / 2 }, 10, u32({ col[1], col[2], col[3], 0.15 }), 16); end
+    TRF.ST.draw(dl, x + 11, y + h / 2, 7, { col[1], col[2], col[3], 1 }, zs or #pieces > 0);
+    if hov then
+        local t = zs and ('Starred: you\'ll be warned about %s at 90%%, 100%% and before the pop. Click to unstar.'):fmt(v.zone_name)
+            or (#pieces > 0 and ('Watched: it drops a piece you starred%s. Click to star the zone too.'):fmt(TRF.ST.why(v)))
+            or ('Star %s: warnings at 90%%, 100%% and a minute before the pop.'):fmt(v.zone_name or 'this venture');
+        imgui.SetTooltip(t);
+    end
+    if clicked then TRF.ST.toggleZone(v); end
+end
+
+------------------------------------------------------------------------
+-- CONTROLLER: VenGo's window takes the controller (VanaCore hands it over; the d-pad moves between buttons,
+-- A presses, the game doesn't see them). /vengo pad or the button in Settings; Back / Select gives it back.
+------------------------------------------------------------------------
+TRF.PAD = { on = false, focus = false };
+function TRF.PAD.set(on)
+    if on and not (rawget(_G, 'vana') and vana.gamepad and vana.gamepad.nav) then
+        msg('This VanaCore has no controller hand-over (vana.gamepad.nav); the controller can\'t drive VenGo here.');
+        return;
+    end
+    TRF.PAD.on = on;
+    if on then
+        ui.open[1] = true;
+        if config.minimized then config.minimized = false; saveSettings(); end
+        TRF.PAD.focus = true;
+        msg('VenGo has the controller: d-pad to move, A to press. Back / Select (or /vengo pad) gives it back.');
+    else
+        pcall(vana.gamepad.nav, false);
+        msg('The controller is back with the game.');
+    end
+end
+function TRF.PAD.frame()
+    if not TRF.PAD.on then return; end
+    if not ui.open[1] or config.minimized then TRF.PAD.set(false); return; end
+    pcall(vana.gamepad.nav, true);
+end
+pcall(function ()
+    ashita.events.register('xinput_button', 'vengo_pad_x', function (e)
+        if TRF.PAD.on and e.button == 5 and (e.state or 0) ~= 0 then  -- (Back)
+            TRF.PAD.set(false);
+            e.blocked = true;
+            return true;
+        end
+    end);
+    ashita.events.register('dinput_button', 'vengo_pad_d', function (e)
+        if TRF.PAD.on and e.button == 56 and (e.state or 0) >= 128 then -- (Share / Select on most pads)
+            TRF.PAD.set(false);
+            e.blocked = true;
+            return true;
+        end
+    end);
+end);
+
+------------------------------------------------------------------------
+-- UPDATES: VenGo asks GitHub for ChadBrowick/VenGo's latest release (in the background, with Windows' curl.exe)
+-- at load and every 6 hours, and offers it when it's newer. INSTALL downloads that release's zip (only from that
+-- repository) and unpacks it over the vengo folder with Windows' tar.exe; your settings aren't in the zip.
+------------------------------------------------------------------------
+TRF.UP = { REPO = 'ChadBrowick/VenGo', at = nil, nextAt = 0, pending = nil, latest = nil, err = nil, install = nil };
+TRF.UP.API = 'https://api.github.com/repos/' .. TRF.UP.REPO .. '/releases/latest';
+TRF.UP.PAGE = 'https://github.com/' .. TRF.UP.REPO .. '/releases/latest';
+function TRF.UP.file(n) return addon.path .. n; end
+function TRF.UP.shell(exe, args)
+    local ok, err = pcall(function ()
+        local ffi = require('ffi');
+        pcall(ffi.cdef, 'void* __stdcall ShellExecuteA(void* hwnd, const char* op, const char* file, const char* params, const char* dir, int show);');
+        local r = ffi.load('shell32').ShellExecuteA(nil, 'open', exe, args, nil, (exe:find('^https://')) and 1 or 0);
+        if tonumber(ffi.cast('intptr_t', r)) <= 32 then error(exe .. ' could not be started'); end
+    end);
+    return ok, err;
+end
+function TRF.UP.newer(a, b)                                      -- (is version a newer than b? "4.32" vs "4.4")
+    local function parts(s) local t = {}; for n in tostring(s or ''):gmatch('%d+') do t[#t + 1] = tonumber(n); end return t; end
+    local pa, pb = parts(a), parts(b);
+    for i = 1, math.max(#pa, #pb) do
+        local x, y = pa[i] or 0, pb[i] or 0;
+        if x ~= y then return x > y; end
+    end
+    return false;
+end
+function TRF.UP.ask()
+    local U = TRF.UP;
+    if U.pending then return; end
+    os.remove(U.file('update_check.tmp'));
+    local ok, err = U.shell('curl.exe', ('-s -f -L -m 20 -A "VenGo/%s" -H "Accept: application/vnd.github+json" -o "%s" "%s"')
+        :format(addon.version, U.file('update_check.tmp'), U.API));
+    if ok then U.pending = os.time(); else U.err = tostring(err); end
+end
+function TRF.UP.tick()
+    local U = TRF.UP;
+    if config.check_updates == false then return; end
+    local now = os.time();
+    if U.pending then
+        local f = io.open(U.file('update_check.tmp'), 'rb');
+        local body = f and f:read('*a');
+        if f then f:close(); end
+        local data = body and body ~= '' and TRF.jsonDecode(body) or nil;
+        if data and data.tag_name then
+            U.pending, U.at, U.err = nil, now, nil;
+            local zip = nil;
+            for _, a in ipairs(data.assets or {}) do
+                local u = tostring(a.browser_download_url or '');
+                if u:lower():find('%.zip$') and u:find('^https://github%.com/' .. U.REPO:gsub('%p', '%%%0') .. '/releases/download/') then zip = u; end
+            end
+            U.latest = { tag = tostring(data.tag_name), url = tostring(data.html_url or U.PAGE), zip = zip,
+                         notes = tostring(data.body or ''):gsub('\r', '') };
+            if TRF.UP.newer(U.latest.tag, addon.version) and U.told ~= U.latest.tag then
+                U.told = U.latest.tag;
+                msg(('VenGo %s is out (you have %s). See Settings > Updates, or type /vengo upgrade.'):fmt(U.latest.tag, addon.version));
+            end
+            os.remove(U.file('update_check.tmp'));
+        elseif now - U.pending > 25 then
+            U.pending, U.err = nil, 'GitHub didn\'t answer';
+            os.remove(U.file('update_check.tmp'));
+        end
+    elseif now >= U.nextAt then
+        U.nextAt = now + ((U.at == nil and U.nextAt == 0) and 30 or 6 * 3600);   -- (30 s after loading, then every 6 hours)
+        if U.at ~= nil or U.first then U.ask(); end
+        U.first = true;
+    end
+    local I = U.install;                                         -- (an install under way)
+    if I then
+        if I.step == 'download' then
+            local f = io.open(U.file('update.zip'), 'rb');
+            local size = f and f:seek('end') or 0;
+            if f then f:close(); end
+            if size > 1000 and size == I.size then                   -- (it stopped growing: done)
+                I.step, I.at = 'unpack', now;
+                local parent = addon.path:gsub('[\\/]+$', ''):match('^(.*)[\\/][^\\/]+$');
+                local ok = U.shell('tar.exe', ('-xf "%s" -C "%s"'):format(U.file('update.zip'), parent));
+                if not ok then msg('Couldn\'t start tar.exe to unpack the update. Unzip update.zip in the vengo folder yourself.'); U.install = nil; end
+            elseif now - I.at > 90 then
+                msg('The update download didn\'t finish. Try again, or get it from the release page.'); U.install = nil;
+            end
+            I.size = size;
+        elseif I.step == 'unpack' and now - I.at >= 3 then
+            local f = io.open(addon.path .. 'vengo.lua', 'rb');
+            local head = f and f:read(4096) or '';
+            if f then f:close(); end
+            local v = head:match("addon%.version%s*=%s*'([^']+)'");
+            if v == I.tag or not TRF.UP.newer(I.tag, v) then
+                msg(('VenGo %s is installed. Type /addon reload vengo to start it.'):fmt(I.tag));
+                os.remove(U.file('update.zip'));
+                U.install = nil;
+                U.done = I.tag;
+            elseif now - I.at > 20 then
+                msg('The update didn\'t unpack. update.zip is in the vengo folder: unzip it over the vengo folder yourself.');
+                U.install = nil;
+            end
+        end
+    end
+end
+function TRF.UP.installNow()
+    local U = TRF.UP;
+    local L = U.latest;
+    if L == nil or not L.zip then msg('No zip to install on that release: opening its page.'); U.shell(L and L.url or U.PAGE, ''); return; end
+    if U.install then return; end
+    os.remove(U.file('update.zip'));
+    local ok = U.shell('curl.exe', ('-s -f -L -m 60 -A "VenGo/%s" -o "%s" "%s"'):format(addon.version, U.file('update.zip'), L.zip));
+    if ok then
+        U.install = { step = 'download', at = os.time(), tag = L.tag, size = -1 };
+        msg(('Downloading VenGo %s from github.com/%s...'):fmt(L.tag, U.REPO));
+    else
+        msg('Couldn\'t start curl.exe to download the update.');
+    end
+end
+-- On the Ventures tab: a slim notice when a newer VenGo is out
+function TRF.UP.notice()
+    local L = TRF.UP.latest;
+    if config.check_updates == false or L == nil or not TRF.UP.newer(L.tag, addon.version) or TRF.UP.done == L.tag then return; end
+    local dl = imgui.GetWindowDrawList();
+    local x, y = imgui.GetCursorScreenPos();
+    local h = 34;
+    TRF.card(dl, x, y, ROW_W, h, 'on', false, 8);
+    dl:AddText({ x + 14, y + (h - imgui.GetTextLineHeight()) / 2 }, u32(C.text), ('VenGo %s is out (you have %s).'):fmt(L.tag, addon.version));
+    imgui.SetCursorScreenPos({ x + ROW_W - 270, y + 5 });
+    if button('INSTALL##vengo_up_i', { 120, h - 10 }, false, true) then TRF.UP.installNow(); end
+    imgui.SameLine(0, 8);
+    if button('WHAT\'S NEW##vengo_up_n', { 130, h - 10 }, true, true) then ui.tab = 11; end
+    imgui.SetCursorScreenPos({ x, y + h + 8 });
+    imgui.Dummy({ ROW_W, 1 });
+end
+
+-- Settings: Starred, Controller, Updates
+TRF.extraSettings = function()
+    section('Starred');
+    if rowSwitch('##vengo_star_chat', 'Chat warnings for starred VNMs', config.star_chat ~= false,
+            'At 90%, at 100% and a minute before the pop, for starred zones and ventures that drop a starred armour piece') then
+        config.star_chat = not (config.star_chat ~= false); saveSettings();
+    end
+    if rowSwitch('##vengo_star_snd', 'Sound for starred VNMs', config.star_sound ~= false, 'The alert sound with each warning') then
+        config.star_sound = not (config.star_sound ~= false); saveSettings();
+    end
+    local zs, is_ = TRF.ST.set('star_zones'), TRF.ST.set('star_items');
+    local nz, ni = 0, 0;
+    for _ in pairs(zs) do nz = nz + 1; end
+    for _ in pairs(is_) do ni = ni + 1; end
+    imgui.TextColored(C.muted, ('Starred: %d zone(s), %d armour piece(s).'):fmt(nz, ni));
+    if (nz + ni) > 0 then
+        imgui.SameLine(0, 14);
+        if button('CLEAR STARS##vengo_star_clr', { 0, 0 }, true, true) then config.star_zones, config.star_items = '', ''; saveSettings(); msg('Stars cleared.'); end
+    end
+    hint('Star a venture with the star by its GO button, or click a piece on the VNM ARMOR tab: any venture that drops it is watched.');
+
+    section('Controller');
+    if button((TRF.PAD.on and 'GIVE CONTROLLER BACK' or 'USE CONTROLLER') .. '##vengo_pad', { 320, 0 }) then TRF.PAD.set(not TRF.PAD.on); end
+    hint('VenGo takes the controller: the d-pad moves between buttons and tabs, A presses. Back / Select gives it back to the game. Put /vengo pad in a macro to switch from the game.');
+
+    section('Updates');
+    if rowSwitch('##vengo_upd', 'Check GitHub for new versions', config.check_updates ~= false,
+            'Looks at github.com/' .. TRF.UP.REPO .. ' 30 seconds after loading and every 6 hours') then
+        config.check_updates = not (config.check_updates ~= false); saveSettings();
+    end
+    local U = TRF.UP;
+    local L = U.latest;
+    local st;
+    if U.install then st = (U.install.step == 'download') and 'downloading...' or 'unpacking...';
+    elseif U.pending then st = 'checking...';
+    elseif L and TRF.UP.newer(L.tag, addon.version) and U.done ~= L.tag then st = ('%s is out (you have %s)'):fmt(L.tag, addon.version);
+    elseif U.done then st = U.done .. ' installed: type /addon reload vengo';
+    elseif L then st = ('up to date (%s)'):fmt(addon.version);
+    else st = U.err or 'not checked yet'; end
+    imgui.TextColored(C.text, 'GitHub: ' .. st);
+    if button('CHECK NOW##vengo_upc', { 200, 0 }, true, true) then U.ask(); end
+    if L and TRF.UP.newer(L.tag, addon.version) and U.done ~= L.tag then
+        imgui.SameLine(0, 10);
+        if button('INSTALL ' .. L.tag .. '##vengo_upi', { 200, 0 }) then U.installNow(); end
+        imgui.SameLine(0, 10);
+        if button('OPEN PAGE##vengo_upo', { 160, 0 }, true, true) then U.shell(L.url, ''); end
+        if L.notes ~= '' then
+            imgui.Spacing();
+            imgui.PushTextWrapPos(imgui.GetCursorPosX() + ROW_W);
+            imgui.TextColored(C.muted, (L.notes:gsub('%*%*', ''):gsub('%[([^%]]+)%]%([^%)]+%)', '%1')));
+            imgui.PopTextWrapPos();
+        end
+    end
+    hint('INSTALL downloads that release\'s zip from github.com/' .. TRF.UP.REPO .. ' only, unpacks it over the vengo folder (your settings, stars and presets aren\'t in it), then you type /addon reload vengo.');
+end
+
 TRF.sliders = function()
     section('Arrows');
     TRF.slider('##vengo_s_scale', 'Size', 'trail_scale', 0.4, 2.5, '%.2fx', 'How big each arrow is (Small 0.70, Medium 1.00, Large 1.40)');
@@ -4886,7 +5282,8 @@ end
 -- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
 TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
     'trail', 'trail_glow', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
-    'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q' };
+    'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
+    'star_zones', 'star_items', 'star_chat', 'star_sound', 'check_updates' };
 function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
 function TRF.loadPresets()
     TRF.slots = {};
@@ -5365,6 +5762,7 @@ local function tabSettings()
     trailSettings();
     TRF.sliders();
     TRF.presets();
+    TRF.extraSettings();
 
     section('Ventures data');
     if rowSwitch('##vengo_cw', 'Crystal Warrior zones (CW)', config.mode == 'CW',
@@ -5626,7 +6024,9 @@ local function drawUI()
     local flags = bit.bor(ImGuiWindowFlags_NoTitleBar, ImGuiWindowFlags_NoCollapse,
         ImGuiWindowFlags_NoBackground, ImGuiWindowFlags_NoScrollbar, ImGuiWindowFlags_NoScrollWithMouse);
     local pushed = pushFont(fonts.panel, 16);
+    if TRF.PAD.focus then TRF.PAD.focus = false; pcall(imgui.SetNextWindowFocus); end
     if imgui.Begin('VenGo##vengo_main', { true }, flags) then
+        TRF.PAD.frame();
         local dl = imgui.GetWindowDrawList();
         local wx, wy = imgui.GetWindowPos();
         local ww, wh = imgui.GetWindowSize();
@@ -5698,6 +6098,8 @@ ashita.events.register('d3d_present', 'vengo_present', function ()
     siteTick(now);
     loginTick();
     drawTrail();
+    pcall(TRF.ST.tick);
+    pcall(TRF.UP.tick);
     drawUI();
     drawAlert();
     trailTick(now);
@@ -5721,12 +6123,18 @@ ashita.events.register('command', 'vengo_command', function (e)
             ui.open[1] = not ui.open[1];
         end
     elseif cmd == 'help' then
-        msg('Usage: /vengo (window) | <nm|zone|shorthand> (warp there) | current | next | cancel | ventures | mode ace|cw | update | reload | testalert | where');
+        msg('Usage: /vengo (window) | <nm|zone|shorthand> (warp there) | current | next | cancel | ventures | mode ace|cw | update | reload | testalert | where | pad (controller) | upgrade (install a new VenGo)');
     elseif cmd == 'cancel' or cmd == 'stop' then
         ARMED = nil;
         msg('Cancelled.');
     elseif cmd == 'refresh' then
         refreshBoard();
+    elseif cmd == 'pad' or cmd == 'controller' then
+        TRF.PAD.set(not TRF.PAD.on);
+    elseif cmd == 'upgrade' then
+        local L = TRF.UP.latest;
+        if L and TRF.UP.newer(L.tag, addon.version) then TRF.UP.installNow();
+        else msg('Checking GitHub for a new VenGo...'); TRF.UP.ask(); end
     elseif cmd == 'next' then
         warpNext();
     elseif cmd == 'testalert' then
