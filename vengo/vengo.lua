@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.30';
+addon.version = '4.31';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -3423,11 +3423,13 @@ TRF.armorTab = function()
     -- Each set in its own panel (its colour along the top, its name and T1 T2 T3 inside), with a clear gap between
     -- sets and a small one between tiers. The cells fill the width: a wider window gives bigger icons.
     local lh = imgui.GetTextLineHeight();
-    local labelW = 44;
-    local setGap = 10;
-    local pad = 4;
-    local tg = 2;                                                -- (between tiers)
-    local cell = math.floor(math.max(32, math.min(58, (ROW_W - labelW - setGap * 4 - 5 * (pad * 2 + tg * 2)) / 15)));
+    local labelW = 0;                                            -- (as wide as the longest slot name really is, plus room)
+    for _, l in ipairs(TRF.AR.SLOT_LABELS) do labelW = math.max(labelW, spacedW(l:upper(), 1)); end
+    labelW = labelW + 16;
+    local setGap = 12;
+    local pad = 7;
+    local tg = 4;                                                -- (between tiers)
+    local cell = math.floor(math.max(30, math.min(46, (ROW_W - labelW - setGap * 4 - 5 * (pad * 2 + tg * 2)) / 15)));
     local setW = cell * 3 + tg * 2 + pad * 2;
     local headH = lh * 2 + 14;
     local gridH = 5 * cell + 4 * tg;
@@ -3443,8 +3445,7 @@ TRF.armorTab = function()
         local c_ = set.color;
         local over = mx_ >= px and mx_ < px + setW and my_ >= y0 and my_ < y0 + panelH;
         dl:AddRectFilled({ px, y0 }, { px + setW, y0 + panelH }, u32({ C.panel[1], C.panel[2], C.panel[3], 0.95 }), 10);
-        dl:AddRectFilled({ px, y0 }, { px + setW, y0 + 22 }, u32({ c_[1], c_[2], c_[3], 0.10 }), 10);
-        dl:AddLine({ px + 10, y0 + 1 }, { px + setW - 10, y0 + 1 }, u32({ c_[1], c_[2], c_[3], 0.9 }), 2);
+        dl:AddRectFilled({ px + 1, y0 + 1 }, { px + setW - 1, y0 + lh + 12 }, u32({ c_[1], c_[2], c_[3], 0.12 }), 9);
         dl:AddRect({ px, y0 }, { px + setW, y0 + panelH }, u32({ 1, 1, 1, over and 0.12 or 0.06 }), 10, C.rall, 1);
         -- the name (hover: crest, jobs and crest zones), how many of its 15 you have, and T1 T2 T3
         local n_ = 0;
@@ -3453,7 +3454,10 @@ TRF.armorTab = function()
         local tw = imgui.CalcTextSize(set.name);
         dl:AddCircleFilled({ px + pad + 5, y0 + 6 + lh / 2 }, 3.5, u32(c_), 12);
         dl:AddText({ px + pad + 14, y0 + 6 }, u32(C.text), set.name);
-        dl:AddText({ px + setW - pad - imgui.CalcTextSize(cnt), y0 + 6 }, u32(n_ >= 15 and C.green or C.lav), cnt);
+        local cntW = imgui.CalcTextSize(cnt);
+        if pad + 14 + tw + 10 + cntW <= setW - pad then           -- (only when there's room beside the name)
+            dl:AddText({ px + setW - pad - cntW, y0 + 6 }, u32(n_ >= 15 and C.green or C.lav), cnt);
+        end
         imgui.SetCursorScreenPos({ px, y0 });
         imgui.InvisibleButton('##vengo_arset' .. si, { setW, lh + 10 });
         if imgui.IsItemHovered() then
@@ -3461,6 +3465,7 @@ TRF.armorTab = function()
             local ci = itemIcon(TRF.AR.CREST_IDS[set.crest]);
             if ci then imgui.Image(ci.ptr, { 20, 20 }); imgui.SameLine(0, 6); end
             imgui.TextColored(set.color, set.name .. ' (' .. set.crest .. ' Crest)');
+            imgui.TextColored(n_ >= 15 and C.green or C.lav, ('%d of 15 pieces'):fmt(n_));
             imgui.TextColored(C.muted, set.jobs);
             imgui.Separator();
             imgui.TextColored(C.text, 'Crest zones:');
@@ -3487,14 +3492,14 @@ TRF.armorTab = function()
                 local cx = cellX(si, t_);
                 local over = mx_ >= cx and mx_ < cx + cell and my_ >= ry and my_ < ry + cell;
                 TRF.card(dl, cx, ry, cell, cell, complete and 'on' or (owned[id] and 'own') or nil, over, 6);
-                TRF.icon(dl, id, cx + 1, ry + 1, cell - 2, (complete or owned[id]) and 1 or 0.55);
+                TRF.icon(dl, id, cx + 3, ry + 3, cell - 6, (complete or owned[id]) and 1 or 0.55);
                 local h = hot[id];
                 if h == 2 then
                     local pulse = math.abs(math.sin(now * 3));
                     dl:AddRect({ cx - 1, ry - 1 }, { cx + cell + 1, ry + cell + 1 }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.25 * pulse }), 7, C.rall, 5);
                     dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.6 + 0.4 * pulse }), 6, C.rall, 2);
                 elseif h == 1 then
-                    dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ C.gold[1], C.gold[2], C.gold[3], 0.8 }), 6, C.rall, 1.5);
+                    dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ C.gold[1], C.gold[2], C.gold[3], 0.65 }), 6, C.rall, 1.2);
                 end
                 imgui.SetCursorScreenPos({ cx, ry });
                 imgui.InvisibleButton(('##vengo_ar%d'):format(id), { cell, cell });
