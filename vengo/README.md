@@ -57,7 +57,7 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 - **Commandobill, Seekey and Phatty** for the ventures addon: the venture board and the VNM list
 - **Thorny** for Uberwarp, which does the warps behind GO
 - **GUST** for the TeX Gyre Adventor font
-- **Loxley** for Trove: the VNM Armor collection data (MIT licence, `LICENSE-trove.txt`)
+- **Loxley** for Trove: the VNM Armor, Ultimates, Lumoria and Odious Codex data (MIT licence, `LICENSE-trove.txt`)
 
 ## Credits and licence
 

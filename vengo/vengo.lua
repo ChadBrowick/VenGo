@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.27';
+addon.version = '4.28';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1684,7 +1684,7 @@ local WIN_W = SW + 30 + MARGIN + FULL_ROW + 50;         -- starting size; the wi
 local WIN_H = 700;
 local MIN_W, MIN_H = 640, 460;
 
-local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'VNM ARMOR', 'SETTINGS', 'SPECIAL THANKS' };
+local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'VNM ARMOR', 'ULTIMATES', 'LUMORIA', 'ODIOUS CODEX', 'SETTINGS', 'SPECIAL THANKS' };
 ui.tab = ui.tab or 1;
 
 local function statusText()
@@ -2368,7 +2368,7 @@ end
 
 -- The menu: dots, the chosen one lit pink fading to the right with a bright
 -- left edge and a small arrow beside it
-local GROUPS = { [8] = true };          -- (a faint line before SETTINGS)
+local GROUPS = { [7] = true, [11] = true };   -- (faint lines before the collections and before SETTINGS)
 
 local function sidebar(dl, x0, y0, sw)
     local y = y0;
@@ -2829,7 +2829,7 @@ local THANKS = {
     { 'Commandobill, Seekey and Phatty', 'the ventures addon: the live venture board and the VNM list (drops, grid squares, notes)' },
     { 'Thorny', 'Uberwarp: the warps behind GO' },
     { 'GUST', 'the TeX Gyre Adventor font' },
-    { 'Loxley (Trove)', 'the VNM Armor collection data: the sets, tiers, drop zones and Storage Slip 01 (MIT licence, LICENSE-trove.txt)' },
+    { 'Loxley (Trove)', 'the VNM Armor, Ultimates, Lumoria and Odious Codex data, and how to ask the CatsEyeXI server for currency and Lumoria progress (MIT licence, LICENSE-trove.txt)' },
 };
 
 local function tabThanks()
@@ -3242,7 +3242,7 @@ end
 -- Set, tier, drop-zone and Storage Slip 01 data from Trove's VNM Armor plugin by Loxley (MIT licence,
 -- LICENSE-trove.txt).
 ------------------------------------------------------------------------
-TRF.AR = { owned = {}, scanAt = 0 };
+TRF.AR = { owned = {}, scanAt = -1e9 };
 TRF.AR.SETS = {
     { name = 'Ares', crest = 'Mountain', color = { 0.90, 0.55, 0.20, 1 }, jobs = 'WAR DRK PLD DRG RUN',
       final = { head = 16084, body = 14546, hands = 14961, legs = 15625, feet = 15711 },
@@ -3523,6 +3523,1286 @@ TRF.armorTab = function()
     imgui.Dummy({ ROW_W, 20 });
     hint('Hover a piece for its drop zones, today\'s ventures that drop it, and the HNM that also drops it. Hover a set name for its crest and jobs. Counts every bag and Storage Slip 01.');
 end
+
+------------------------------------------------------------------------
+-- ULTIMATES, LUMORIA and ODIOUS CODEX: collection tabs. Their data (items, weapons, stages, currencies, bits)
+-- comes from Trove's plugins by Loxley (MIT licence, LICENSE-trove.txt). Currency totals and the Lumoria data are
+-- asked of the CatsEyeXI server the way Trove asks for them (packet 0x1A4); the rest is read from your bags.
+------------------------------------------------------------------------
+TRF.LU = TRF.LU or {};
+TRF.TV = { cur = {}, curAt = nil, curPending = nil, lum = nil, lumAt = nil, lumPending = nil };
+TRF.TV.PACKET = 0x1A4;
+-- Ask the server for something (Trove's request: byte 4 = what, byte 6 = which plugin)
+function TRF.TV.ask(action, plugin)
+    local p = {};
+    for i = 1, 64 do p[i] = 0; end
+    p[5] = action;
+    p[7] = plugin or 0;
+    pcall(function () AshitaCore:GetPacketManager():AddOutgoingPacket(TRF.TV.PACKET, p); end);
+end
+function TRF.TV.askCurrency(force)
+    local T = TRF.TV;
+    local now = os.clock();
+    if T.curPending and now - T.curPending < 5 then return; end
+    if not force and T.curAt and now - T.curAt < 60 then return; end
+    T.curPending = now;
+    T.ask(7);                                                    -- (GET_CURRENCY)
+end
+function TRF.TV.askLumoria(force)
+    local T = TRF.TV;
+    local now = os.clock();
+    if T.lumPending and now - T.lumPending < 5 then return; end
+    if not force and T.lumAt and now - T.lumAt < 60 then return; end
+    T.lumPending = now;
+    T.ask(17, 0);                                                -- (GET_PLUGIN_DATA, Lumoria)
+end
+-- The server's answers
+function TRF.TV.packet(d)
+    local T = TRF.TV;
+    local function u8(o) return d:byte(o + 1) or 0; end
+    local function u16(o) return u8(o) + u8(o + 1) * 256; end
+    local function i32(o)
+        local v = u8(o) + u8(o + 1) * 256 + u8(o + 2) * 65536 + u8(o + 3) * 16777216;
+        if v >= 0x80000000 then v = v - 0x100000000; end
+        return v;
+    end
+    local function str(o, n)
+        local s = d:sub(o + 1, o + n);
+        return (s:gsub('%z.*$', ''));
+    end
+    local action = u8(0x04);
+    if action == 6 then                                          -- (a currency line)
+        local name = str(0x18, 23);
+        if name ~= '' then
+            T.cur[name] = { total = i32(0x30), icon = u16(0x06), section = str(0x08, 15), breakdown = str(0x34, 71) };
+        end
+    elseif action == 2 and T.curPending then                     -- (the end of the list)
+        T.curAt, T.curPending = os.clock(), nil;
+    elseif action == 17 and u8(0x05) == 0 then                   -- (Lumoria)
+        local L = { buffs = u16(0x06), torques = u8(0x08), weapons = u8(0x09),
+                    homam = {}, nashira = {}, omega = {}, ultima = {}, organInv = {}, organVis = {} };
+        for i = 1, 5 do
+            L.homam[i] = u8(0x09 + i); L.nashira[i] = u8(0x0E + i);
+            L.omega[i] = u8(0x13 + i); L.ultima[i] = u8(0x18 + i);
+        end
+        for i = 1, 12 do L.organInv[i] = u8(0x1D + i); L.organVis[i] = u8(0x1D + 12 + i); end
+        local lb = 0x1D + 24 + 1;
+        L.torqueLoc, L.weaponLoc, L.homamLoc, L.nashiraLoc = u8(lb), u8(lb + 1), u8(lb + 2), u8(lb + 3);
+        T.lum, T.lumAt, T.lumPending = L, os.clock(), nil;
+    end
+end
+function TRF.TV.total(name)
+    local e = TRF.TV.cur[name];
+    return e and e.total or nil;
+end
+
+-- Your bags: which of a set of items you have, and how many (every 2 s while a tab is open)
+TRF.BAGS = { 0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
+function TRF.scanBags(watch, fn)
+    local have, count = {}, {};
+    pcall(function ()
+        local inv = mm():GetInventory();
+        for _, b in ipairs(TRF.BAGS) do
+            local max = inv:GetContainerCountMax(b) or 0;
+            for j = 0, max do
+                local it = inv:GetContainerItem(b, j);
+                if it == nil then break; end
+                local id = it.Id;
+                if id ~= 0 and id ~= 65535 then
+                    if watch == nil or watch[id] then
+                        have[id] = true;
+                        count[id] = (count[id] or 0) + (tonumber(it.Count) or 1);
+                    end
+                    if fn then fn(id, it); end
+                end
+            end
+        end
+    end);
+    return have, count;
+end
+
+-- Small drawing pieces shared by the three tabs
+function TRF.icon(dl, id, x, y, sz, alpha)
+    local ic = itemIcon(id);
+    if ic then
+        pcall(function () dl:AddImage(ic.ptr, { x, y }, { x + sz, y + sz }, { 0, 0 }, { 1, 1 }, u32({ 1, 1, 1, alpha or 1 })); end);
+    else
+        dl:AddRectFilled({ x, y }, { x + sz, y + sz }, u32({ 1, 1, 1, 0.06 * (alpha or 1) }), 3);
+    end
+end
+function TRF.itemTip(id, lines)
+    imgui.BeginTooltip();
+    local ic = itemIcon(id);
+    if ic then imgui.Image(ic.ptr, { 32, 32 }); imgui.SameLine(0, 8); end
+    imgui.TextColored(C.text, TRF.AR.name(id));
+    pcall(function ()
+        local r = AshitaCore:GetResourceManager():GetItemById(id);
+        if r and r.Description and r.Description[1] and r.Description[1] ~= '' then
+            imgui.PushTextWrapPos(imgui.GetCursorPosX() + 320);
+            imgui.TextColored(C.muted, r.Description[1]);
+            imgui.PopTextWrapPos();
+        end
+    end);
+    for _, l in ipairs(lines or {}) do imgui.TextColored(l[2] or C.text, l[1]); end
+    imgui.EndTooltip();
+end
+-- A hover area over a spot just drawn (the tooltip comes from the caller)
+function TRF.hot(id, x, y, w, h)
+    local cx, cy = imgui.GetCursorScreenPos();
+    imgui.SetCursorScreenPos({ x, y });
+    local clicked = imgui.InvisibleButton(id, { w, h });
+    local hov = imgui.IsItemHovered();
+    imgui.SetCursorScreenPos({ cx, cy });
+    return hov, clicked;
+end
+function TRF.bar(dl, x, y, w, h, have, need, fill)
+    local pct = (need > 0) and math.min(have / need, 1) or 0;
+    dl:AddRectFilled({ x, y }, { x + w, y + h }, u32({ 0.03, 0.03, 0.05, 0.9 }), 3);
+    if pct > 0 then dl:AddRectFilled({ x, y }, { x + w * pct, y + h }, u32(fill or { NEON2[1] * 0.6, NEON2[2] * 0.6, NEON2[3] * 0.6, 0.8 }), 3); end
+    dl:AddRect({ x, y }, { x + w, y + h }, u32({ 1, 1, 1, 0.07 }), 3);
+    local s = ('%s / %s'):fmt(TRF.num(math.min(have, need)), TRF.num(need));
+    local tw = imgui.CalcTextSize(s);
+    local ty = y + (h - imgui.GetTextLineHeight()) / 2;
+    dl:AddText({ x + (w - tw) / 2 + 1, ty + 1 }, u32({ 0, 0, 0, 0.8 }), s);
+    dl:AddText({ x + (w - tw) / 2, ty }, u32({ 1, 1, 1, 0.95 }), s);
+end
+function TRF.num(n)
+    local s = tostring(math.floor(n or 0));
+    return (s:reverse():gsub('(%d%d%d)', '%1,'):reverse():gsub('^,', ''));
+end
+function TRF.header(dl, text, col, count)
+    local x, y = imgui.GetCursorScreenPos();
+    local h = 26;
+    dl:AddRectFilled({ x, y }, { x + ROW_W, y + h }, u32({ col[1] * 0.28, col[2] * 0.28, col[3] * 0.28, 0.85 }), 4);
+    dl:AddRectFilled({ x, y }, { x + 3, y + h }, u32({ col[1], col[2], col[3], 1 }));
+    local lh = imgui.GetTextLineHeight();
+    dl:AddText({ x + 12, y + (h - lh) / 2 }, u32({ col[1], col[2], col[3], 1 }), text);
+    if count then
+        local tw = imgui.CalcTextSize(count);
+        dl:AddText({ x + ROW_W - tw - 12, y + (h - lh) / 2 }, u32({ col[1], col[2], col[3], 0.65 }), count);
+    end
+    imgui.Dummy({ ROW_W, h + 4 });
+end
+function TRF.refreshRow(what, at, pending, onClick)
+    local age = at and ('updated ' .. math.floor((os.clock() - at) / 60) .. ' min ago') or (pending and 'asking the server...' or 'not loaded yet');
+    imgui.TextColored(C.muted, what .. ': ' .. age);
+    imgui.SameLine(0, 14);
+    if button('REFRESH##vengo_ref_' .. what, { 0, 0 }, true, true) then onClick(); end
+end
+
+------------------------------------------------------------------------
+-- ODIOUS CODEX: which Dynamis pop items and zone drops your Odious Codex holds (read from the item itself)
+------------------------------------------------------------------------
+TRF.CX = { open = {}, at = -1e9, masks = nil, has = false, ID = 30840 };
+function TRF.CX.scan()
+    local X = TRF.CX;
+    if os.clock() - X.at < 2 then return; end
+    X.at = os.clock();
+    X.has, X.masks = false, { A = 0, B = 0, C = 0, D = 0 };
+    TRF.scanBags({ [X.ID] = true }, function (id, it)
+        if id ~= X.ID or X.has then return; end
+        X.has = true;
+        local ex = it.Extra;
+        local function b(i)
+            if type(ex) == 'string' then return ex:byte(i + 1) or 0; end
+            local ok, v = pcall(function () return ex[i]; end);
+            v = (ok and tonumber(v)) or 0;
+            if v < 0 then v = v + 256; end
+            return v;
+        end
+        local function u32_(o) return b(o) + b(o + 1) * 256 + b(o + 2) * 65536 + b(o + 3) * 16777216; end
+        X.masks = { A = u32_(0), B = u32_(4), C = u32_(8), D = u32_(12) };
+    end);
+end
+function TRF.CX.got(e)
+    local m = TRF.CX.masks and TRF.CX.masks[e.mask] or 0;
+    return bit.band(m, bit.lshift(1, e.bit)) ~= 0;                -- (bit numbering as Trove reads it)
+end
+TRF.cxTab = function()
+    local X = TRF.CX;
+    X.scan();
+    local all, have = 0, 0;
+    for _, z in ipairs(X.ZONES) do
+        for _, e in ipairs(z.pops) do all = all + 1; if X.got(e) then have = have + 1; end end
+        for _, e in ipairs(z.drops or {}) do all = all + 1; if X.got(e) then have = have + 1; end end
+    end
+    section(('Odious Codex  %d / %d'):fmt(have, all));
+    if not X.has then
+        hint('No Odious Codex found in your bags or wardrobes. It records the Dynamis pop items and drops you\'ve collected.');
+        return;
+    end
+    local dl = imgui.GetWindowDrawList();
+    local lh = imgui.GetTextLineHeight();
+    for zi, z in ipairs(X.ZONES) do
+        local zh, zt = 0, #z.pops + #(z.drops or {});
+        for _, e in ipairs(z.pops) do if X.got(e) then zh = zh + 1; end end
+        for _, e in ipairs(z.drops or {}) do if X.got(e) then zh = zh + 1; end end
+        local t = z.tint or { 0.14, 0.12, 0.20 };
+        local col = { math.min(1, t[1] * 4), math.min(1, t[2] * 4), math.min(1, t[3] * 4) };
+        local x, y = imgui.GetCursorScreenPos();
+        local h = 34;
+        local hov, clicked = TRF.hot('##vengo_cxz' .. zi, x, y, ROW_W, h);
+        dl:AddRectFilled({ x, y }, { x + ROW_W, y + h }, u32({ t[1], t[2], t[3], hov and 1 or 0.85 }), 5);
+        dl:AddRectFilled({ x, y }, { x + 3, y + h }, u32({ col[1], col[2], col[3], 1 }));
+        dl:AddText({ x + 14, y + 3 }, u32(C.text), (X.open[zi] and 'v  ' or '>  ') .. z.name);
+        dl:AddText({ x + 14, y + 3 + lh }, u32(C.muted), ('%d / %d collected'):fmt(zh, zt));
+        TRF.bar(dl, x + ROW_W - 200, y + 9, 186, 16, zh, zt, { col[1] * 0.6, col[2] * 0.6, col[3] * 0.6, 0.85 });
+        if clicked then X.open[zi] = not X.open[zi]; end
+        imgui.Dummy({ ROW_W, h + 4 });
+        if X.open[zi] then
+            local cols = { { 'Pop items', z.pops } };
+            if #(z.drops or {}) > 0 then cols[2] = { 'Zone drops', z.drops }; end
+            local cw = (#cols == 2) and (ROW_W - 10) / 2 or ROW_W;
+            local x0, y0 = imgui.GetCursorScreenPos();
+            local maxY = y0;
+            for ci, c in ipairs(cols) do
+                local cx = x0 + (ci - 1) * (cw + 10);
+                local cy = y0;
+                local n = 0;
+                for _, e in ipairs(c[2]) do if X.got(e) then n = n + 1; end end
+                spaced(dl, cx, cy, ('%s  %d/%d'):fmt(c[1]:upper(), n, #c[2]), u32(C.label), 1.5);
+                cy = cy + lh + 6;
+                for ei, e in ipairs(c[2]) do
+                    local got = X.got(e);
+                    local rh = 28;
+                    local rhov = TRF.hot(('##vengo_cx%d_%d_%d'):format(zi, ci, ei), cx, cy, cw, rh);
+                    dl:AddRectFilled({ cx, cy }, { cx + cw, cy + rh }, u32(got and { 0.16, 0.34, 0.16, 0.75 } or { C.well[1], C.well[2], C.well[3], rhov and 1 or 0.8 }), 4);
+                    TRF.icon(dl, e.id, cx + 3, cy + 2, 24, got and 1 or 0.45);
+                    dl:AddText({ cx + 34, cy + (rh - lh) / 2 }, u32(got and C.green or C.muted), e.name);
+                    if e.spawns then
+                        local sw_ = imgui.CalcTextSize(e.spawns);
+                        if sw_ < cw - 180 then dl:AddText({ cx + cw - sw_ - 8, cy + (rh - lh) / 2 }, u32({ C.muted[1], C.muted[2], C.muted[3], 0.8 }), e.spawns); end
+                    end
+                    if rhov then TRF.itemTip(e.id, { { got and 'In your Codex' or 'Not in your Codex yet', got and C.green or C.muted }, { 'Spawns: ' .. tostring(e.spawns or '?'), C.gold } }); end
+                    cy = cy + rh + 2;
+                end
+                if cy > maxY then maxY = cy; end
+            end
+            imgui.SetCursorScreenPos({ x0, maxY + 6 });
+            imgui.Dummy({ ROW_W, 1 });
+        end
+    end
+    hint('Click a zone to see its items. Read from the Odious Codex item itself (any bag or wardrobe).');
+end
+
+------------------------------------------------------------------------
+-- ULTIMATES: relic weapons (Dynamis currency per stage), Mythic and Ergon, and the CW Incursion weapons
+------------------------------------------------------------------------
+TRF.UL = { view = 'relic', at = -1e9, have = {}, count = {} };
+TRF.UL.CUR_NAME = { BYNE = 'Byne Bills', SHELL = 'Whiteshells', BRONZE = 'Bronzepieces' };
+TRF.UL.BAR_ICONS = { ['Alexandrite'] = 2488, ['H-P Bayld'] = 8798 };
+function TRF.UL.scan()
+    local U = TRF.UL;
+    if os.clock() - U.at < 2 then return; end
+    U.at = os.clock();
+    if U.watch == nil then
+        local w = {};
+        for _, r in ipairs(U.RELICS) do w[r.finalId] = true; for _, s in ipairs(r.stages) do w[s.weaponId] = true; end end
+        for _, c in ipairs(U.EXTRA_CARDS) do
+            for _, m in ipairs(c.materials or {}) do w[m.id] = true; end
+            for _, row in ipairs(c.materialRows or {}) do for _, m in ipairs(row.items) do w[m.id] = true; end end
+            for _, m in ipairs(c.sideColumn or {}) do w[m.id] = true; end
+        end
+        for _, z in ipairs(U.INCURSION_ZONES) do
+            for _, wp in ipairs(z.weapons) do
+                w[wp.id] = true; w[wp.mat] = true;
+                for _, ph in ipairs(wp.phases) do w[ph.result] = true; for _, r in ipairs(ph.reqs) do w[r] = true; end end
+            end
+        end
+        U.watch = w;
+    end
+    U.have, U.count = TRF.scanBags(U.watch);
+end
+function TRF.UL.cur(kind) return TRF.TV.total(TRF.UL.CUR_NAME[kind]) or 0; end
+
+function TRF.UL.relicCard(dl, r, x, y, w, h)
+    local U = TRF.UL;
+    local stage = 0;
+    if U.have[r.finalId] then stage = #r.stages;
+    else for s = #r.stages, 1, -1 do if U.have[r.stages[s].weaponId] then stage = s; break; end end end
+    local done = stage >= #r.stages;
+    local need = { BYNE = 0, SHELL = 0, BRONZE = 0 };
+    for _, s in ipairs(r.stages) do
+        need[s.currency] = need[s.currency] + s.amount;
+        for _, ex in ipairs(s.extraCurrency or {}) do need[ex[1]] = need[ex[1]] + ex[2]; end
+    end
+    local tn, th = 0, 0;
+    for k, a in pairs(need) do if a > 0 then tn = tn + a; th = th + math.min(U.cur(k), a); end end
+    local pct = done and 1 or (tn > 0 and th / tn or 0);
+    local bg = done and { 0.28, 0.22, 0.08, 0.85 } or (stage > 0 and { 0.10, 0.22, 0.12, 0.85 }) or { C.well[1], C.well[2], C.well[3], 0.9 };
+    local accent = done and { 1, 0.85, 0.3, 1 } or (stage > 0 and { 0.4, 0.9, 0.4, 1 }) or { NEON2[1], NEON2[2], NEON2[3], 1 };
+    dl:AddRectFilled({ x, y }, { x + w, y + h }, u32(bg), 5);
+    dl:AddRectFilled({ x, y }, { x + 3, y + h }, u32(accent));
+    TRF.icon(dl, r.finalId, x + 8, y + 6, 26);
+    dl:AddText({ x + 40, y + 5 }, u32(C.text), r.name);
+    dl:AddText({ x + 40 + imgui.CalcTextSize(r.name) + 8, y + 5 }, u32(C.muted), r.job or '');
+    local ps = ('%d%%'):fmt(math.floor(pct * 100));
+    dl:AddText({ x + w - imgui.CalcTextSize(ps) - 10, y + 5 }, u32(done and { 1, 0.85, 0.3, 1 } or (pct >= 0.75 and C.green) or C.lav), ps);
+    for s = 1, #r.stages do
+        local dx, dy = x + 44 + (s - 1) * 14, y + 28;
+        if s <= stage then dl:AddCircleFilled({ dx, dy }, 4.5, u32(done and { 1, 0.85, 0.3, 1 } or { 0.4, 0.9, 0.4, 1 }), 12);
+        else dl:AddCircle({ dx, dy }, 4.5, u32({ 0.45, 0.45, 0.5, 1 }), 12, 1); end
+    end
+    if not done then
+        local bars = {};
+        for _, k in ipairs({ 'BYNE', 'SHELL', 'BRONZE' }) do if need[k] > 0 then bars[#bars + 1] = { k, need[k] }; end end
+        table.sort(bars, function (a, b) return a[2] < b[2]; end);
+        local by = y + 40;
+        for _, b in ipairs(bars) do
+            local cd = U.CURRENCY[b[1]];
+            TRF.icon(dl, cd.icon, x + 40, by, 16);
+            TRF.bar(dl, x + 60, by, w - 70, 16, U.cur(b[1]), b[2], cd.barFill);
+            by = by + 19;
+        end
+    end
+    if TRF.hot('##vengo_relic' .. r.finalId, x, y, w, h) then
+        local lines = { { done and 'Complete' or ('Stage %d of %d'):fmt(stage, #r.stages), done and C.gold or C.green } };
+        for si, s in ipairs(r.stages) do
+            lines[#lines + 1] = { ('  %d. %s  (%s %s)'):fmt(si, TRF.AR.name(s.weaponId), TRF.num(s.amount), U.CUR_NAME[s.currency]),
+                                  U.have[s.weaponId] and C.green or C.muted };
+        end
+        TRF.itemTip(r.finalId, lines);
+    end
+end
+
+function TRF.UL.extraCard(dl, c, x, y, w, h)
+    local U = TRF.UL;
+    local have = TRF.TV.total(c.currency) or 0;
+    local pct = c.target > 0 and math.min(have / c.target, 1) or 0;
+    local rows = c.materialRows or { { items = c.materials or {} } };
+    dl:AddRectFilled({ x, y }, { x + w, y + h }, u32(pct >= 1 and { 0.28, 0.22, 0.08, 0.85 } or { C.well[1], C.well[2], C.well[3], 0.9 }), 5);
+    dl:AddRectFilled({ x, y }, { x + 3, y + h }, u32(c.color));
+    TRF.icon(dl, c.icon, x + 8, y + 6, 26);
+    dl:AddText({ x + 40, y + 5 }, u32(C.text), c.name);
+    local ps = ('%d%%'):fmt(math.floor(pct * 100));
+    dl:AddText({ x + w - imgui.CalcTextSize(ps) - 10, y + 5 }, u32(pct >= 1 and C.gold or C.lav), ps);
+    TRF.icon(dl, U.BAR_ICONS[c.currency] or c.icon, x + 40, y + 26, 16);
+    TRF.bar(dl, x + 60, y + 26, w - 70, 16, have, c.target, c.barFill);
+    local my = y + 48;
+    local tipLines = nil;
+    for ri, row in ipairs(rows) do
+        for mi, m in ipairs(row.items) do
+            local mx = x + 40 + (mi - 1) * 21;
+            local got = U.have[m.id];
+            if got then dl:AddRectFilled({ mx - 1, my - 1 }, { mx + 19, my + 19 }, u32({ 0.45, 0.38, 0.10, 0.7 }), 3); end
+            TRF.icon(dl, m.id, mx, my, 18, got and 1 or 0.3);
+            if TRF.hot(('##vengo_xm%d_%d'):format(m.id, ri), mx, my, 18, 18) then tipLines = { m.id, got }; end
+        end
+        my = my + 21;
+    end
+    for si, m in ipairs(c.sideColumn or {}) do
+        local mx = x + w - (#c.sideColumn - si + 1) * 21 - 6;
+        local got = U.have[m.id];
+        if got then dl:AddRectFilled({ mx - 1, y + 47 }, { mx + 19, y + 67 }, u32({ 0.45, 0.38, 0.10, 0.7 }), 3); end
+        TRF.icon(dl, m.id, mx, y + 48, 18, got and 1 or 0.3);
+        if TRF.hot('##vengo_xs' .. m.id, mx, y + 48, 18, 18) then tipLines = { m.id, got }; end
+    end
+    if tipLines then TRF.itemTip(tipLines[1], { { tipLines[2] and 'You have it' or 'Not in your bags', tipLines[2] and C.green or C.muted } });
+    elseif TRF.hot('##vengo_xc' .. c.name, x, y, w, 46) then
+        imgui.SetTooltip(('%s: %s of %s %s'):fmt(c.name, TRF.num(have), TRF.num(c.target), c.currency));
+    end
+end
+
+function TRF.UL.incursion(dl)
+    local U = TRF.UL;
+    local lh = imgui.GetTextLineHeight();
+    local LABELS = { 'Forge', 'Upgrade', 'Trade' };
+    for zi, z in ipairs(U.INCURSION_ZONES) do
+        local n = 0;
+        for _, wp in ipairs(z.weapons) do if U.have[wp.id] then n = n + 1; end end
+        TRF.header(dl, z.name, z.color, ('%d / %d'):fmt(n, #z.weapons));
+        for wi, wp in ipairs(z.weapons) do
+            local x, y = imgui.GetCursorScreenPos();
+            TRF.icon(dl, wp.id, x + 4, y + 2, 20);
+            dl:AddText({ x + 30, y + 4 }, u32(U.have[wp.id] and C.gold or C.text), wp.name);
+            dl:AddText({ x + 36 + imgui.CalcTextSize(wp.name), y + 4 }, u32(C.muted), wp.job);
+            local bw = math.floor((ROW_W - 8) / 3);
+            local maxBars = 0;
+            for _, ph in ipairs(wp.phases) do if #(ph.bars or {}) > maxBars then maxBars = #ph.bars; end end
+            local bh = 58 + maxBars * 16;
+            local by = y + 26;
+            for pi, ph in ipairs(wp.phases) do
+                local px = x + (pi - 1) * (bw + 4);
+                local got = U.have[ph.result];
+                dl:AddRectFilled({ px, by }, { px + bw, by + bh }, u32(got and { 0.28, 0.22, 0.08, 0.8 } or { C.well[1], C.well[2], C.well[3], 0.85 }), 4);
+                dl:AddRectFilled({ px, by }, { px + 2, by + bh }, u32(got and { 1, 0.85, 0.3, 1 } or z.color));
+                TRF.icon(dl, ph.result, px + 6, by + 3, 22, got and 1 or 0.35);
+                local nm = TRF.AR.name(ph.result);
+                if nm:find('^Item %d') and pi == #wp.phases then nm = wp.name; end
+                while #nm > 1 and imgui.CalcTextSize(nm) > bw - 70 do nm = nm:sub(1, -2); end
+                dl:AddText({ px + 32, by + 6 }, u32(got and C.gold or C.muted), nm);
+                local lt = LABELS[pi] or '';
+                dl:AddText({ px + bw - imgui.CalcTextSize(lt) - 6, by + 6 }, u32(C.label), lt);
+                for ri, rid in ipairs(ph.reqs) do
+                    local rx, ry = px + 6 + (ri - 1) * 22, by + 30;
+                    local own = U.have[rid];
+                    if own then dl:AddRectFilled({ rx - 1, ry - 1 }, { rx + 21, ry + 21 }, u32({ 0.45, 0.38, 0.10, 0.7 }), 3); end
+                    TRF.icon(dl, rid, rx, ry, 20, own and 1 or 0.2);
+                    if TRF.hot(('##vengo_inr%d_%d_%d'):format(zi * 100 + wi, pi, ri), rx, ry, 20, 20) then
+                        TRF.itemTip(rid, { { own and 'You have it' or 'Not in your bags', own and C.green or C.muted } });
+                    end
+                end
+                local yb = by + 54;
+                for _, b in ipairs(ph.bars or {}) do
+                    local have = b[3] and (TRF.TV.total(b[3]) or 0) or (U.count[b[2]] or 0);
+                    TRF.icon(dl, b[2], px + 6, yb, 13);
+                    TRF.bar(dl, px + 22, yb, bw - 30, 13, have, b[4], have >= b[4] and { 0.40, 0.55, 0.20, 0.7 } or { 0.25, 0.35, 0.50, 0.6 });
+                    yb = yb + 16;
+                end
+                if TRF.hot(('##vengo_inp%d_%d'):format(zi * 100 + wi, pi), px, by, bw, 28) then
+                    TRF.itemTip(ph.result, { { LABELS[pi] .. (got and ': done' or ''), got and C.gold or C.muted } });
+                end
+            end
+            imgui.SetCursorScreenPos({ x, by + bh + 8 });
+            imgui.Dummy({ ROW_W, 1 });
+        end
+        imgui.Spacing();
+    end
+end
+
+TRF.ulTab = function()
+    local U = TRF.UL;
+    TRF.TV.askCurrency(false);
+    U.scan();
+    section('Ultimates');
+    local dl = imgui.GetWindowDrawList();
+    local loaded = TRF.TV.curAt ~= nil or next(TRF.TV.cur) ~= nil;
+    local x, y = imgui.GetCursorScreenPos();
+    local cx = x;
+    for _, k in ipairs({ 'BYNE', 'SHELL', 'BRONZE' }) do
+        local cd = U.CURRENCY[k];
+        TRF.icon(dl, cd.icon, cx, y, 18);
+        local s = loaded and TRF.num(U.cur(k)) or '?';
+        dl:AddText({ cx + 24, y + 1 }, u32(cd.color), s);
+        cx = cx + 24 + imgui.CalcTextSize(s) + 26;
+    end
+    imgui.Dummy({ ROW_W, 22 });
+    TRF.refreshRow('Currency', TRF.TV.curAt, TRF.TV.curPending, function () TRF.TV.askCurrency(true); U.at = 0; end);
+    imgui.Spacing();
+    local v = pillChoice('##vengo_ulv', { { 'relic', 'RELIC' }, { 'incursion', 'CW INCURSION' } }, U.view);
+    if v then U.view = v; end
+    imgui.Spacing();
+    if U.view == 'incursion' then TRF.UL.incursion(dl); return; end
+    local gap = 8;
+    local cw = math.floor((ROW_W - gap * 2) / 3);
+    local ch = 40 + 3 * 19 + 4;
+    local items = {};
+    for _, r in ipairs(U.RELICS) do items[#items + 1] = { 'r', r }; end
+    for _, c in ipairs(U.EXTRA_CARDS) do items[#items + 1] = { 'x', c }; end
+    local x0, y0 = imgui.GetCursorScreenPos();
+    for i, it in ipairs(items) do
+        local col, row = (i - 1) % 3, math.floor((i - 1) / 3);
+        local px, py = x0 + col * (cw + gap), y0 + row * (ch + gap);
+        if it[1] == 'r' then U.relicCard(dl, it[2], px, py, cw, ch); else U.extraCard(dl, it[2], px, py, cw, ch); end
+    end
+    local rows = math.ceil(#items / 3);
+    imgui.SetCursorScreenPos({ x0, y0 + rows * (ch + gap) });
+    imgui.Dummy({ ROW_W, 1 });
+    hint('Currency totals come from the CatsEyeXI server (the same list as Trove\'s Currency tab); weapons and materials from your bags. Hover a card for its stages.');
+end
+
+------------------------------------------------------------------------
+-- LUMORIA: Storming Sea buffs, Homam / Nashira with augment tiers, Omega / Ultima pieces, torques, Jailer
+-- weapons and organs (all from the CatsEyeXI server)
+------------------------------------------------------------------------
+function TRF.LU.bit(m, pos) return bit.band(m or 0, bit.lshift(1, pos)) ~= 0; end
+TRF.luTab = function()
+    local LU, T = TRF.LU, TRF.TV;
+    T.askLumoria(false);
+    section('Lumoria');
+    TRF.refreshRow('Lumoria', T.lumAt, T.lumPending, function () T.askLumoria(true); end);
+    local D = T.lum;
+    if D == nil then
+        hint('Asking the CatsEyeXI server for your Sea progress. If nothing comes back, press REFRESH.');
+        return;
+    end
+    local dl = imgui.GetWindowDrawList();
+    local lh = imgui.GetTextLineHeight();
+    local SEA = { 0.45, 0.62, 1.0 };
+
+    -- Storming Sea buffs, two columns
+    local nb = 0;
+    for i = 0, 9 do if LU.bit(D.buffs, i) then nb = nb + 1; end end
+    TRF.header(dl, 'Storming Sea buffs', SEA, ('%d / 10'):fmt(nb));
+    local x0, y0 = imgui.GetCursorScreenPos();
+    local half = (ROW_W - 8) / 2;
+    for i, b in ipairs(LU.BUFFS) do
+        local on = LU.bit(D.buffs, i - 1);
+        local bx, by = x0 + ((i - 1) % 2) * (half + 8), y0 + math.floor((i - 1) / 2) * 30;
+        dl:AddRectFilled({ bx, by }, { bx + half, by + 28 }, u32(on and { 0.10, 0.20, 0.30, 0.85 } or { C.well[1], C.well[2], C.well[3], 0.8 }), 4);
+        TRF.icon(dl, b.chip, bx + 3, by + 3, 22, on and 1 or 0.4);
+        dl:AddText({ bx + 32, by + (28 - lh) / 2 }, u32(on and { 0.45, 0.85, 1, 1 } or C.muted), b.name);
+        if TRF.hot('##vengo_lub' .. i, bx, by, half, 28) then
+            imgui.BeginTooltip();
+            imgui.TextColored({ 0.45, 0.85, 1, 1 }, b.name .. (on and '   (active)' or ''));
+            imgui.TextColored(C.text, b.desc);
+            imgui.TextColored(C.muted, ('%s  ·  %s %s'):fmt(b.nm, b.zone, b.pos));
+            imgui.TextColored(C.muted, b.chipName .. '  ·  ' .. b.jobs);
+            imgui.EndTooltip();
+        end
+    end
+    imgui.SetCursorScreenPos({ x0, y0 + 5 * 30 + 6 });
+    imgui.Dummy({ ROW_W, 1 });
+
+    -- Homam and Nashira, side by side
+    local function column(cx, cy, cw, name, pieces, tiers, mats, matCounts, locMask)
+        local n = 0;
+        for i = 1, 5 do if (tiers[i] or 0) > 0 then n = n + 1; end end
+        dl:AddText({ cx, cy }, u32(n >= 5 and C.green or C.acc), ('%s  %d / 5'):fmt(name, n));
+        cy = cy + lh + 6;
+        for i, p in ipairs(pieces) do
+            local tier = tiers[i] or 0;
+            local own = tier > 0;
+            local rh = 40;
+            dl:AddRectFilled({ cx, cy }, { cx + cw, cy + rh }, u32(own and { 0.12, 0.22, 0.12, 0.6 } or { C.well[1], C.well[2], C.well[3], 0.8 }), 4);
+            TRF.icon(dl, p.id, cx + 4, cy + 8, 24, own and 1 or 0.4);
+            dl:AddText({ cx + 34, cy + 3 }, u32(own and C.green or C.muted), p.name);
+            for d = 1, 3 do
+                local dx = cx + 38 + (d - 1) * 12;
+                if d <= tier - 1 then dl:AddCircleFilled({ dx, cy + 28 }, 4, u32({ 1, 0.85, 0.3, 1 }), 12);
+                else dl:AddCircle({ dx, cy + 28 }, 4, u32({ 0.3, 0.3, 0.35, 0.8 }), 12, 1); end
+            end
+            local mc = matCounts[i] or 0;
+            local s = 'x' .. mc;
+            local sw_ = imgui.CalcTextSize(s);
+            dl:AddText({ cx + cw - sw_ - 6, cy + 12 }, u32(mc > 0 and C.text or C.muted), s);
+            if mats[i] then TRF.icon(dl, mats[i].id, cx + cw - sw_ - 30, cy + 10, 20, mc > 0 and 1 or 0.45); end
+            if TRF.hot(('##vengo_lua%s%d'):format(name, i), cx, cy, cw, rh) then
+                local lines = {};
+                if own then
+                    local at = tier - 1;
+                    if at >= 1 and p.augs and p.augs[at] then for _, a in ipairs(p.augs[at]) do lines[#lines + 1] = { a, { 1, 0.55, 0.75, 1 } }; end
+                    else lines[#lines + 1] = { 'Base (no augments)', C.muted }; end
+                    lines[#lines + 1] = { LU.bit(locMask, i - 1) and 'In: Squire' or 'In: Inventory', C.green };
+                else lines[#lines + 1] = { 'Not owned', C.muted }; end
+                if mats[i] then lines[#lines + 1] = { ('%s: %d'):fmt(mats[i].name, mc), C.text }; end
+                TRF.itemTip(p.id, lines);
+            end
+            cy = cy + rh + 2;
+        end
+        return cy;
+    end
+    TRF.header(dl, 'Homam and Nashira', SEA, nil);
+    local ax, ay = imgui.GetCursorScreenPos();
+    local cw = (ROW_W - 10) / 2;
+    local e1 = column(ax, ay, cw, 'Homam', LU.HOMAM, D.homam, LU.OMEGA_PIECES, D.omega, D.homamLoc);
+    local e2 = column(ax + cw + 10, ay, cw, 'Nashira', LU.NASHIRA, D.nashira, LU.ULTIMA_PIECES, D.ultima, D.nashiraLoc);
+    imgui.SetCursorScreenPos({ ax, math.max(e1, e2) + 6 });
+    imgui.Dummy({ ROW_W, 1 });
+
+    -- torques and Jailer weapons
+    local function iconRow(label, list, mask, locMask, key)
+        local n = 0;
+        for i = 0, #list - 1 do if LU.bit(mask, i) then n = n + 1; end end
+        TRF.header(dl, label, SEA, ('%d / %d'):fmt(n, #list));
+        local rx, ry = imgui.GetCursorScreenPos();
+        for i, it in ipairs(list) do
+            local own = LU.bit(mask, i - 1);
+            local ix = rx + (i - 1) * 42;
+            dl:AddRectFilled({ ix, ry }, { ix + 38, ry + 38 }, u32(own and { 0.16, 0.34, 0.16, 0.8 } or { C.well[1], C.well[2], C.well[3], 0.8 }), 4);
+            TRF.icon(dl, it.id, ix + 3, ry + 3, 32, own and 1 or 0.35);
+            if TRF.hot(('##vengo_lu%s%d'):format(key, i), ix, ry, 38, 38) then
+                TRF.itemTip(it.id, { { own and ('Owned  ·  ' .. (LU.bit(locMask, i - 1) and 'Squire' or 'Inventory')) or 'Not owned', own and C.green or C.muted },
+                                     { 'From: ' .. it.nm, C.gold } });
+            end
+        end
+        imgui.SetCursorScreenPos({ rx, ry + 44 });
+        imgui.Dummy({ ROW_W, 1 });
+    end
+    iconRow('Sea Torques', LU.TORQUES, D.torques, D.torqueLoc, 't');
+    iconRow('Jailer Weapons', LU.WEAPONS, D.weapons, D.weaponLoc, 'w');
+
+    -- organs: inventory + vision storage
+    local tot = 0;
+    for i = 1, #LU.ORGANS do tot = tot + (D.organInv[i] or 0) + (D.organVis[i] or 0); end
+    TRF.header(dl, 'Organs', SEA, TRF.num(tot));
+    local ox, oy = imgui.GetCursorScreenPos();
+    local per = 6;
+    local ow = (ROW_W - (per - 1) * 6) / per;
+    for i, o in ipairs(LU.ORGANS) do
+        local inv, vis = D.organInv[i] or 0, D.organVis[i] or 0;
+        local t_ = inv + vis;
+        local px, py = ox + ((i - 1) % per) * (ow + 6), oy + math.floor((i - 1) / per) * 34;
+        dl:AddRectFilled({ px, py }, { px + ow, py + 30 }, u32({ C.well[1], C.well[2], C.well[3], 0.85 }), 4);
+        TRF.icon(dl, o.id, px + 3, py + 3, 24, t_ > 0 and 1 or 0.35);
+        dl:AddText({ px + 32, py + (30 - lh) / 2 }, u32(t_ > 0 and (o.hq and C.gold or C.text) or C.muted), 'x' .. t_);
+        if TRF.hot('##vengo_luo' .. i, px, py, ow, 30) then
+            TRF.itemTip(o.id, { { ('Inventory: %d'):fmt(inv), C.text }, { ('Vision storage: %d'):fmt(vis), C.text }, { ('Total: %d'):fmt(t_), C.green } });
+        end
+    end
+    imgui.SetCursorScreenPos({ ox, oy + math.ceil(#LU.ORGANS / per) * 34 + 4 });
+    imgui.Dummy({ ROW_W, 1 });
+    hint('From the CatsEyeXI server (the same data as Trove\'s Lumoria window). Hover anything for details; dots are augment tiers.');
+end
+
+-- Trove's data for the three tabs (items, stages, bits): MIT licence, LICENSE-trove.txt
+TRF.CX.ZONES = {
+    {
+        name = "Dynamis-San d'Oria",
+        tint = { 0.20, 0.12, 0.12 }, -- red
+        pops = {
+            { name = "Barbaric Bijou",  id = 3353, mask = 'A', bit = 1,  spawns = "Overlord's Tombstone" },
+            { name = "Chapter 1",       id = 3404, mask = 'A', bit = 11, spawns = "Arch Overlord (1/5)" },
+            { name = "Chapter 2",       id = 3405, mask = 'A', bit = 12, spawns = "Arch Overlord (2/5)" },
+            { name = "Chapter 3",       id = 3406, mask = 'A', bit = 13, spawns = "Arch Overlord (3/5)" },
+            { name = "Chapter 4",       id = 3407, mask = 'A', bit = 14, spawns = "Arch Overlord (4/5)" },
+            { name = "Chapter 5",       id = 3408, mask = 'A', bit = 15, spawns = "Arch Overlord (5/5)" },
+        },
+        drops = {
+            { name = "Odious Scale",       id = 3380, mask = 'C', bit = 9,  spawns = "Bladeburner Rokgevok" },
+            { name = "Odious Leather",     id = 3381, mask = 'C', bit = 10, spawns = "Steelshank Kratzvatz" },
+            { name = "Odious Cryptex",     id = 3382, mask = 'C', bit = 11, spawns = "Bloodfist Voshgrosh" },
+            { name = "Odious Strongbox",   id = 3383, mask = 'C', bit = 12, spawns = "Spellspear Djokvukk" },
+        },
+    },
+    {
+        name = "Dynamis-Bastok",
+        tint = { 0.12, 0.14, 0.22 }, -- blue
+        pops = {
+            { name = "Steelwall Bijou", id = 3354, mask = 'A', bit = 2,  spawns = "Gu'Dha Effigy" },
+            { name = "Chapter 6",       id = 3409, mask = 'A', bit = 16, spawns = "Arch Gu'Dha (1/5)" },
+            { name = "Chapter 7",       id = 3410, mask = 'A', bit = 17, spawns = "Arch Gu'Dha (2/5)" },
+            { name = "Chapter 8",       id = 3411, mask = 'A', bit = 18, spawns = "Arch Gu'Dha (3/5)" },
+            { name = "Chapter 9",       id = 3412, mask = 'A', bit = 19, spawns = "Arch Gu'Dha (4/5)" },
+            { name = "Chapter 10",      id = 3413, mask = 'A', bit = 20, spawns = "Arch Gu'Dha (5/5)" },
+        },
+        drops = {
+            { name = "Odious Charm",       id = 3384, mask = 'C', bit = 5,  spawns = "Zo'Pha Forgesoul" },
+            { name = "Odious Backscale",   id = 3385, mask = 'C', bit = 6,  spawns = "Ra'Gho Darkfount" },
+            { name = "Odious Engraving",   id = 3386, mask = 'C', bit = 7,  spawns = "Va'Zhe Pummelsong" },
+            { name = "Odious Letterbox",   id = 3387, mask = 'C', bit = 8,  spawns = "Bu'Bho Truesteel" },
+        },
+    },
+    {
+        name = "Dynamis-Windurst",
+        tint = { 0.12, 0.18, 0.12 }, -- green
+        pops = {
+            { name = "Divine Bijou",    id = 3355, mask = 'A', bit = 3,  spawns = "Tzee Xicu Idol" },
+            { name = "Chapter 11",      id = 3414, mask = 'A', bit = 21, spawns = "Arch Tzee Xicu (1/5)" },
+            { name = "Chapter 12",      id = 3415, mask = 'A', bit = 22, spawns = "Arch Tzee Xicu (2/5)" },
+            { name = "Chapter 13",      id = 3416, mask = 'A', bit = 23, spawns = "Arch Tzee Xicu (3/5)" },
+            { name = "Chapter 14",      id = 3417, mask = 'A', bit = 24, spawns = "Arch Tzee Xicu (4/5)" },
+            { name = "Chapter 15",      id = 3418, mask = 'A', bit = 25, spawns = "Arch Tzee Xicu (5/5)" },
+        },
+        drops = {
+            { name = "Odious Necklace",    id = 3388, mask = 'C', bit = 1,  spawns = "Xuu Bhoqa the Enigma" },
+            { name = "Odious Feather",     id = 3389, mask = 'C', bit = 2,  spawns = "Fuu Tzapo the Blessed" },
+            { name = "Odious Holy Water",  id = 3390, mask = 'C', bit = 3,  spawns = "Naa Yixo the Stillrage" },
+            { name = "Odious Quipu",       id = 3391, mask = 'C', bit = 4,  spawns = "Tee Zaksa the Ceaseless" },
+        },
+    },
+    {
+        name = "Dynamis-Jeuno",
+        tint = { 0.20, 0.18, 0.10 }, -- yellow
+        pops = {
+            { name = "Roving Bijou",    id = 3356, mask = 'A', bit = 4,  spawns = "Goblin Golem" },
+            { name = "Chapter 16",      id = 3419, mask = 'A', bit = 26, spawns = "Arch Goblin Golem (1/5)" },
+            { name = "Chapter 17",      id = 3420, mask = 'A', bit = 27, spawns = "Arch Goblin Golem (2/5)" },
+            { name = "Chapter 18",      id = 3421, mask = 'A', bit = 28, spawns = "Arch Goblin Golem (3/5)" },
+            { name = "Chapter 19",      id = 3422, mask = 'A', bit = 29, spawns = "Arch Goblin Golem (4/5)" },
+            { name = "Chapter 20",      id = 3423, mask = 'A', bit = 30, spawns = "Arch Goblin Golem (5/5)" },
+        },
+        drops = {
+            { name = "Odious Cup",         id = 3392, mask = 'C', bit = 23, spawns = "Quicktrix Hexhands" },
+            { name = "Odious Die",         id = 3393, mask = 'C', bit = 24, spawns = "Feralox Honeylips" },
+            { name = "Odious Mask",        id = 3394, mask = 'C', bit = 25, spawns = "Scourquix Scaleskin" },
+            { name = "Odious Grenade",     id = 3395, mask = 'C', bit = 26, spawns = "Wilywox Tenderpalm" },
+        },
+    },
+    {
+        name = "Dynamis-Beaucedine",
+        tint = { 0.12, 0.16, 0.22 }, -- light blue
+        pops = {
+            { name = "Leering Bijou",   id = 3357, mask = 'A', bit = 5,  spawns = "Angra Mainyu" },
+            { name = "Chapter 21",      id = 3424, mask = 'A', bit = 31, spawns = "Arch Angra Mainyu (1/5)" },
+            { name = "Chapter 22",      id = 3425, mask = 'A', bit = 32, spawns = "Arch Angra Mainyu (2/5)" },
+            { name = "Chapter 23",      id = 3426, mask = 'B', bit = 1,  spawns = "Arch Angra Mainyu (3/5)" },
+            { name = "Chapter 24",      id = 3427, mask = 'B', bit = 2,  spawns = "Arch Angra Mainyu (4/5)" },
+            { name = "Chapter 25",      id = 3428, mask = 'B', bit = 3,  spawns = "Arch Angra Mainyu (5/5)" },
+        },
+        drops = {
+            { name = "Odious Talisman",        id = 3396, mask = 'C', bit = 27, spawns = "Taquede" },
+            { name = "Odious Bell",            id = 3397, mask = 'C', bit = 28, spawns = "Pignonpausard" },
+            { name = "Odious Tree Root",       id = 3398, mask = 'C', bit = 29, spawns = "Hitaume" },
+            { name = "Odious Mirror",          id = 3399, mask = 'C', bit = 30, spawns = "Cavanneche" },
+            { name = "Despot's Parchment",     id = 3359, mask = 'C', bit = 31, spawns = "Goublefaupe" },
+            { name = "Sadist's Parchment",     id = 3360, mask = 'C', bit = 32, spawns = "Quiebitiel" },
+            { name = "Villain's Parchment",    id = 3361, mask = 'D', bit = 1,  spawns = "Mildaunegeux" },
+            { name = "Deluder's Parchment",    id = 3362, mask = 'D', bit = 2,  spawns = "Velosareon" },
+            { name = "Traitor's Parchment",    id = 3363, mask = 'D', bit = 3,  spawns = "Dagourmarche" },
+        },
+    },
+    {
+        name = "Dynamis-Xarcabard",
+        tint = { 0.09, 0.10, 0.18 }, -- dark blue
+        pops = {
+            { name = "Shrouded Bijou",  id = 3358, mask = 'A', bit = 6,  spawns = "Dynamis Lord" },
+            { name = "Chapter 26",      id = 3429, mask = 'B', bit = 4,  spawns = "Arch Dynamis Lord (1/5)" },
+            { name = "Chapter 27",      id = 3430, mask = 'B', bit = 5,  spawns = "Arch Dynamis Lord (2/5)" },
+            { name = "Chapter 28",      id = 3431, mask = 'B', bit = 6,  spawns = "Arch Dynamis Lord (3/5)" },
+            { name = "Chapter 29",      id = 3432, mask = 'B', bit = 7,  spawns = "Arch Dynamis Lord (4/5)" },
+            { name = "Chapter 30",      id = 3433, mask = 'B', bit = 8,  spawns = "Arch Dynamis Lord (5/5)" },
+        },
+        drops = {
+            { name = "Odious Skull",       id = 3400, mask = 'D', bit = 4,  spawns = "Duke Haures" },
+            { name = "Odious Horn",        id = 3401, mask = 'D', bit = 5,  spawns = "Marquis Caim" },
+            { name = "Odious Blood",       id = 3402, mask = 'D', bit = 6,  spawns = "Baron Avnas" },
+            { name = "Odious Pen",         id = 3403, mask = 'D', bit = 7,  spawns = "Count Haagenti" },
+            { name = "Mystic Goad",        id = 3364, mask = 'D', bit = 8,  spawns = "Animated Knuckles" },
+            { name = "Ornate Goad",        id = 3365, mask = 'D', bit = 9,  spawns = "Animated Dagger" },
+            { name = "Holy Goad",          id = 3366, mask = 'D', bit = 10, spawns = "Animated Longsword" },
+            { name = "Intricate Goad",     id = 3367, mask = 'D', bit = 11, spawns = "Animated Claymore" },
+            { name = "Runaeic Goad",       id = 3368, mask = 'D', bit = 12, spawns = "Animated Tabar" },
+            { name = "Seraphic Goad",      id = 3369, mask = 'D', bit = 13, spawns = "Animated Great Axe" },
+            { name = "Tenebrous Goad",     id = 3370, mask = 'D', bit = 14, spawns = "Animated Scythe" },
+            { name = "Stellar Goad",       id = 3371, mask = 'D', bit = 15, spawns = "Animated Spear" },
+            { name = "Demoniac Goad",      id = 3372, mask = 'D', bit = 16, spawns = "Animated Kunai" },
+            { name = "Divine Goad",        id = 3373, mask = 'D', bit = 17, spawns = "Animated Tachi" },
+            { name = "Heavenly Goad",      id = 3374, mask = 'D', bit = 18, spawns = "Animated Hammer" },
+            { name = "Celestial Goad",     id = 3375, mask = 'D', bit = 19, spawns = "Animated Staff" },
+            { name = "Snarled Goad",       id = 3376, mask = 'D', bit = 20, spawns = "Animated Longbow" },
+            { name = "Ethereal Goad",      id = 3377, mask = 'D', bit = 21, spawns = "Animated Gun" },
+            { name = "Mysterial Goad",     id = 3378, mask = 'D', bit = 22, spawns = "Animated Horn" },
+            { name = "Supernal Goad",      id = 3379, mask = 'D', bit = 23, spawns = "Animated Shield" },
+        },
+    },
+    {
+        name = "Dynamis-Valkurm",
+        tint = { 0.16, 0.12, 0.20 }, -- purple
+        pops = {
+            { name = "Creepers Juju",   id = 3456, mask = 'A', bit = 7,  spawns = "Cirrate Christelle" },
+            { name = "Tome II Ch.1",    id = 3470, mask = 'B', bit = 9,  spawns = "Arch Christelle (1/4)" },
+            { name = "Tome II Ch.2",    id = 3471, mask = 'B', bit = 10, spawns = "Arch Christelle (2/4)" },
+            { name = "Tome II Ch.3",    id = 3472, mask = 'B', bit = 11, spawns = "Arch Christelle (3/4)" },
+            { name = "Tome II Ch.4",    id = 3473, mask = 'B', bit = 12, spawns = "Arch Christelle (4/4)" },
+        },
+        drops = {
+            { name = "Nightmare Bud",     id = 3461, mask = 'C', bit = 13, spawns = "Lost Nant'ina" },
+            { name = "Nightmare Log",     id = 3460, mask = 'C', bit = 14, spawns = "Lost Fairy Ring" },
+            { name = "Nightmare Water",   id = 3462, mask = 'C', bit = 15, spawns = "Lost Stcemqestcint" },
+        },
+    },
+    {
+        name = "Dynamis-Buburimu",
+        tint = { 0.16, 0.12, 0.20 }, -- purple
+        pops = {
+            { name = "Revelatory Juju", id = 3457, mask = 'A', bit = 8,  spawns = "Apocalyptic Beast" },
+            { name = "Tome II Ch.5",    id = 3474, mask = 'B', bit = 13, spawns = "Arch Apoc. Beast (1/5)" },
+            { name = "Tome II Ch.6",    id = 3475, mask = 'B', bit = 14, spawns = "Arch Apoc. Beast (2/5)" },
+            { name = "Tome II Ch.7",    id = 3476, mask = 'B', bit = 15, spawns = "Arch Apoc. Beast (3/5)" },
+            { name = "Tome II Ch.8",    id = 3477, mask = 'B', bit = 16, spawns = "Arch Apoc. Beast (4/5)" },
+            { name = "Tome II Ch.9",    id = 3478, mask = 'B', bit = 17, spawns = "Arch Apoc. Beast (5/5)" },
+        },
+        drops = {
+            { name = "Nightmare Shank",   id = 3463, mask = 'C', bit = 16, spawns = "Lost Stihi" },
+            { name = "Nightmare Loin",    id = 3465, mask = 'C', bit = 17, spawns = "Lost Alklha" },
+            { name = "Nightmare Roast",   id = 3464, mask = 'C', bit = 18, spawns = "Lost Barong" },
+            { name = "Nightmare Chop",    id = 3466, mask = 'C', bit = 19, spawns = "Lost Aitvaras" },
+        },
+    },
+    {
+        name = "Dynamis-Qufim",
+        tint = { 0.16, 0.12, 0.20 }, -- purple
+        pops = {
+            { name = "Undying Juju",    id = 3458, mask = 'A', bit = 9,  spawns = "Antaeus" },
+            { name = "Tome II Ch.10",   id = 3479, mask = 'B', bit = 18, spawns = "Arch Antaeus (1/4)" },
+            { name = "Tome II Ch.11",   id = 3480, mask = 'B', bit = 19, spawns = "Arch Antaeus (2/4)" },
+            { name = "Tome II Ch.12",   id = 3481, mask = 'B', bit = 20, spawns = "Arch Antaeus (3/4)" },
+            { name = "Tome II Ch.13",   id = 3482, mask = 'B', bit = 21, spawns = "Arch Antaeus (4/4)" },
+        },
+        drops = {
+            { name = "Nightmare Shard",   id = 3469, mask = 'C', bit = 20, spawns = "Lost Suttung" },
+            { name = "Nightmare Shell",   id = 3467, mask = 'C', bit = 21, spawns = "Lost Scolopendra" },
+            { name = "Nightmare Blood",   id = 3468, mask = 'C', bit = 22, spawns = "Lost Stringes" },
+        },
+    },
+    {
+        name = "Dynamis-Tavnazia",
+        tint = { 0.20, 0.15, 0.10 }, -- orange
+        pops = {
+            { name = "Heralds Juju",    id = 3459, mask = 'A', bit = 10, spawns = "Diabolos" },
+            { name = "Tome II Ch.14",   id = 3483, mask = 'B', bit = 22, spawns = "Arch Diabolos (1/4)" },
+            { name = "Tome II Ch.15",   id = 3484, mask = 'B', bit = 23, spawns = "Arch Diabolos (2/4)" },
+            { name = "Tome II Ch.16",   id = 3485, mask = 'B', bit = 24, spawns = "Arch Diabolos (3/4)" },
+            { name = "Tome II Ch.17",   id = 3486, mask = 'B', bit = 25, spawns = "Arch Diabolos (4/4)" },
+        },
+        drops = {},
+    },
+};
+
+TRF.UL.CURRENCY = {
+    -- Byne Bills (base unit = 1 One Byne Bill)
+    BYNE = {
+        name  = 'Byne Bills',
+        icon  = 1455, -- One Byne Bill
+        color = { 1.00, 0.78, 0.35, 1.00 }, -- amber
+        barFill = { 0.70, 0.55, 0.20, 0.65 }, -- darker fill for readability
+    },
+    -- Whiteshells (base unit = 1 Tukuku Whiteshell)
+    SHELL = {
+        name  = 'Whiteshells',
+        icon  = 1449, -- Tukuku Whiteshell
+        color = { 0.55, 0.85, 1.00, 1.00 }, -- light blue
+        barFill = { 0.25, 0.50, 0.65, 0.65 },
+    },
+    -- Bronzepieces (base unit = 1 Ordelle Bronzepiece)
+    BRONZE = {
+        name  = 'Bronzepieces',
+        icon  = 1452, -- Ordelle Bronzepiece
+        color = { 0.85, 0.60, 0.40, 1.00 }, -- bronze
+        barFill = { 0.55, 0.35, 0.18, 0.65 },
+    },
+};
+
+TRF.UL.RELICS = {
+    {
+        name = 'Spharai', finalId = 18264, job = 'MNK',
+        stages = {
+            { weaponId = 18261, currency = 'BYNE',   amount = 400 },   -- Militant Knuckles
+            { weaponId = 18262, currency = 'BRONZE', amount = 1400 },  -- Dynamis Knuckles
+            { weaponId = 18263, currency = 'SHELL',  amount = 6100 },  -- Caestus
+            { weaponId = 18264, currency = 'BYNE',   amount = 10000 }, -- Spharai
+        },
+    },
+    {
+        name = 'Mandau', finalId = 18270, job = 'THF',
+        stages = {
+            { weaponId = 18267, currency = 'BYNE',   amount = 400 },   -- Malefic Dagger
+            { weaponId = 18268, currency = 'BRONZE', amount = 1400 },  -- Dynamis Dagger
+            { weaponId = 18269, currency = 'SHELL',  amount = 6100 },  -- Batardeau
+            { weaponId = 18270, currency = 'BYNE',   amount = 10000 }, -- Mandau
+        },
+    },
+    {
+        name = 'Excalibur', finalId = 18276, job = 'PLD',
+        stages = {
+            { weaponId = 18273, currency = 'BRONZE', amount = 400 },   -- Glyptic Sword
+            { weaponId = 18274, currency = 'BYNE',   amount = 1400 },  -- Dynamis Sword
+            { weaponId = 18275, currency = 'SHELL',  amount = 6100 },  -- Caliburn
+            { weaponId = 18276, currency = 'BRONZE', amount = 10000 }, -- Excalibur
+        },
+    },
+    {
+        name = 'Ragnarok', finalId = 18282, job = 'DRK',
+        stages = {
+            { weaponId = 18279, currency = 'BRONZE', amount = 400 },   -- Gilded Blade
+            { weaponId = 18280, currency = 'SHELL',  amount = 1600 },  -- Dynamis Blade
+            { weaponId = 18281, currency = 'BYNE',   amount = 6100 },  -- Valhalla
+            { weaponId = 18282, currency = 'BRONZE', amount = 10000 }, -- Ragnarok
+        },
+    },
+    {
+        name = 'Guttler', finalId = 18288, job = 'BST',
+        stages = {
+            { weaponId = 18285, currency = 'SHELL',  amount = 300 },   -- Leonine Axe
+            { weaponId = 18286, currency = 'BRONZE', amount = 1400 },  -- Dynamis Axe
+            { weaponId = 18287, currency = 'BYNE',   amount = 6000 },  -- Ogre Killer
+            { weaponId = 18288, currency = 'SHELL',  amount = 10000 }, -- Guttler
+        },
+    },
+    {
+        name = 'Bravura', finalId = 18294, job = 'WAR',
+        stages = {
+            { weaponId = 18291, currency = 'BYNE',   amount = 300 },   -- Agonal Bhuj
+            { weaponId = 18292, currency = 'SHELL',  amount = 1600 },  -- Dynamis Bhuj
+            { weaponId = 18293, currency = 'BRONZE', amount = 6000 },  -- Abaddon Killer
+            { weaponId = 18294, currency = 'BYNE',   amount = 10000 }, -- Bravura
+        },
+    },
+    {
+        name = 'Gungnir', finalId = 18300, job = 'DRG',
+        stages = {
+            { weaponId = 18297, currency = 'SHELL',  amount = 400 },   -- Hotspur Lance
+            { weaponId = 18298, currency = 'BYNE',   amount = 1600 },  -- Dynamis Lance
+            { weaponId = 18299, currency = 'BRONZE', amount = 6100 },  -- Gae Assail
+            { weaponId = 18300, currency = 'SHELL',  amount = 10000 }, -- Gungnir
+        },
+    },
+    {
+        name = 'Apocalypse', finalId = 18306, job = 'DRK',
+        stages = {
+            { weaponId = 18303, currency = 'SHELL',  amount = 500 },   -- Memento Scythe
+            { weaponId = 18304, currency = 'BRONZE', amount = 1600 },  -- Dynamis Scythe
+            { weaponId = 18305, currency = 'BYNE',   amount = 6200 },  -- Bec de Faucon
+            { weaponId = 18306, currency = 'SHELL',  amount = 10000 }, -- Apocalypse
+        },
+    },
+    {
+        name = 'Kikoku', finalId = 18312, job = 'NIN',
+        stages = {
+            { weaponId = 18309, currency = 'BYNE',   amount = 400 },   -- Mimizuku
+            { weaponId = 18310, currency = 'SHELL',  amount = 1600 },  -- Rogetsu
+            { weaponId = 18311, currency = 'BRONZE', amount = 6100 },  -- Yoshimitsu
+            { weaponId = 18312, currency = 'BYNE',   amount = 10000 }, -- Kikoku
+        },
+    },
+    {
+        name = 'Amanomurakumo', finalId = 18318, job = 'SAM',
+        stages = {
+            { weaponId = 18315, currency = 'BRONZE', amount = 300 },   -- Hayatemaru
+            { weaponId = 18316, currency = 'SHELL',  amount = 1500 },  -- Oboromaru
+            { weaponId = 18317, currency = 'BYNE',   amount = 6000 },  -- Totsukanotsurugi
+            { weaponId = 18318, currency = 'BRONZE', amount = 10000 }, -- Amanomurakumo
+        },
+    },
+    {
+        name = 'Mjollnir', finalId = 18324, job = 'WHM',
+        stages = {
+            { weaponId = 18321, currency = 'BRONZE', amount = 500 },   -- Battering Maul
+            { weaponId = 18322, currency = 'BYNE',   amount = 1600 },  -- Dynamis Maul
+            { weaponId = 18323, currency = 'SHELL',  amount = 6200 },  -- Gullintani
+            { weaponId = 18324, currency = 'BRONZE', amount = 10000 }, -- Mjollnir
+        },
+    },
+    {
+        name = 'Claustrum', finalId = 18330, job = 'BLM',
+        stages = {
+            { weaponId = 18327, currency = 'SHELL',  amount = 500 },   -- Sages Staff
+            { weaponId = 18328, currency = 'BYNE',   amount = 1600 },  -- Dynamis Staff
+            { weaponId = 18329, currency = 'BRONZE', amount = 6200 },  -- Thyrus
+            { weaponId = 18330, currency = 'SHELL',  amount = 10000 }, -- Claustrum
+        },
+    },
+    {
+        name = 'Annihilator', finalId = 18336, job = 'RNG',
+        stages = {
+            { weaponId = 18333, currency = 'BYNE',   amount = 500 },   -- Marksmans Gun
+            { weaponId = 18334, currency = 'SHELL',  amount = 1500 },  -- Dynamis Gun
+            { weaponId = 18335, currency = 'BRONZE', amount = 6200 },  -- Ferdinand
+            { weaponId = 18336, currency = 'BYNE',   amount = 10000 }, -- Annihilator
+        },
+    },
+    {
+        name = 'Gjallarhorn', finalId = 18342, job = 'BRD',
+        stages = {
+            { weaponId = 18339, currency = 'SHELL',  amount = 300 },   -- Pyrrhic Horn
+            { weaponId = 18340, currency = 'BYNE',   amount = 1400 },  -- Dynamis Horn
+            { weaponId = 18341, currency = 'BRONZE', amount = 6000 },  -- Millennium Horn
+            { weaponId = 18342, currency = 'SHELL',  amount = 10000 }, -- Gjallarhorn
+        },
+    },
+    {
+        name = 'Yoichinoyumi', finalId = 18348, job = 'RNG',
+        stages = {
+            { weaponId = 18345, currency = 'BRONZE', amount = 400 },   -- Wolver Bow
+            { weaponId = 18346, currency = 'BRONZE', amount = 1500 },  -- Dynamis Bow
+            { weaponId = 18347, currency = 'SHELL',  amount = 6100 },  -- Futatokoroto
+            { weaponId = 18348, currency = 'BRONZE', amount = 10000 }, -- Yoichinoyumi
+        },
+    },
+    {
+        name = 'Aegis', finalId = 15070, job = 'PLD',
+        stages = {
+            { weaponId = 15067, currency = 'BYNE',   amount = 100,  extraCurrency = { { 'BRONZE', 100 }, { 'SHELL', 100 } } },   -- Bulwark Shield
+            { weaponId = 15068, currency = 'BYNE',   amount = 400,  extraCurrency = { { 'BRONZE', 400 }, { 'SHELL', 400 } } },   -- Dynamis Shield
+            { weaponId = 15069, currency = 'BYNE',   amount = 2000, extraCurrency = { { 'BRONZE', 2000 }, { 'SHELL', 2000 } } }, -- Ancile
+            { weaponId = 15070, currency = 'BRONZE', amount = 10000 }, -- Aegis
+        },
+    },
+};
+
+TRF.UL.EXTRA_CARDS = {
+    {
+        name       = 'Mythic',
+        icon       = 18993, -- Yagrush
+        currency   = 'Alexandrite',
+        target     = 30000,
+        color      = { 0.70, 0.90, 0.50, 1.00 }, -- lime green
+        barFill    = { 0.35, 0.50, 0.20, 0.65 },
+        materials  = {
+            { id = 3066, name = "Medusa's Brassard" },
+            { id = 3067, name = "Gurfurlur's Morion" },
+            { id = 3068, name = "Ja Ja's Plastron" },
+        },
+    },
+    {
+        name       = 'Ergon',
+        icon       = 21685, -- Epeolatry
+        currency   = 'H-P Bayld',
+        target     = 10000,
+        color      = { 0.80, 0.55, 0.90, 1.00 }, -- purple
+        barFill    = { 0.40, 0.25, 0.50, 0.65 },
+        materialRows = {
+            {
+                items = {
+                    { id = 3980, name = 'Bztavian Stinger' },
+                    { id = 3979, name = 'Rockfin Tooth' },
+                    { id = 3977, name = 'Gabbrath Horn' },
+                    { id = 4015, name = 'Yggdreant Root' },
+                    { id = 4013, name = 'Waktza Crest' },
+                    { id = 8754, name = 'Cehuetzi Pelt' },
+                },
+            },
+            {
+                items = {
+                    { id = 3981, name = 'Bztavian Wing' },
+                    { id = 3978, name = 'Rockfin Fin' },
+                    { id = 6068, name = 'Gabbrath Meat' },
+                    { id = 4014, name = 'Yggdreant Bole' },
+                    { id = 4012, name = 'Waktza Rostrum' },
+                    { id = 8752, name = 'Cehuetzi Claw' },
+                },
+            },
+        },
+        -- Extra column: Domain NM materials (displayed right of rows in L-shape)
+        sideColumn = {
+            { id = 9506, name = 'Amphisbaena Hide' },
+            { id = 9510, name = 'Battosai Fang' },
+            { id = 9511, name = 'Tortuga Shell' },
+        },
+    },
+};
+
+TRF.UL.INCURSION_ZONES = {
+    {
+        name  = 'Mamook',
+        color = { 0.90, 0.45, 0.40, 1.00 },  -- red (Orcish)
+        weapons = {
+            { name = 'Ohrmazd', id = 20530, job = 'MNK/PUP', coin = 3951, chain = 3012, hoard = 3063, gem = 8964, mat = 1458, phases = {
+                { result = 21510, reqs = { 16437, 16446, 17519, 2984 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 300 } } },
+                { result = 20531, reqs = { 17472, 17503, 18350, 21510 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 500 }, { 'Chains', 3012, 'Orcish Chain', 10 } } },
+                { result = 20530, reqs = { 20531, 18351, 16426 }, bars = { { 'Hoards', 3063, 'Mamook Steel', 9900 }, { 'Gems', 8964, 'Imperial Citrine', 250 }, { 'Mats', 1458, nil, 12 } } },
+            }},
+            { name = 'Claidheamh', id = 20718, job = 'PLD/BLU', coin = 3951, chain = 3012, hoard = 3063, gem = 8961, mat = 1409, phases = {
+                { result = 22219, reqs = { 16628, 16634, 17692, 2985 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 300 } } },
+                { result = 20719, reqs = { 16580, 16533, 17693, 22219 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 500 }, { 'Chains', 3012, 'Orcish Chain', 10 } } },
+                { result = 20718, reqs = { 20719, 17695, 17649 }, bars = { { 'Hoards', 3063, 'Mamook Steel', 9900 }, { 'Gems', 8961, 'Imperial Opal', 250 }, { 'Mats', 1409, nil, 12 } } },
+            }},
+            { name = 'Kumbhakarna', id = 20809, job = 'WAR/BST', coin = 3951, chain = 3012, hoard = 3063, gem = 8962, mat = 1459, phases = {
+                { result = 21712, reqs = { 16663, 16664, 16687, 2986 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 300 } } },
+                { result = 20810, reqs = { 17969, 16676, 17936, 21712 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 500 }, { 'Chains', 3012, 'Orcish Chain', 10 } } },
+                { result = 20809, reqs = { 20810, 17937, 17960 }, bars = { { 'Hoards', 3063, 'Mamook Steel', 9900 }, { 'Gems', 8962, 'Imperial Amethyst', 250 }, { 'Mats', 1459, nil, 12 } } },
+            }},
+            { name = 'Svarga', id = 20857, job = 'WAR', coin = 3951, chain = 3012, hoard = 3063, gem = 8964, mat = 1467, phases = {
+                { result = 21769, reqs = { 16717, 18215, 18209, 2987 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 300 } } },
+                { result = 20859, reqs = { 18507, 16727, 18210, 21769 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 500 }, { 'Chains', 3012, 'Orcish Chain', 10 } } },
+                { result = 20857, reqs = { 20859, 18211, 18497 }, bars = { { 'Hoards', 3063, 'Mamook Steel', 9900 }, { 'Gems', 8964, 'Imperial Citrine', 250 }, { 'Mats', 1467, nil, 12 } } },
+            }},
+            { name = 'Olyndicus', id = 20946, job = 'DRG', coin = 3951, chain = 3012, hoard = 3063, gem = 8962, mat = 1462, phases = {
+                { result = 21864, reqs = { 16864, 16876, 18085, 2988 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 300 } } },
+                { result = 20947, reqs = { 16885, 16882, 18086, 21864 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 500 }, { 'Chains', 3012, 'Orcish Chain', 10 } } },
+                { result = 20946, reqs = { 20947, 18088, 18125 }, bars = { { 'Hoards', 3063, 'Mamook Steel', 9900 }, { 'Gems', 8962, 'Imperial Amethyst', 250 }, { 'Mats', 1462, nil, 12 } } },
+            }},
+            { name = 'Svalinn', id = 27627, job = 'WAR', coin = 3951, chain = 3012, hoard = 3063, gem = 8960, mat = 1468, phases = {
+                { result = 26413, reqs = { 12334, 12326, 18171, 2989 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 300 } } },
+                { result = 27624, reqs = { 12348, 16187, 12405, 26413 }, bars = { { 'Orcish Steel', 3951, 'Orcish Steel', 500 }, { 'Chains', 3012, 'Orcish Chain', 10 } } },
+                { result = 27627, reqs = { 27624, 12361, 12360 }, bars = { { 'Hoards', 3063, 'Mamook Steel', 9900 }, { 'Gems', 8960, 'Imperial Garnet', 250 }, { 'Mats', 1468, nil, 12 } } },
+            }},
+        },
+    },
+    {
+        name  = 'Halvung',
+        color = { 0.45, 0.65, 1.00, 1.00 },  -- blue (Quadav)
+        weapons = {
+            { name = 'Claritas', id = 18909, job = 'RDM', coin = 3952, chain = 3013, hoard = 3064, gem = 8965, mat = 1468, phases = {
+                { result = 21622, reqs = { 16633, 16803, 17692, 2978 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 300 } } },
+                { result = 18905, reqs = { 16822, 16821, 17696, 21622 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 500 }, { 'Chains', 3013, 'Quadav Chain', 10 } } },
+                { result = 18909, reqs = { 18905, 17694, 17658 }, bars = { { 'Hoards', 3064, 'Halvung Brass', 9900 }, { 'Gems', 8965, 'Imperial Sapphire', 250 }, { 'Mats', 1468, nil, 12 } } },
+            }},
+            { name = 'Macbain', id = 20759, job = 'DRK/RUN', coin = 3952, chain = 3013, hoard = 3064, gem = 8960, mat = 1459, phases = {
+                { result = 21665, reqs = { 16931, 16932, 16959, 2979 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 300 } } },
+                { result = 20760, reqs = { 16942, 16945, 16937, 21665 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 500 }, { 'Chains', 3013, 'Quadav Chain', 10 } } },
+                { result = 20759, reqs = { 20760, 18385, 19153 }, bars = { { 'Hoards', 3064, 'Halvung Brass', 9900 }, { 'Gems', 8960, 'Imperial Garnet', 250 }, { 'Mats', 1459, nil, 12 } } },
+            }},
+            { name = 'Inanna', id = 20901, job = 'BLM/DRK', coin = 3952, chain = 3013, hoard = 3064, gem = 8961, mat = 1458, phases = {
+                { result = 21822, reqs = { 16779, 16782, 18045, 2980 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 300 } } },
+                { result = 20903, reqs = { 16787, 18041, 18046, 21822 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 500 }, { 'Chains', 3013, 'Quadav Chain', 10 } } },
+                { result = 20901, reqs = { 20903, 18047, 18948 }, bars = { { 'Hoards', 3064, 'Halvung Brass', 9900 }, { 'Gems', 8961, 'Imperial Opal', 250 }, { 'Mats', 1458, nil, 12 } } },
+            }},
+            { name = 'Nehushtan', id = 21105, job = 'WHM/GEO', coin = 3952, chain = 3013, hoard = 3064, gem = 8965, mat = 1409, phases = {
+                { result = 22006, reqs = { 17115, 17121, 17462, 2981 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 300 } } },
+                { result = 21109, reqs = { 17416, 17454, 17463, 22006 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 500 }, { 'Chains', 3013, 'Quadav Chain', 10 } } },
+                { result = 21105, reqs = { 21109, 17464, 18857 }, bars = { { 'Hoards', 3064, 'Halvung Brass', 9900 }, { 'Gems', 8965, 'Imperial Sapphire', 250 }, { 'Mats', 1409, nil, 12 } } },
+            }},
+            { name = 'Providence', id = 18626, job = 'SMN', coin = 3952, chain = 3013, hoard = 3064, gem = 8965, mat = 1462, phases = {
+                { result = 22291, reqs = { 17126, 17127, 17571, 2982 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 300 } } },
+                { result = 21172, reqs = { 17108, 17563, 17573, 22291 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 500 }, { 'Chains', 3013, 'Quadav Chain', 10 } } },
+                { result = 18626, reqs = { 21172, 17576, 17528 }, bars = { { 'Hoards', 3064, 'Halvung Brass', 9900 }, { 'Gems', 8965, 'Imperial Sapphire', 250 }, { 'Mats', 1462, nil, 12 } } },
+            }},
+            { name = 'Doomsday', id = 21476, job = 'RNG/COR', coin = 3952, chain = 3013, hoard = 3064, gem = 8960, mat = 1467, phases = {
+                { result = 22144, reqs = { 17254, 17260, 17271, 2983 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 300 } } },
+                { result = 21275, reqs = { 17232, 17244, 17215, 22144 }, bars = { { 'Quadav Brass', 3952, 'Quadav Brass', 500 }, { 'Chains', 3013, 'Quadav Chain', 10 } } },
+                { result = 21476, reqs = { 21275, 17245, 18706 }, bars = { { 'Hoards', 3064, 'Halvung Brass', 9900 }, { 'Gems', 8960, 'Imperial Garnet', 250 }, { 'Mats', 1467, nil, 12 } } },
+            }},
+        },
+    },
+    {
+        name  = 'Arrapago',
+        color = { 0.50, 0.88, 0.50, 1.00 },  -- green (Yagudo)
+        weapons = {
+            { name = 'Ipetam', id = 20616, job = 'THF/DNC', coin = 3953, chain = 3014, hoard = 3065, gem = 8963, mat = 1459, phases = {
+                { result = 21566, reqs = { 16742, 16739, 17993, 2990 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 300 } } },
+                { result = 20617, reqs = { 16767, 19120, 17994, 21566 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 500 }, { 'Chains', 3014, 'Yagudo Chain', 10 } } },
+                { result = 20616, reqs = { 20617, 17996, 17619 }, bars = { { 'Hoards', 3065, 'Arrapago Silver', 9900 }, { 'Gems', 8963, 'Imperial Peridot', 250 }, { 'Mats', 1459, nil, 12 } } },
+            }},
+            { name = 'Izuna', id = 20989, job = 'NIN', coin = 3953, chain = 3014, hoard = 3065, gem = 8963, mat = 1468, phases = {
+                { result = 21912, reqs = { 16925, 16921, 17786, 2991 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 300 } } },
+                { result = 20993, reqs = { 19280, 16911, 17787, 21912 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 500 }, { 'Chains', 3014, 'Yagudo Chain', 10 } } },
+                { result = 20989, reqs = { 20993, 18429, 18430 }, bars = { { 'Hoards', 3065, 'Arrapago Silver', 9900 }, { 'Gems', 8963, 'Imperial Peridot', 250 }, { 'Mats', 1468, nil, 12 } } },
+            }},
+            { name = 'Nenekirimaru', id = 21037, job = 'SAM', coin = 3953, chain = 3014, hoard = 3065, gem = 8963, mat = 1467, phases = {
+                { result = 21976, reqs = { 16983, 16986, 17820, 2992 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 300 } } },
+                { result = 21038, reqs = { 17813, 16980, 17821, 21976 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 500 }, { 'Chains', 3014, 'Yagudo Chain', 10 } } },
+                { result = 21037, reqs = { 21038, 17823, 18446 }, bars = { { 'Hoards', 3065, 'Arrapago Silver', 9900 }, { 'Gems', 8963, 'Imperial Peridot', 250 }, { 'Mats', 1467, nil, 12 } } },
+            }},
+            { name = 'Keraunos', id = 21169, job = 'BLM/SCH', coin = 3953, chain = 3014, hoard = 3065, gem = 8961, mat = 1458, phases = {
+                { result = 22088, reqs = { 17124, 17119, 17571, 2993 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 300 } } },
+                { result = 21171, reqs = { 17586, 17564, 17572, 22088 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 500 }, { 'Chains', 3014, 'Yagudo Chain', 10 } } },
+                { result = 21169, reqs = { 21171, 17575, 17567 }, bars = { { 'Hoards', 3065, 'Arrapago Silver', 9900 }, { 'Gems', 8961, 'Imperial Opal', 250 }, { 'Mats', 1458, nil, 12 } } },
+            }},
+            { name = 'Phaosphaelia', id = 21224, job = 'RNG', coin = 3953, chain = 3014, hoard = 3065, gem = 8962, mat = 1462, phases = {
+                { result = 22133, reqs = { 17178, 17180, 17202, 2994 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 300 } } },
+                { result = 21226, reqs = { 17187, 17212, 17203, 22133 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 500 }, { 'Chains', 3014, 'Yagudo Chain', 10 } } },
+                { result = 21224, reqs = { 21226, 17165, 17199 }, bars = { { 'Hoards', 3065, 'Arrapago Silver', 9900 }, { 'Gems', 8962, 'Imperial Amethyst', 250 }, { 'Mats', 1462, nil, 12 } } },
+            }},
+            { name = 'Linos', id = 21404, job = 'BRD', coin = 3953, chain = 3014, hoard = 3065, gem = 8964, mat = 1409, phases = {
+                { result = 22296, reqs = { 17370, 17375, 18170, 2995 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 300 } } },
+                { result = 21406, reqs = { 17346, 17982, 17995, 22296 }, bars = { { 'Yagudo Silver', 3953, 'Yagudo Silver', 500 }, { 'Chains', 3014, 'Yagudo Chain', 10 } } },
+                { result = 21404, reqs = { 21406, 17838, 17365 }, bars = { { 'Hoards', 3065, 'Arrapago Silver', 9900 }, { 'Gems', 8964, 'Imperial Citrine', 250 }, { 'Mats', 1409, nil, 12 } } },
+            }},
+        },
+    },
+};
+
+TRF.LU.TORQUES = {
+    { id = 15508, name = 'Justice Torque',     nm = 'Jailer of Justice' },
+    { id = 15509, name = 'Hope Torque',        nm = 'Jailer of Hope' },
+    { id = 15510, name = 'Prudence Torque',    nm = 'Jailer of Prudence' },
+    { id = 15511, name = 'Fortitude Torque',   nm = 'Jailer of Fortitude' },
+    { id = 15512, name = 'Faith Torque',       nm = 'Jailer of Faith' },
+    { id = 15513, name = 'Temperance Torque',  nm = 'Jailer of Temperance' },
+    { id = 15514, name = 'Love Torque',        nm = 'Jailer of Love' },
+};
+
+TRF.LU.WEAPONS = {
+    { id = 17595, name = 'Hope Staff',       nm = 'Jailer of Hope' },
+    { id = 17710, name = 'Justice Sword',    nm = 'Jailer of Justice' },
+    { id = 17948, name = 'Temperance Axe',   nm = 'Jailer of Temperance' },
+    { id = 18100, name = 'Love Halberd',     nm = 'Jailer of Love' },
+    { id = 18222, name = 'Fortitude Axe',    nm = 'Jailer of Fortitude' },
+    { id = 18360, name = 'Faith Baghnakhs',  nm = 'Jailer of Faith' },
+    { id = 18397, name = 'Prudence Rod',     nm = 'Jailer of Prudence' },
+};
+
+TRF.LU.HOMAM = {
+    { id = 15240, name = 'Homam Zucchetto', slot = 'Head',
+      augs = {
+          { 'Dual Wield+1, Mag.Acc.+1, Triple Atk.+1%' },
+          { 'Dual Wield+2, Mag.Acc.+2, Triple Atk.+2%' },
+          { 'Dual Wield+3, Mag.Acc.+3, Triple Atk.+3%' },
+      },
+    },
+    { id = 14488, name = 'Homam Corazza', slot = 'Body',
+      augs = {
+          { 'Haste+1%, Great Sword Skill+3, Desperate Blows+2' },
+          { 'Haste+2%, Great Sword Skill+4, Desperate Blows+3' },
+          { 'Haste+3%, Great Sword Skill+5, Desperate Blows+4' },
+      },
+    },
+    { id = 14905, name = 'Homam Manopolas', slot = 'Hands',
+      augs = {
+          { 'HP+15, Parrying Skill+3, Phys. Dmg. Taken-1%' },
+          { 'HP+20, Parrying Skill+4, Phys. Dmg. Taken-2%' },
+          { 'HP+25, Parrying Skill+5, Phys. Dmg. Taken-3%' },
+      },
+    },
+    { id = 15576, name = 'Homam Cosciales', slot = 'Legs',
+      augs = {
+          { 'Conserve MP+3, Blue Magic Skill+3, Enh. Magic Duration+3' },
+          { 'Conserve MP+4, Blue Magic Skill+4, Enh. Magic Duration+4' },
+          { 'Conserve MP+5, Blue Magic Skill+5, Enh. Magic Duration+5' },
+      },
+    },
+    { id = 15661, name = 'Homam Gambieras', slot = 'Feet',
+      augs = {
+          { 'STR+3, Polearm Skill+4, Meditate Duration+1' },
+          { 'STR+4, Polearm Skill+5, Meditate Duration+2' },
+          { 'STR+5, Polearm Skill+6, Meditate Duration+3' },
+      },
+    },
+};
+
+TRF.LU.NASHIRA = {
+    { id = 15241, name = 'Nashira Turban', slot = 'Head',
+      augs = {
+          { 'MP+10, Fast Cast+1%, Conserve MP+1' },
+          { 'MP+15, Fast Cast+2%, Conserve MP+2' },
+          { 'MP+20, Fast Cast+3%, Conserve MP+3' },
+      },
+    },
+    { id = 14489, name = 'Nashira Manteel', slot = 'Body',
+      augs = {
+          { 'Enh. Mag. Skill+3, Conserve MP+1, Enh. Magic Duration+3' },
+          { 'Enh. Mag. Skill+4, Conserve MP+2, Enh. Magic Duration+4' },
+          { 'Enh. Mag. Skill+5, Conserve MP+3, Enh. Magic Duration+5' },
+      },
+    },
+    { id = 14906, name = 'Nashira Gages', slot = 'Hands',
+      augs = {
+          { 'MP+8, Blood Boon+3, B.P. Ability Delay-1' },
+          { 'MP+10, Blood Boon+4, B.P. Ability Delay-2' },
+          { 'MP+12, Blood Boon+5, B.P. Ability Delay-3' },
+      },
+    },
+    { id = 15577, name = 'Nashira Seraweels', slot = 'Legs',
+      augs = {
+          { 'INT+1, MND+1, Enfeebling Magic Duration+3' },
+          { 'INT+2, MND+2, Enfeebling Magic Duration+4' },
+          { 'INT+3, MND+3, Enfeebling Magic Duration+5' },
+      },
+    },
+    { id = 15662, name = 'Nashira Crackows', slot = 'Feet',
+      augs = {
+          { 'MP+8, INT+2, Mag. Atk. Bonus+1' },
+          { 'MP+10, INT+3, Mag. Atk. Bonus+2' },
+          { 'MP+12, INT+4, Mag. Atk. Bonus+3' },
+      },
+    },
+};
+
+TRF.LU.OMEGA_PIECES = {
+    { id = 1925, name = "Omega's Eye" },
+    { id = 1926, name = "Omega's Heart" },
+    { id = 1927, name = "Omega's Foreleg" },
+    { id = 1928, name = "Omega's Hind Leg" },
+    { id = 1929, name = "Omega's Tail" },
+};
+
+TRF.LU.ULTIMA_PIECES = {
+    { id = 1920, name = "Ultima's Cerebrum" },
+    { id = 1921, name = "Ultima's Heart" },
+    { id = 1922, name = "Ultima's Claw" },
+    { id = 1923, name = "Ultima's Leg" },
+    { id = 1924, name = "Ultima's Tail" },
+};
+
+TRF.LU.ORGANS = {
+    { id = 1784, name = 'Phuabo Organ' },
+    { id = 1785, name = 'Xzomit Organ' },
+    { id = 1786, name = 'Aern Organ' },
+    { id = 1787, name = 'Hpemde Organ' },
+    { id = 1788, name = 'Yovra Organ' },
+    { id = 1818, name = 'Euvhi Organ' },
+    { id = 1852, name = 'H.Q. Phuabo Organ', hq = true },
+    { id = 1855, name = 'H.Q. Xzomit Organ', hq = true },
+    { id = 1900, name = 'H.Q. Aern Organ',   hq = true },
+    { id = 1871, name = 'H.Q. Hpemde Organ', hq = true },
+    { id = 1899, name = 'H.Q. Euvhi Organ',  hq = true },
+    { id = 1819, name = 'Luminion Chip' },
+};
+
+TRF.LU.BUFFS = {
+    { name = "Sniper's Salvo",        desc = 'Ranged Accuracy+15, Ranged Attack+15',       nm = "Al'Xzomit",       zone = "Al'Taieu",                pos = '(J-13)', chip = 1906, chipName = 'Emerald Chip', jobs = 'RNG, NIN, COR' },
+    { name = "Rogue's Retribution",   desc = 'DEX+5, Critical Hit Rate+10%',               nm = "Al'Ghrah",        zone = "Garden of Ru'Hmet",       pos = '(I-8)',  chip = 1905, chipName = 'Scarlet Chip', jobs = 'THF, DRG, BST' },
+    { name = "Warlord's Wrath",       desc = 'Enmity+5, Double Attack+10%',                nm = "Al'Euvhi",        zone = "Garden of Ru'Hmet",       pos = '(H-10)', chip = 1905, chipName = 'Scarlet Chip', jobs = 'WAR, SAM' },
+    { name = "Scholar's Swiftness",   desc = 'Fast Cast+10%, Movement Speed+10%',          nm = "Al'Hpemde",       zone = "Al'Taieu",                pos = '(D-9)',  chip = 1906, chipName = 'Emerald Chip', jobs = 'RDM, SMN, SCH' },
+    { name = "Rambler's Respite",     desc = 'HP/MP Rec. +10, Mag. Def.+15',               nm = "Al'Zdei",         zone = "Grand Palace of Hu'Xzoi", pos = '(L-8)',  chip = 1904, chipName = 'Ivory Chip',   jobs = 'MNK, BRD, PUP' },
+    { name = "Cleric's Clarity",      desc = 'MND+5, Cure Potency+10%',                    nm = "Al'Aern",         zone = "Grand Palace of Hu'Xzoi", pos = '(I-7)',  chip = 1904, chipName = 'Ivory Chip',   jobs = 'WHM, PLD, DNC' },
+    { name = "Thaumaturge's Tempest", desc = 'INT+5, Mag. Atk. Bonus+10',                  nm = "Al'Phuabo",       zone = "Al'Taieu",                pos = '(M-9)',  chip = 1906, chipName = 'Emerald Chip', jobs = 'BLM, DRK, BLU' },
+    { name = "Ronin's Revenge",       desc = 'WS Accuracy+10, Store TP+8',                 nm = 'Justice Warden',  zone = "Al'Taieu",                pos = '(D-11)', chip = 2127, chipName = 'Metal Chip',   jobs = 'All Jobs' },
+    { name = "Trickster's Tenacity",  desc = 'AGI+5, Evasion+15, Mag. Dmg. Taken-8%',     nm = 'Prudence Warden', zone = "Al'Taieu",                pos = '(L-9)',  chip = 2127, chipName = 'Metal Chip',   jobs = 'All Jobs' },
+    { name = "Braver's Bulwark",      desc = 'DEF+15, Phys. Dmg. Taken-8%',                nm = 'Hope Warden',     zone = "Al'Taieu",                pos = '(E-9)',  chip = 2127, chipName = 'Metal Chip',   jobs = 'All Jobs' },
+};
 
 TRF.sliders = function()
     section('Arrows');
@@ -4314,8 +5594,11 @@ local function drawUI()
             elseif ui.tab == 5 then TRF.hunterTab();
             elseif ui.tab == 6 then TRF.summitTab();
             elseif ui.tab == 7 then TRF.armorTab();
-            elseif ui.tab == 8 then tabSettings();
-            elseif ui.tab == 9 then tabThanks();
+            elseif ui.tab == 8 then TRF.ulTab();
+            elseif ui.tab == 9 then TRF.luTab();
+            elseif ui.tab == 10 then TRF.cxTab();
+            elseif ui.tab == 11 then tabSettings();
+            elseif ui.tab == 12 then tabThanks();
             end
         end);
         if not ok then imgui.TextColored({ C.hp[1], C.hp[2], C.hp[3], 1 }, 'Window error: ' .. tostring(err)); end
@@ -4444,6 +5727,11 @@ end);
 
 -- The venture board from the server
 ashita.events.register('packet_in', 'vengo_packet', function (e)
+    if e ~= nil and e.id == 0x1A4 then                           -- (the CatsEyeXI server's answers: currency, Lumoria)
+        pcall(TRF.TV.packet, e.data_modified or e.data);
+        e.blocked = true;                                         -- (the game itself doesn't know this packet)
+        return;
+    end
     if e == nil or e.id ~= 0x1A3 then return; end
     local ok, err = pcall(onVenturePacket, e.data);
     if not ok then msg('Could not read the venture board: ' .. tostring(err)); end
