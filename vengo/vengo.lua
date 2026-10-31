@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.28';
+addon.version = '4.29';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -3434,7 +3434,8 @@ TRF.armorTab = function()
         local sx = setX(si) + (setW - tw) / 2;
         imgui.SetCursorScreenPos({ setX(si), y0 });
         imgui.InvisibleButton('##vengo_arset' .. si, { setW, lh + 2 });
-        dl:AddText({ sx, y0 }, u32(set.color), set.name);
+        dl:AddCircleFilled({ sx - 9, y0 + lh / 2 + 1 }, 3.5, u32(set.color), 12);
+        dl:AddText({ sx, y0 }, u32(C.text), set.name);
         if imgui.IsItemHovered() then
             imgui.BeginTooltip();
             local ci = itemIcon(TRF.AR.CREST_IDS[set.crest]);
@@ -3452,34 +3453,34 @@ TRF.armorTab = function()
         for t_ = 1, 3 do
             local tl = 'T' .. t_;
             local tx = setX(si) + (t_ - 1) * (cell + 2) + (cell - imgui.CalcTextSize(tl)) / 2;
-            dl:AddText({ tx, y0 + lh + 4 }, u32(C.label), tl);
+            spaced(dl, tx, y0 + lh + 4, tl, u32(C.label), 1);
         end
     end
     local gy = y0 + lh * 2 + 10;
     local hoverInfo = nil;
     for r, sl in ipairs(TRF.AR.SLOTS) do
         local ry = gy + (r - 1) * (cell + 2);
-        dl:AddText({ x0, ry + (cell - lh) / 2 }, u32(C.text), TRF.AR.SLOT_LABELS[r]);
+        spaced(dl, x0, ry + (cell - lh) / 2, TRF.AR.SLOT_LABELS[r]:upper(), u32(C.label), 1.5);
         for si, set in ipairs(TRF.AR.SETS) do
             local complete = owned[set.final[sl]] ~= nil;
             for t_ = 1, 3 do
                 local id = set.tiers[t_][sl];
                 local cx = setX(si) + (t_ - 1) * (cell + 2);
-                local bg = complete and { 0.18, 0.28, 0.48, 1 } or (owned[id] and { 0.18, 0.38, 0.18, 1 }) or { C.well[1], C.well[2], C.well[3], 1 };
-                dl:AddRectFilled({ cx, ry }, { cx + cell, ry + cell }, u32(bg), 4);
-                local ic = itemIcon(id);
-                if ic then pcall(function () dl:AddImage(ic.ptr, { cx + 3, ry + 3 }, { cx + cell - 3, ry + cell - 3 }); end); end
+                local mx_, my_ = imgui.GetMousePos();
+                local over = mx_ >= cx and mx_ < cx + cell and my_ >= ry and my_ < ry + cell;
+                TRF.card(dl, cx, ry, cell, cell, complete and 'on' or (owned[id] and 'own') or nil, over, 6);
+                TRF.icon(dl, id, cx + 3, ry + 3, cell - 6, (complete or owned[id]) and 1 or 0.55);
                 local h = hot[id];
                 if h == 2 then
                     local pulse = math.abs(math.sin(now * 3));
-                    dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ 1, 0.85 + pulse * 0.15, 0.2, 0.6 + pulse * 0.4 }), 4, C.rall, 2.5);
+                    dl:AddRect({ cx - 1, ry - 1 }, { cx + cell + 1, ry + cell + 1 }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.25 * pulse }), 7, C.rall, 5);
+                    dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.6 + 0.4 * pulse }), 6, C.rall, 2);
                 elseif h == 1 then
-                    dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ 1, 0.85, 0.3, 0.75 }), 4, C.rall, 1.5);
+                    dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ C.gold[1], C.gold[2], C.gold[3], 0.8 }), 6, C.rall, 1.5);
                 end
                 imgui.SetCursorScreenPos({ cx, ry });
                 imgui.InvisibleButton(('##vengo_ar%d'):format(id), { cell, cell });
                 if imgui.IsItemHovered() then
-                    dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ 1, 1, 1, 0.5 }), 4, C.rall, 1);
                     hoverInfo = { id = id, set = set, tier = t_, slot = sl, complete = complete };
                 end
             end
@@ -3510,16 +3511,16 @@ TRF.armorTab = function()
 
     -- legend
     local lx, ly = imgui.GetCursorScreenPos();
-    local function key(x, col, outline, text)
-        dl:AddRectFilled({ x, ly + 2 }, { x + 14, ly + 16 }, u32(col), 3);
-        if outline then dl:AddRect({ x, ly + 2 }, { x + 14, ly + 16 }, u32(outline), 3, C.rall, 1.5); end
+    local function key(x, kind, outline, text)
+        TRF.card(dl, x, ly + 2, 14, 14, kind, false, 4);
+        if outline then dl:AddRect({ x, ly + 2 }, { x + 14, ly + 16 }, u32(outline), 4, C.rall, 1.5); end
         dl:AddText({ x + 20, ly + 1 }, u32(C.muted), text);
         return x + 20 + imgui.CalcTextSize(text) + 22;
     end
-    local kx = key(lx, { 0.18, 0.38, 0.18, 1 }, nil, 'Owned');
-    kx = key(kx, { 0.18, 0.28, 0.48, 1 }, nil, 'Completed');
-    kx = key(kx, { C.well[1], C.well[2], C.well[3], 1 }, { 1, 0.85, 0.3, 0.75 }, 'Drops from today\'s ventures');
-    key(kx, { C.well[1], C.well[2], C.well[3], 1 }, { 1, 0.95, 0.2, 1 }, 'VNM up (pulsing)');
+    local kx = key(lx, 'own', nil, 'Owned');
+    kx = key(kx, 'on', nil, 'Completed');
+    kx = key(kx, nil, { C.gold[1], C.gold[2], C.gold[3], 0.8 }, 'Drops from today\'s ventures');
+    key(kx, nil, { NEON2[1], NEON2[2], NEON2[3], 1 }, 'VNM up (pulsing)');
     imgui.Dummy({ ROW_W, 20 });
     hint('Hover a piece for its drop zones, today\'s ventures that drop it, and the HNM that also drops it. Hover a set name for its crest and jobs. Counts every bag and Storage Slip 01.');
 end
@@ -3655,33 +3656,64 @@ function TRF.hot(id, x, y, w, h)
     imgui.SetCursorScreenPos({ cx, cy });
     return hov, clicked;
 end
+-- A thin rounded bar like the rest of VenGo (pink to violet; green when it's full), the numbers to its right
 function TRF.bar(dl, x, y, w, h, have, need, fill)
     local pct = (need > 0) and math.min(have / need, 1) or 0;
-    dl:AddRectFilled({ x, y }, { x + w, y + h }, u32({ 0.03, 0.03, 0.05, 0.9 }), 3);
-    if pct > 0 then dl:AddRectFilled({ x, y }, { x + w * pct, y + h }, u32(fill or { NEON2[1] * 0.6, NEON2[2] * 0.6, NEON2[3] * 0.6, 0.8 }), 3); end
-    dl:AddRect({ x, y }, { x + w, y + h }, u32({ 1, 1, 1, 0.07 }), 3);
     local s = ('%s / %s'):fmt(TRF.num(math.min(have, need)), TRF.num(need));
     local tw = imgui.CalcTextSize(s);
-    local ty = y + (h - imgui.GetTextLineHeight()) / 2;
-    dl:AddText({ x + (w - tw) / 2 + 1, ty + 1 }, u32({ 0, 0, 0, 0.8 }), s);
-    dl:AddText({ x + (w - tw) / 2, ty }, u32({ 1, 1, 1, 0.95 }), s);
+    local lh = imgui.GetTextLineHeight();
+    local bw = math.max(20, w - tw - 10);
+    local ph = math.min(6, h);
+    local cy = y + h / 2;
+    dl:AddRectFilled({ x, cy - ph / 2 }, { x + bw, cy + ph / 2 }, u32({ 0.20, 0.19, 0.25, 1 }), ph / 2);
+    if pct > 0 then
+        if pct >= 1 then
+            dl:AddRectFilled({ x, cy - ph / 2 }, { x + bw, cy + ph / 2 }, u32(C.green), ph / 2);
+        else
+            local ok = pcall(function ()
+                dl:AddRectFilledMultiColor({ x, cy - ph / 2 }, { x + bw * pct, cy + ph / 2 }, u32(C.hp), u32(C.mp2), u32(C.mp2), u32(C.hp));
+            end);
+            if not ok then dl:AddRectFilled({ x, cy - ph / 2 }, { x + bw * pct, cy + ph / 2 }, u32(NEON), ph / 2); end
+        end
+    end
+    dl:AddText({ x + bw + 8, cy - lh / 2 }, u32(pct >= 1 and C.green or C.lav), s);
+end
+-- A dark rounded panel with a faint edge. kind: 'own' (green), 'done' (gold), 'on' (blue), else plain.
+-- Hovered: the pink glow and bright left edge the venture list uses.
+TRF.KINDS = { own = { 0.48, 0.92, 0.58 }, done = { 0.96, 0.76, 0.32 }, on = { 0.62, 0.80, 1.00 } };
+function TRF.card(dl, x, y, w, h, kind, hov, r)
+    r = r or 8;
+    dl:AddRectFilled({ x, y }, { x + w, y + h }, u32({ C.well[1], C.well[2], C.well[3], 0.95 }), r);
+    local k = TRF.KINDS[kind or ''];
+    if k then dl:AddRectFilled({ x, y }, { x + w, y + h }, u32({ k[1], k[2], k[3], 0.10 }), r); end
+    if hov then
+        pcall(function ()
+            dl:AddRectFilledMultiColor({ x, y }, { x + math.min(w, 260), y + h },
+                u32({ NEON2[1], NEON2[2], NEON2[3], 0.22 }), u32({ NEON2[1], NEON2[2], NEON2[3], 0 }),
+                u32({ NEON2[1], NEON2[2], NEON2[3], 0 }), u32({ NEON2[1], NEON2[2], NEON2[3], 0.22 }));
+        end);
+        dl:AddRectFilled({ x, y + 3 }, { x + 3, y + h - 3 }, u32({ NEON2[1], NEON2[2], NEON2[3], 1 }), 1);
+    end
+    dl:AddRect({ x, y }, { x + w, y + h }, u32(k and { k[1], k[2], k[3], 0.45 } or { 1, 1, 1, hov and 0.14 or 0.06 }), r, C.rall, 1);
 end
 function TRF.num(n)
     local s = tostring(math.floor(n or 0));
     return (s:reverse():gsub('(%d%d%d)', '%1,'):reverse():gsub('^,', ''));
 end
 function TRF.header(dl, text, col, count)
+    imgui.Spacing();
     local x, y = imgui.GetCursorScreenPos();
-    local h = 26;
-    dl:AddRectFilled({ x, y }, { x + ROW_W, y + h }, u32({ col[1] * 0.28, col[2] * 0.28, col[3] * 0.28, 0.85 }), 4);
-    dl:AddRectFilled({ x, y }, { x + 3, y + h }, u32({ col[1], col[2], col[3], 1 }));
     local lh = imgui.GetTextLineHeight();
-    dl:AddText({ x + 12, y + (h - lh) / 2 }, u32({ col[1], col[2], col[3], 1 }), text);
+    local dx = x;
+    if col then dl:AddCircleFilled({ x + 4, y + lh / 2 + 1 }, 3.5, u32({ col[1], col[2], col[3], 1 }), 12); dx = x + 14; end
+    local tw = spaced(dl, dx, y, text:upper(), u32(C.label), 2);
+    local cw = 0;
     if count then
-        local tw = imgui.CalcTextSize(count);
-        dl:AddText({ x + ROW_W - tw - 12, y + (h - lh) / 2 }, u32({ col[1], col[2], col[3], 0.65 }), count);
+        cw = imgui.CalcTextSize(count);
+        dl:AddText({ x + ROW_W - cw, y }, u32(C.lav), count);
     end
-    imgui.Dummy({ ROW_W, h + 4 });
+    dl:AddLine({ dx + tw + 14, y + lh / 2 }, { x + ROW_W - cw - (count and 12 or 0), y + lh / 2 }, u32({ 1, 1, 1, 0.06 }), 1);
+    imgui.Dummy({ ROW_W, lh + 8 });
 end
 function TRF.refreshRow(what, at, pending, onClick)
     local age = at and ('updated ' .. math.floor((os.clock() - at) / 60) .. ' min ago') or (pending and 'asking the server...' or 'not loaded yet');
@@ -3742,11 +3774,13 @@ TRF.cxTab = function()
         local x, y = imgui.GetCursorScreenPos();
         local h = 34;
         local hov, clicked = TRF.hot('##vengo_cxz' .. zi, x, y, ROW_W, h);
-        dl:AddRectFilled({ x, y }, { x + ROW_W, y + h }, u32({ t[1], t[2], t[3], hov and 1 or 0.85 }), 5);
-        dl:AddRectFilled({ x, y }, { x + 3, y + h }, u32({ col[1], col[2], col[3], 1 }));
-        dl:AddText({ x + 14, y + 3 }, u32(C.text), (X.open[zi] and 'v  ' or '>  ') .. z.name);
-        dl:AddText({ x + 14, y + 3 + lh }, u32(C.muted), ('%d / %d collected'):fmt(zh, zt));
-        TRF.bar(dl, x + ROW_W - 200, y + 9, 186, 16, zh, zt, { col[1] * 0.6, col[2] * 0.6, col[3] * 0.6, 0.85 });
+        TRF.card(dl, x, y, ROW_W, h, (zh >= zt and zt > 0) and 'own' or nil, hov or X.open[zi]);
+        local ax, ay = x + 16, y + h / 2;                    -- (an arrow: right when closed, down when open)
+        if X.open[zi] then dl:AddTriangleFilled({ ax - 4, ay - 2 }, { ax + 4, ay - 2 }, { ax, ay + 3 }, u32(C.lav));
+        else dl:AddTriangleFilled({ ax - 2, ay - 4 }, { ax + 3, ay }, { ax - 2, ay + 4 }, u32(C.lav)); end
+        dl:AddCircleFilled({ x + 30, ay }, 3.5, u32({ col[1], col[2], col[3], 1 }), 12);
+        dl:AddText({ x + 42, ay - lh / 2 }, u32(C.text), z.name);
+        TRF.bar(dl, x + ROW_W - 230, y, 216, h, zh, zt);
         if clicked then X.open[zi] = not X.open[zi]; end
         imgui.Dummy({ ROW_W, h + 4 });
         if X.open[zi] then
@@ -3766,9 +3800,9 @@ TRF.cxTab = function()
                     local got = X.got(e);
                     local rh = 28;
                     local rhov = TRF.hot(('##vengo_cx%d_%d_%d'):format(zi, ci, ei), cx, cy, cw, rh);
-                    dl:AddRectFilled({ cx, cy }, { cx + cw, cy + rh }, u32(got and { 0.16, 0.34, 0.16, 0.75 } or { C.well[1], C.well[2], C.well[3], rhov and 1 or 0.8 }), 4);
+                    TRF.card(dl, cx, cy, cw, rh, got and 'own' or nil, rhov, 6);
                     TRF.icon(dl, e.id, cx + 3, cy + 2, 24, got and 1 or 0.45);
-                    dl:AddText({ cx + 34, cy + (rh - lh) / 2 }, u32(got and C.green or C.muted), e.name);
+                    dl:AddText({ cx + 34, cy + (rh - lh) / 2 }, u32(got and C.text or C.muted), e.name);
                     if e.spawns then
                         local sw_ = imgui.CalcTextSize(e.spawns);
                         if sw_ < cw - 180 then dl:AddText({ cx + cw - sw_ - 8, cy + (rh - lh) / 2 }, u32({ C.muted[1], C.muted[2], C.muted[3], 0.8 }), e.spawns); end
@@ -3829,21 +3863,22 @@ function TRF.UL.relicCard(dl, r, x, y, w, h)
     local tn, th = 0, 0;
     for k, a in pairs(need) do if a > 0 then tn = tn + a; th = th + math.min(U.cur(k), a); end end
     local pct = done and 1 or (tn > 0 and th / tn or 0);
-    local bg = done and { 0.28, 0.22, 0.08, 0.85 } or (stage > 0 and { 0.10, 0.22, 0.12, 0.85 }) or { C.well[1], C.well[2], C.well[3], 0.9 };
-    local accent = done and { 1, 0.85, 0.3, 1 } or (stage > 0 and { 0.4, 0.9, 0.4, 1 }) or { NEON2[1], NEON2[2], NEON2[3], 1 };
-    dl:AddRectFilled({ x, y }, { x + w, y + h }, u32(bg), 5);
-    dl:AddRectFilled({ x, y }, { x + 3, y + h }, u32(accent));
+    local mx_, my_ = imgui.GetMousePos();
+    TRF.card(dl, x, y, w, h, done and 'done' or (stage > 0 and 'own') or nil, mx_ >= x and mx_ < x + w and my_ >= y and my_ < y + h);
     TRF.icon(dl, r.finalId, x + 8, y + 6, 26);
     dl:AddText({ x + 40, y + 5 }, u32(C.text), r.name);
     dl:AddText({ x + 40 + imgui.CalcTextSize(r.name) + 8, y + 5 }, u32(C.muted), r.job or '');
     local ps = ('%d%%'):fmt(math.floor(pct * 100));
-    dl:AddText({ x + w - imgui.CalcTextSize(ps) - 10, y + 5 }, u32(done and { 1, 0.85, 0.3, 1 } or (pct >= 0.75 and C.green) or C.lav), ps);
+    dl:AddText({ x + w - imgui.CalcTextSize(ps) - 10, y + 5 }, u32(done and C.gold or (pct >= 0.75 and C.green) or C.lav), ps);
     for s = 1, #r.stages do
         local dx, dy = x + 44 + (s - 1) * 14, y + 28;
-        if s <= stage then dl:AddCircleFilled({ dx, dy }, 4.5, u32(done and { 1, 0.85, 0.3, 1 } or { 0.4, 0.9, 0.4, 1 }), 12);
-        else dl:AddCircle({ dx, dy }, 4.5, u32({ 0.45, 0.45, 0.5, 1 }), 12, 1); end
+        if s <= stage then dl:AddCircleFilled({ dx, dy }, 4, u32(done and C.gold or { NEON2[1], NEON2[2], NEON2[3], 1 }), 12);
+        else dl:AddCircle({ dx, dy }, 4, u32({ 1, 1, 1, 0.25 }), 12, 1); end
     end
-    if not done then
+    if done then
+        spaced(dl, x + 40, y + 46, 'COMPLETE', u32(C.gold), 2.5);
+        dl:AddText({ x + 40, y + 46 + imgui.GetTextLineHeight() + 4 }, u32(C.muted), TRF.AR.name(r.finalId));
+    else
         local bars = {};
         for _, k in ipairs({ 'BYNE', 'SHELL', 'BRONZE' }) do if need[k] > 0 then bars[#bars + 1] = { k, need[k] }; end end
         table.sort(bars, function (a, b) return a[2] < b[2]; end);
@@ -3851,7 +3886,7 @@ function TRF.UL.relicCard(dl, r, x, y, w, h)
         for _, b in ipairs(bars) do
             local cd = U.CURRENCY[b[1]];
             TRF.icon(dl, cd.icon, x + 40, by, 16);
-            TRF.bar(dl, x + 60, by, w - 70, 16, U.cur(b[1]), b[2], cd.barFill);
+            TRF.bar(dl, x + 60, by, w - 70, 16, U.cur(b[1]), b[2]);
             by = by + 19;
         end
     end
@@ -3870,21 +3905,21 @@ function TRF.UL.extraCard(dl, c, x, y, w, h)
     local have = TRF.TV.total(c.currency) or 0;
     local pct = c.target > 0 and math.min(have / c.target, 1) or 0;
     local rows = c.materialRows or { { items = c.materials or {} } };
-    dl:AddRectFilled({ x, y }, { x + w, y + h }, u32(pct >= 1 and { 0.28, 0.22, 0.08, 0.85 } or { C.well[1], C.well[2], C.well[3], 0.9 }), 5);
-    dl:AddRectFilled({ x, y }, { x + 3, y + h }, u32(c.color));
+    local mx_, my_ = imgui.GetMousePos();
+    TRF.card(dl, x, y, w, h, pct >= 1 and 'done' or nil, mx_ >= x and mx_ < x + w and my_ >= y and my_ < y + h);
     TRF.icon(dl, c.icon, x + 8, y + 6, 26);
     dl:AddText({ x + 40, y + 5 }, u32(C.text), c.name);
     local ps = ('%d%%'):fmt(math.floor(pct * 100));
     dl:AddText({ x + w - imgui.CalcTextSize(ps) - 10, y + 5 }, u32(pct >= 1 and C.gold or C.lav), ps);
     TRF.icon(dl, U.BAR_ICONS[c.currency] or c.icon, x + 40, y + 26, 16);
-    TRF.bar(dl, x + 60, y + 26, w - 70, 16, have, c.target, c.barFill);
+    TRF.bar(dl, x + 60, y + 26, w - 70, 16, have, c.target);
     local my = y + 48;
     local tipLines = nil;
     for ri, row in ipairs(rows) do
         for mi, m in ipairs(row.items) do
             local mx = x + 40 + (mi - 1) * 21;
             local got = U.have[m.id];
-            if got then dl:AddRectFilled({ mx - 1, my - 1 }, { mx + 19, my + 19 }, u32({ 0.45, 0.38, 0.10, 0.7 }), 3); end
+            if got then TRF.card(dl, mx - 1, my - 1, 20, 20, 'own', false, 4); end
             TRF.icon(dl, m.id, mx, my, 18, got and 1 or 0.3);
             if TRF.hot(('##vengo_xm%d_%d'):format(m.id, ri), mx, my, 18, 18) then tipLines = { m.id, got }; end
         end
@@ -3893,7 +3928,7 @@ function TRF.UL.extraCard(dl, c, x, y, w, h)
     for si, m in ipairs(c.sideColumn or {}) do
         local mx = x + w - (#c.sideColumn - si + 1) * 21 - 6;
         local got = U.have[m.id];
-        if got then dl:AddRectFilled({ mx - 1, y + 47 }, { mx + 19, y + 67 }, u32({ 0.45, 0.38, 0.10, 0.7 }), 3); end
+        if got then TRF.card(dl, mx - 1, y + 47, 20, 20, 'own', false, 4); end
         TRF.icon(dl, m.id, mx, y + 48, 18, got and 1 or 0.3);
         if TRF.hot('##vengo_xs' .. m.id, mx, y + 48, 18, 18) then tipLines = { m.id, got }; end
     end
@@ -3913,7 +3948,7 @@ function TRF.UL.incursion(dl)
         TRF.header(dl, z.name, z.color, ('%d / %d'):fmt(n, #z.weapons));
         for wi, wp in ipairs(z.weapons) do
             local x, y = imgui.GetCursorScreenPos();
-            TRF.icon(dl, wp.id, x + 4, y + 2, 20);
+            TRF.icon(dl, wp.id, x + 2, y + 1, 20);
             dl:AddText({ x + 30, y + 4 }, u32(U.have[wp.id] and C.gold or C.text), wp.name);
             dl:AddText({ x + 36 + imgui.CalcTextSize(wp.name), y + 4 }, u32(C.muted), wp.job);
             local bw = math.floor((ROW_W - 8) / 3);
@@ -3924,19 +3959,20 @@ function TRF.UL.incursion(dl)
             for pi, ph in ipairs(wp.phases) do
                 local px = x + (pi - 1) * (bw + 4);
                 local got = U.have[ph.result];
-                dl:AddRectFilled({ px, by }, { px + bw, by + bh }, u32(got and { 0.28, 0.22, 0.08, 0.8 } or { C.well[1], C.well[2], C.well[3], 0.85 }), 4);
-                dl:AddRectFilled({ px, by }, { px + 2, by + bh }, u32(got and { 1, 0.85, 0.3, 1 } or z.color));
+                local mx_, my_ = imgui.GetMousePos();
+                TRF.card(dl, px, by, bw, bh, got and 'done' or nil, mx_ >= px and mx_ < px + bw and my_ >= by and my_ < by + bh, 6);
                 TRF.icon(dl, ph.result, px + 6, by + 3, 22, got and 1 or 0.35);
                 local nm = TRF.AR.name(ph.result);
                 if nm:find('^Item %d') and pi == #wp.phases then nm = wp.name; end
                 while #nm > 1 and imgui.CalcTextSize(nm) > bw - 70 do nm = nm:sub(1, -2); end
                 dl:AddText({ px + 32, by + 6 }, u32(got and C.gold or C.muted), nm);
                 local lt = LABELS[pi] or '';
-                dl:AddText({ px + bw - imgui.CalcTextSize(lt) - 6, by + 6 }, u32(C.label), lt);
+                local ltw = spacedW(lt:upper(), 1);
+                spaced(dl, px + bw - ltw - 8, by + 6, lt:upper(), u32(C.label), 1);
                 for ri, rid in ipairs(ph.reqs) do
                     local rx, ry = px + 6 + (ri - 1) * 22, by + 30;
                     local own = U.have[rid];
-                    if own then dl:AddRectFilled({ rx - 1, ry - 1 }, { rx + 21, ry + 21 }, u32({ 0.45, 0.38, 0.10, 0.7 }), 3); end
+                    if own then TRF.card(dl, rx - 1, ry - 1, 22, 22, 'own', false, 4); end
                     TRF.icon(dl, rid, rx, ry, 20, own and 1 or 0.2);
                     if TRF.hot(('##vengo_inr%d_%d_%d'):format(zi * 100 + wi, pi, ri), rx, ry, 20, 20) then
                         TRF.itemTip(rid, { { own and 'You have it' or 'Not in your bags', own and C.green or C.muted } });
@@ -3946,7 +3982,7 @@ function TRF.UL.incursion(dl)
                 for _, b in ipairs(ph.bars or {}) do
                     local have = b[3] and (TRF.TV.total(b[3]) or 0) or (U.count[b[2]] or 0);
                     TRF.icon(dl, b[2], px + 6, yb, 13);
-                    TRF.bar(dl, px + 22, yb, bw - 30, 13, have, b[4], have >= b[4] and { 0.40, 0.55, 0.20, 0.7 } or { 0.25, 0.35, 0.50, 0.6 });
+                    TRF.bar(dl, px + 22, yb, bw - 30, 13, have, b[4]);
                     yb = yb + 16;
                 end
                 if TRF.hot(('##vengo_inp%d_%d'):format(zi * 100 + wi, pi), px, by, bw, 28) then
@@ -3973,7 +4009,7 @@ TRF.ulTab = function()
         local cd = U.CURRENCY[k];
         TRF.icon(dl, cd.icon, cx, y, 18);
         local s = loaded and TRF.num(U.cur(k)) or '?';
-        dl:AddText({ cx + 24, y + 1 }, u32(cd.color), s);
+        dl:AddText({ cx + 24, y + 1 }, u32(C.lav), s);
         cx = cx + 24 + imgui.CalcTextSize(s) + 26;
     end
     imgui.Dummy({ ROW_W, 22 });
@@ -4029,12 +4065,14 @@ TRF.luTab = function()
     for i, b in ipairs(LU.BUFFS) do
         local on = LU.bit(D.buffs, i - 1);
         local bx, by = x0 + ((i - 1) % 2) * (half + 8), y0 + math.floor((i - 1) / 2) * 30;
-        dl:AddRectFilled({ bx, by }, { bx + half, by + 28 }, u32(on and { 0.10, 0.20, 0.30, 0.85 } or { C.well[1], C.well[2], C.well[3], 0.8 }), 4);
-        TRF.icon(dl, b.chip, bx + 3, by + 3, 22, on and 1 or 0.4);
-        dl:AddText({ bx + 32, by + (28 - lh) / 2 }, u32(on and { 0.45, 0.85, 1, 1 } or C.muted), b.name);
-        if TRF.hot('##vengo_lub' .. i, bx, by, half, 28) then
+        local bh_ = TRF.hot('##vengo_lub' .. i, bx, by, half, 28);
+        TRF.card(dl, bx, by, half, 28, on and 'on' or nil, bh_, 6);
+        TRF.icon(dl, b.chip, bx + 4, by + 3, 22, on and 1 or 0.4);
+        dl:AddText({ bx + 34, by + (28 - lh) / 2 }, u32(on and C.text or C.muted), b.name);
+        if on then dl:AddCircleFilled({ bx + half - 12, by + 14 }, 3.5, u32(C.seal), 12); end
+        if bh_ then
             imgui.BeginTooltip();
-            imgui.TextColored({ 0.45, 0.85, 1, 1 }, b.name .. (on and '   (active)' or ''));
+            imgui.TextColored(C.seal, b.name .. (on and '   (active)' or ''));
             imgui.TextColored(C.text, b.desc);
             imgui.TextColored(C.muted, ('%s  ·  %s %s'):fmt(b.nm, b.zone, b.pos));
             imgui.TextColored(C.muted, b.chipName .. '  ·  ' .. b.jobs);
@@ -4048,25 +4086,27 @@ TRF.luTab = function()
     local function column(cx, cy, cw, name, pieces, tiers, mats, matCounts, locMask)
         local n = 0;
         for i = 1, 5 do if (tiers[i] or 0) > 0 then n = n + 1; end end
-        dl:AddText({ cx, cy }, u32(n >= 5 and C.green or C.acc), ('%s  %d / 5'):fmt(name, n));
+        local tw_ = spaced(dl, cx, cy, name:upper(), u32(C.label), 2);
+        dl:AddText({ cx + tw_ + 12, cy }, u32(n >= 5 and C.green or C.lav), ('%d / 5'):fmt(n));
         cy = cy + lh + 6;
         for i, p in ipairs(pieces) do
             local tier = tiers[i] or 0;
             local own = tier > 0;
             local rh = 40;
-            dl:AddRectFilled({ cx, cy }, { cx + cw, cy + rh }, u32(own and { 0.12, 0.22, 0.12, 0.6 } or { C.well[1], C.well[2], C.well[3], 0.8 }), 4);
-            TRF.icon(dl, p.id, cx + 4, cy + 8, 24, own and 1 or 0.4);
-            dl:AddText({ cx + 34, cy + 3 }, u32(own and C.green or C.muted), p.name);
+            local mx_, my_ = imgui.GetMousePos();
+            TRF.card(dl, cx, cy, cw, rh, own and 'own' or nil, mx_ >= cx and mx_ < cx + cw and my_ >= cy and my_ < cy + rh, 6);
+            TRF.icon(dl, p.id, cx + 6, cy + 8, 24, own and 1 or 0.4);
+            dl:AddText({ cx + 38, cy + 4 }, u32(own and C.text or C.muted), p.name);
             for d = 1, 3 do
-                local dx = cx + 38 + (d - 1) * 12;
-                if d <= tier - 1 then dl:AddCircleFilled({ dx, cy + 28 }, 4, u32({ 1, 0.85, 0.3, 1 }), 12);
-                else dl:AddCircle({ dx, cy + 28 }, 4, u32({ 0.3, 0.3, 0.35, 0.8 }), 12, 1); end
+                local dx = cx + 42 + (d - 1) * 12;
+                if d <= tier - 1 then dl:AddCircleFilled({ dx, cy + 28 }, 4, u32({ NEON2[1], NEON2[2], NEON2[3], 1 }), 12);
+                else dl:AddCircle({ dx, cy + 28 }, 4, u32({ 1, 1, 1, 0.25 }), 12, 1); end
             end
             local mc = matCounts[i] or 0;
             local s = 'x' .. mc;
             local sw_ = imgui.CalcTextSize(s);
-            dl:AddText({ cx + cw - sw_ - 6, cy + 12 }, u32(mc > 0 and C.text or C.muted), s);
-            if mats[i] then TRF.icon(dl, mats[i].id, cx + cw - sw_ - 30, cy + 10, 20, mc > 0 and 1 or 0.45); end
+            dl:AddText({ cx + cw - sw_ - 10, cy + 12 }, u32(mc > 0 and C.lav or C.muted), s);
+            if mats[i] then TRF.icon(dl, mats[i].id, cx + cw - sw_ - 34, cy + 10, 20, mc > 0 and 1 or 0.45); end
             if TRF.hot(('##vengo_lua%s%d'):format(name, i), cx, cy, cw, rh) then
                 local lines = {};
                 if own then
@@ -4099,9 +4139,10 @@ TRF.luTab = function()
         for i, it in ipairs(list) do
             local own = LU.bit(mask, i - 1);
             local ix = rx + (i - 1) * 42;
-            dl:AddRectFilled({ ix, ry }, { ix + 38, ry + 38 }, u32(own and { 0.16, 0.34, 0.16, 0.8 } or { C.well[1], C.well[2], C.well[3], 0.8 }), 4);
+            local th_ = TRF.hot(('##vengo_lu%s%d'):format(key, i), ix, ry, 38, 38);
+            TRF.card(dl, ix, ry, 38, 38, own and 'own' or nil, th_, 6);
             TRF.icon(dl, it.id, ix + 3, ry + 3, 32, own and 1 or 0.35);
-            if TRF.hot(('##vengo_lu%s%d'):format(key, i), ix, ry, 38, 38) then
+            if th_ then
                 TRF.itemTip(it.id, { { own and ('Owned  ·  ' .. (LU.bit(locMask, i - 1) and 'Squire' or 'Inventory')) or 'Not owned', own and C.green or C.muted },
                                      { 'From: ' .. it.nm, C.gold } });
             end
@@ -4123,10 +4164,11 @@ TRF.luTab = function()
         local inv, vis = D.organInv[i] or 0, D.organVis[i] or 0;
         local t_ = inv + vis;
         local px, py = ox + ((i - 1) % per) * (ow + 6), oy + math.floor((i - 1) / per) * 34;
-        dl:AddRectFilled({ px, py }, { px + ow, py + 30 }, u32({ C.well[1], C.well[2], C.well[3], 0.85 }), 4);
-        TRF.icon(dl, o.id, px + 3, py + 3, 24, t_ > 0 and 1 or 0.35);
-        dl:AddText({ px + 32, py + (30 - lh) / 2 }, u32(t_ > 0 and (o.hq and C.gold or C.text) or C.muted), 'x' .. t_);
-        if TRF.hot('##vengo_luo' .. i, px, py, ow, 30) then
+        local oh_ = TRF.hot('##vengo_luo' .. i, px, py, ow, 30);
+        TRF.card(dl, px, py, ow, 30, t_ > 0 and 'own' or nil, oh_, 6);
+        TRF.icon(dl, o.id, px + 4, py + 3, 24, t_ > 0 and 1 or 0.35);
+        dl:AddText({ px + 34, py + (30 - lh) / 2 }, u32(t_ > 0 and (o.hq and C.gold or C.lav) or C.muted), 'x' .. t_);
+        if oh_ then
             TRF.itemTip(o.id, { { ('Inventory: %d'):fmt(inv), C.text }, { ('Vision storage: %d'):fmt(vis), C.text }, { ('Total: %d'):fmt(t_), C.green } });
         end
     end
