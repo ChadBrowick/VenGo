@@ -25,7 +25,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.35';
+addon.version = '4.36';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -5908,12 +5908,14 @@ do
 drawAlert = function()
     if ALERT == nil or ALERT.dismissed then return; end
     local v = ALERT.v;
+    local starred = TRF.ST and TRF.ST.watched(v) or false;
+    local gc = starred and C.gold or NEON2;                       -- (the glow: gold for a starred VNM)
     local nc, nv = pushTheme();
     local pulse = 0.55 + 0.45 * math.sin(os.clock() * 4);
     imgui.PushStyleColor(ImGuiCol_WindowBg, { 0.05, 0.04, 0.07, config.transparent and 0.70 or 0.95 });
-    imgui.PushStyleColor(ImGuiCol_Border, { NEON2[1], NEON2[2], NEON2[3], 0.45 + 0.55 * pulse });
+    imgui.PushStyleColor(ImGuiCol_Border, { gc[1], gc[2], gc[3], 0.65 + 0.35 * pulse });
     imgui.PushStyleVar(ImGuiStyleVar_WindowPadding, { 22, 16 });
-    imgui.PushStyleVar(ImGuiStyleVar_WindowBorderSize, 2);
+    imgui.PushStyleVar(ImGuiStyleVar_WindowBorderSize, 3);
     imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 10);
     nc, nv = nc + 2, nv + 3;
     local ds = imgui.GetIO().DisplaySize;
@@ -5923,15 +5925,49 @@ drawAlert = function()
     local pushed = pushFont(fonts.panel, 16);
     if imgui.Begin('VenGo alert##vengo_alert', { true }, flags) then
         local dl = imgui.GetWindowDrawList();
+        -- a bright glow all round the banner, behind it, pulsing
+        pcall(function ()
+            local wx, wy = imgui.GetWindowPos();
+            local ww, wh = imgui.GetWindowSize();
+            local bg = imgui.GetBackgroundDrawList and imgui.GetBackgroundDrawList() or nil;
+            if bg == nil then return; end
+            for i = 1, 9 do
+                local g = i * 2.4;
+                local a = (0.20 - i * 0.02) * (0.55 + 0.45 * pulse) * (starred and 1.3 or 1);
+                bg:AddRect({ wx - g, wy - g }, { wx + ww + g, wy + wh + g }, u32({ gc[1], gc[2], gc[3], math.max(0, a) }), 10 + g, C.rall, 3);
+            end
+        end);
         local x0, y0 = imgui.GetCursorScreenPos();
         local lh = imgui.GetTextLineHeight();
-        local w = spaced(dl, x0, y0, 'VNM INCOMING', u32({ NEON2[1], NEON2[2], NEON2[3], 0.6 + 0.4 * pulse }), 3);
-        imgui.Dummy({ w, lh });
+        local sx = x0;
+        if starred then                                          -- (a gold star before the title)
+            TRF.ST.draw(dl, x0 + 7, y0 + lh / 2, 7, { C.gold[1], C.gold[2], C.gold[3], 0.7 + 0.3 * pulse }, true);
+            sx = x0 + 20;
+        end
+        local w = spaced(dl, sx, y0, starred and 'STARRED VNM INCOMING' or 'VNM INCOMING',
+            u32({ gc[1], gc[2], gc[3], 0.7 + 0.3 * pulse }), 3);
+        imgui.Dummy({ w + (sx - x0), lh });
 
         local tp = pushFont(fonts.big, 26);
         if not tp then imgui.SetWindowFontScale(1.35); end
+        if starred then
+            local nx, ny = imgui.GetCursorScreenPos();
+            local nh = imgui.GetTextLineHeight();
+            dl:AddCircleFilled({ nx + 11, ny + nh / 2 }, 13, u32({ C.gold[1], C.gold[2], C.gold[3], 0.18 * pulse }), 20);
+            TRF.ST.draw(dl, nx + 11, ny + nh / 2, 10, C.gold, true);
+            imgui.Dummy({ 26, nh });
+            imgui.SameLine(0, 6);
+        end
         imgui.TextColored(C.text, v.nm);
         if tp then imgui.PopFont(); else imgui.SetWindowFontScale(1); end
+        if starred then
+            local why = TRF.ST.zoneStarred(v) and 'You starred this zone' or 'Drops a piece you starred';
+            local ps = TRF.ST.piecesOf(v);
+            local names = {};
+            for i, id in ipairs(ps) do if i <= 3 then names[#names + 1] = TRF.AR.name(id); end end
+            if #names > 0 then why = why .. ': ' .. table.concat(names, ', '); end
+            imgui.TextColored(C.gold, why);
+        end
 
         imgui.TextColored(C.acc, ('%s  (%s)'):fmt(v.zone_name, v.grid or '?'));
         local d = dropsOf(v);
