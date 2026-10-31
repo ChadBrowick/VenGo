@@ -20,12 +20,12 @@
   look of the window come from YunaUI by Yunas (GPL v3). The font is TeX Gyre
   Adventor by GUST (GUST Font License). The venture board layout and VNM list
   come from the ventures addon (Commandobill, Seekey, Phatty). Warps go through
-  Uberwarp by Thorny, which is installed separately. VanaCore is Vekkien's project.
+  Uberwarp by Thorny, which is installed separately. VanaCore is Vekien's project.
 ]]
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.31';
+addon.version = '4.32';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -2824,7 +2824,7 @@ local function tabDynamis()
 end
 
 local THANKS = {
-    { 'Vekkien', 'the VanaCore project, the client VenGo runs in' },
+    { 'Vekien', 'the VanaCore project, the client VenGo runs in' },
     { 'Yunas', 'YunaUI: the look of VenGo, and how it starts up in VanaCore' },
     { 'Commandobill, Seekey and Phatty', 'the ventures addon: the live venture board and the VNM list (drops, grid squares, notes)' },
     { 'Thorny', 'Uberwarp: the warps behind GO' },

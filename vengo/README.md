@@ -52,7 +52,7 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 
 ## Special thanks
 
-- **Vekkien** for the VanaCore project
+- **Vekien** for the VanaCore project
 - **Yunas** for YunaUI: VenGo's look and its VanaCore start-up come from it
 - **Commandobill, Seekey and Phatty** for the ventures addon: the venture board and the VNM list
 - **Thorny** for Uberwarp, which does the warps behind GO
