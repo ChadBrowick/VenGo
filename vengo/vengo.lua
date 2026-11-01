@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.48';
+addon.version = '4.49';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1407,6 +1407,8 @@ local WARP_OVERRIDES = {
              hp = { 'Aht Urhgan Whitegate' } },                       --   Whitegate Home Point #1
     [79] = { name = 'Nashmau',                                        -- Caedarva Mire
              hp = { 'Nashmau' } },                                    --   Nashmau Home Point
+    [91] = { name = "Crawlers' Nest [S]",                             -- Rolanberry Fields [S]
+             sg = { "Crawlers' Nest [S]" } },                         --   Crawlers' Nest [S] Survival Guide
     [123] = { name = 'Kazham',                                        -- Yuhtunga Jungle (it has no Home Point)
               hp = { 'Kazham' } },                                    --   Kazham Home Point
     [118] = { name = 'Bibiki Bay', nm = 'puffer pugil',               -- Buburimu Peninsula (only for Puffer Pugil)
