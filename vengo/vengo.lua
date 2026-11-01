@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.47';
+addon.version = '4.48';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1407,6 +1407,8 @@ local WARP_OVERRIDES = {
              hp = { 'Aht Urhgan Whitegate' } },                       --   Whitegate Home Point #1
     [79] = { name = 'Nashmau',                                        -- Caedarva Mire
              hp = { 'Nashmau' } },                                    --   Nashmau Home Point
+    [123] = { name = 'Kazham',                                        -- Yuhtunga Jungle (it has no Home Point)
+              hp = { 'Kazham' } },                                    --   Kazham Home Point
     [118] = { name = 'Bibiki Bay', nm = 'puffer pugil',               -- Buburimu Peninsula (only for Puffer Pugil)
               sg = { 'Bibiki Bay' } },                                --   Bibiki Bay Survival Guide
 };
@@ -1542,7 +1544,10 @@ end
 local function warpSummary(opts)
     local have = {};
     for _, sys in ipairs(SYSTEMS) do
-        if #opts[sys] > 0 then have[#have + 1] = SYS_NAME[sys] .. ((#opts[sys] > 1) and ('s (' .. #opts[sys] .. ')') or ''); end
+        if #opts[sys] > 0 then
+            local via = opts[sys][1].via;                         -- (a warp into the zone next door: say which)
+            have[#have + 1] = SYS_NAME[sys] .. (via and (' (' .. via .. ')') or ((#opts[sys] > 1) and ('s (' .. #opts[sys] .. ')') or ''));
+        end
     end
     return (#have > 0) and table.concat(have, ', ') or 'none';
 end
