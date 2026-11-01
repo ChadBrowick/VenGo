@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.42';
+addon.version = '4.43';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -3485,6 +3485,47 @@ function TRF.AR.name(id)
     return n;
 end
 
+-- One piece (style B): faded grey when you don't have it; green tile and check when owned, gold tile and check when
+-- completed; a cyan bar under it when it drops from today's ventures, a pulsing pink glow and bar when its VNM is up
+TRF.AR.GREEN, TRF.AR.GOLD = { 0.48, 0.92, 0.58 }, { 0.96, 0.76, 0.32 };
+TRF.AR.CYAN, TRF.AR.PINK = { 0.31, 0.86, 0.92 }, { 1.00, 0.42, 0.72 };
+function TRF.AR.check(dl, x, y, r, col)                          -- (a filled circle with a dark tick)
+    dl:AddCircleFilled({ x, y }, r, u32({ col[1], col[2], col[3], 1 }), 16);
+    local k = { col[1] * 0.15, col[2] * 0.15, col[3] * 0.15, 1 };
+    dl:AddLine({ x - r * 0.45, y + r * 0.02 }, { x - r * 0.1, y + r * 0.38 }, u32(k), math.max(1.5, r * 0.28));
+    dl:AddLine({ x - r * 0.1, y + r * 0.38 }, { x + r * 0.5, y - r * 0.35 }, u32(k), math.max(1.5, r * 0.28));
+end
+function TRF.AR.piece(dl, id, x, y, sz, have, hot, over, now)
+    local A = TRF.AR;
+    local P_ = A.PINK;
+    local pulse = (hot == 2) and (0.55 + 0.45 * math.abs(math.sin(now * 3))) or 0;
+    if hot == 2 then                                             -- (the glow, behind the cell)
+        for i = 3, 1, -1 do
+            local o = i * 3;
+            dl:AddRectFilled({ x - o, y - o }, { x + sz + o, y + sz + o }, u32({ P_[1], P_[2], P_[3], (0.30 - i * 0.07) * pulse }), 6 + o);
+        end
+    end
+    TRF.card(dl, x, y, sz, sz, nil, over, 6);
+    local c_ = (have == 2) and A.GOLD or A.GREEN;
+    if have > 0 then
+        dl:AddRectFilled({ x, y }, { x + sz, y + sz }, u32({ c_[1], c_[2], c_[3], have == 2 and 0.16 or 0.10 }), 6);
+        dl:AddRect({ x, y }, { x + sz, y + sz }, u32({ c_[1], c_[2], c_[3], have == 2 and 0.85 or 0.55 }), 6, C.rall, have == 2 and 1.5 or 1);
+    end
+    local ic = itemIcon(id);
+    if ic then
+        local tint = (have > 0) and { 1, 1, 1, 1 } or { 0.62, 0.62, 0.66, 0.38 };
+        pcall(dl.AddImage, dl, ic.ptr, { x + 4, y + 4 }, { x + sz - 4, y + sz - 4 }, { 0, 0 }, { 1, 1 }, u32(tint));
+    else
+        dl:AddRectFilled({ x + 4, y + 4 }, { x + sz - 4, y + sz - 4 }, u32({ 1, 1, 1, 0.05 }), 3);
+    end
+    if hot == 2 then dl:AddRect({ x, y }, { x + sz, y + sz }, u32({ P_[1], P_[2], P_[3], 0.7 + 0.3 * pulse }), 6, C.rall, 2); end
+    if have > 0 then A.check(dl, x + 8, y + sz - 8, 6, c_); end
+    if hot == 1 or hot == 2 then
+        local b = (hot == 2) and P_ or A.CYAN;
+        dl:AddRectFilled({ x + 6, y + sz + 3 }, { x + sz - 6, y + sz + 6 }, u32({ b[1], b[2], b[3], hot == 2 and (0.7 + 0.3 * pulse) or 0.95 }), 2);
+    end
+end
+
 TRF.armorTab = function()
     TRF.AR.scan();
     local hot, why = TRF.AR.hot();
@@ -3509,10 +3550,11 @@ TRF.armorTab = function()
     local setGap = 12;
     local pad = 7;
     local tg = 4;                                                -- (between tiers)
+    local rg = 10;                                               -- (between rows: room for the bar under a piece)
     local cell = math.floor(math.max(30, math.min(46, (ROW_W - labelW - setGap * 4 - 5 * (pad * 2 + tg * 2)) / 15)));
     local setW = cell * 3 + tg * 2 + pad * 2;
     local headH = lh * 2 + 14;
-    local gridH = 5 * cell + 4 * tg;
+    local gridH = 5 * cell + 4 * rg + 4;
     local panelH = headH + gridH + pad + 2;
     local now = os.clock();
     local function setX(si) return x0 + labelW + (si - 1) * (setW + setGap); end
@@ -3563,7 +3605,7 @@ TRF.armorTab = function()
     end
     local hoverInfo = nil;
     for r, sl in ipairs(TRF.AR.SLOTS) do
-        local ry = gy + (r - 1) * (cell + tg);
+        local ry = gy + (r - 1) * (cell + rg);
         spaced(dl, x0, ry + (cell - lh) / 2, TRF.AR.SLOT_LABELS[r]:upper(), u32(C.label), 1);
         for si, set in ipairs(TRF.AR.SETS) do
             local complete = owned[set.final[sl]] ~= nil;
@@ -3571,16 +3613,7 @@ TRF.armorTab = function()
                 local id = set.tiers[t_][sl];
                 local cx = cellX(si, t_);
                 local over = mx_ >= cx and mx_ < cx + cell and my_ >= ry and my_ < ry + cell;
-                TRF.card(dl, cx, ry, cell, cell, complete and 'on' or (owned[id] and 'own') or nil, over, 6);
-                TRF.icon(dl, id, cx + 3, ry + 3, cell - 6, (complete or owned[id]) and 1 or 0.55);
-                local h = hot[id];
-                if h == 2 then
-                    local pulse = math.abs(math.sin(now * 3));
-                    dl:AddRect({ cx - 1, ry - 1 }, { cx + cell + 1, ry + cell + 1 }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.25 * pulse }), 7, C.rall, 5);
-                    dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.6 + 0.4 * pulse }), 6, C.rall, 2);
-                elseif h == 1 then
-                    dl:AddRect({ cx, ry }, { cx + cell, ry + cell }, u32({ C.gold[1], C.gold[2], C.gold[3], 0.65 }), 6, C.rall, 1.2);
-                end
+                TRF.AR.piece(dl, id, cx, ry, cell, complete and 2 or (owned[id] and 1 or 0), hot[id], over, now);
                 if TRF.ST.itemStarred(id) then
                     dl:AddCircleFilled({ cx + cell - 8, ry + 8 }, 7, u32({ 0, 0, 0, 0.55 }), 14);
                     TRF.ST.draw(dl, cx + cell - 8, ry + 8, 6, C.gold, true);
@@ -3600,7 +3633,7 @@ TRF.armorTab = function()
         local H_ = hoverInfo;
         imgui.BeginTooltip();
         imgui.TextColored(C.text, TRF.AR.name(H_.id));
-        if H_.complete then imgui.TextColored({ 0.45, 0.65, 1, 1 }, '  Completed: ' .. TRF.AR.name(H_.set.final[H_.slot]));
+        if H_.complete then imgui.TextColored(C.gold, '  Completed: ' .. TRF.AR.name(H_.set.final[H_.slot]));
         elseif owned[H_.id] then imgui.TextColored(C.green, '  Owned (' .. tostring(owned[H_.id]) .. ')');
         else imgui.TextColored(C.muted, '  Not owned'); end
         imgui.Separator();
@@ -3622,16 +3655,20 @@ TRF.armorTab = function()
 
     -- legend
     local lx, ly = imgui.GetCursorScreenPos();
-    local function key(x, kind, outline, text)
-        TRF.card(dl, x, ly + 2, 14, 14, kind, false, 4);
-        if outline then dl:AddRect({ x, ly + 2 }, { x + 14, ly + 16 }, u32(outline), 4, C.rall, 1.5); end
-        dl:AddText({ x + 20, ly + 1 }, u32(C.muted), text);
-        return x + 20 + imgui.CalcTextSize(text) + 22;
+    local function key(x, kind, text)
+        local A = TRF.AR;
+        if kind == 'own' or kind == 'done' then A.check(dl, x + 7, ly + lh / 2 + 1, 6.5, kind == 'own' and A.GREEN or A.GOLD);
+        else
+            local c_ = kind == 'drop' and A.CYAN or A.PINK;
+            dl:AddRectFilled({ x, ly + lh / 2 - 1 }, { x + 16, ly + lh / 2 + 3 }, u32({ c_[1], c_[2], c_[3], 1 }), 2);
+        end
+        dl:AddText({ x + 22, ly + 1 }, u32(C.muted), text);
+        return x + 22 + imgui.CalcTextSize(text) + 22;
     end
-    local kx = key(lx, 'own', nil, 'Owned');
-    kx = key(kx, 'on', nil, 'Completed');
-    kx = key(kx, nil, { C.gold[1], C.gold[2], C.gold[3], 0.8 }, 'Drops from today\'s ventures');
-    key(kx, nil, { NEON2[1], NEON2[2], NEON2[3], 1 }, 'VNM up (pulsing)');
+    local kx = key(lx, 'own', 'Owned');
+    kx = key(kx, 'done', 'Completed');
+    kx = key(kx, 'drop', 'Drops from today\'s ventures');
+    key(kx, 'up', 'VNM up (glows)');
     imgui.Dummy({ ROW_W, 20 });
     hint('Click a piece to star it: VenGo warns you (chat and sound) at 90%, 100% and before the pop whenever a venture that drops it is up. Hover a piece for its drop zones; hover a set name for its crest and jobs.');
 end
