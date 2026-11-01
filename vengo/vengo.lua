@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.45';
+addon.version = '4.46';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -5262,11 +5262,28 @@ end
 -- A and B go to the game as usual otherwise, and LB always does). Returns true when the game shouldn't see the button.
 function TRF.PAD.alertKey(btn, down, lb, a, b)
     local P = TRF.PAD;
-    if btn == lb then P.lb = down; P.seen = true; return false; end
+    P.seen = true;                                                -- (any button: there's a controller)
+    if btn == lb then P.lb = down; return false; end
     if btn ~= a and btn ~= b then return false; end
     if not P.lb or ALERT == nil or ALERT.dismissed then return false; end
     if down then P.alertCmd = (btn == a) and 'go' or 'dismiss'; end
     return true;
+end
+-- Is a controller plugged in? (any button pressed since load, or VanaCore lists one; asked every 10 s at most)
+function TRF.PAD.present()
+    local P = TRF.PAD;
+    if P.seen then return true; end
+    local now = os.clock();
+    if P.listAt and now - P.listAt < 10 then return P.listed or false; end
+    P.listAt = now;
+    P.listed = false;
+    pcall(function ()
+        if not (rawget(_G, 'vana') and vana.gamepad and vana.gamepad.list) then return; end
+        local function any(t) return (type(t) == 'table' and next(t) ~= nil) or (type(t) == 'number' and t > 0) or t == true; end
+        local pads, xi = vana.gamepad.list();
+        P.listed = any(pads) or any(xi);
+    end);
+    return P.listed;
 end
 -- A small controller drawn in lines (body, grips, d-pad, buttons)
 function TRF.PAD.icon(dl, x, y, h, col)
@@ -6644,7 +6661,7 @@ drawAlert = function()
         warpTip(v);
         imgui.SameLine(0, 10);
         if button('DISMISS##vengo_alert_x', { 140, 38 }, true) then ALERT.dismissed = true; end
-        if TRF.PAD.seen then TRF.PAD.alertHint(isActive(v) and 'CANCEL' or (TRF.trailShowing(v) and 'STOP' or 'GO')); end
+        if TRF.PAD.present() then TRF.PAD.alertHint(isActive(v) and 'CANCEL' or (TRF.trailShowing(v) and 'STOP' or 'GO')); end
     end
     imgui.End();
     if pushed then imgui.PopFont(); end
