@@ -35,6 +35,8 @@ as you turn. It's a straight line: it shows the way, not the route round walls, 
   every venture that drops it. Watched VNMs get a chat line and a sound at 90%, at 100% and a minute before the pop.
 - **Controller:** `/vengo pad` (or Settings > Controller) gives VenGo the controller: d-pad to move, A to press.
   Back / Select gives it back to the game.
+- **VNM alert from the controller:** while the VNM INCOMING alert is up, hold LB and press A for GO (or STOP / cancel)
+  and LB + B to dismiss it. A and B work as usual in the game otherwise.
 - **Updates:** VenGo checks github.com/ChadBrowick/VenGo for new releases. Settings > Updates (or `/vengo upgrade`)
   downloads the new zip from that repository only and unpacks it over the vengo folder; then `/addon reload vengo`.
 

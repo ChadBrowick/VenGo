@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.43';
+addon.version = '4.44';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -5258,6 +5258,16 @@ function TRF.PAD.set(on)
         msg('The controller is back with the game.');
     end
 end
+-- The VNM alert from the controller: hold LB and press A for GO, B for DISMISS (only while the alert is showing;
+-- A and B go to the game as usual otherwise, and LB always does). Returns true when the game shouldn't see the button.
+function TRF.PAD.alertKey(btn, down, lb, a, b)
+    local P = TRF.PAD;
+    if btn == lb then P.lb = down; P.seen = true; return false; end
+    if btn ~= a and btn ~= b then return false; end
+    if not P.lb or ALERT == nil or ALERT.dismissed then return false; end
+    if down then P.alertCmd = (btn == a) and 'go' or 'dismiss'; end
+    return true;
+end
 function TRF.PAD.frame()
     if not TRF.PAD.on then return; end
     if not ui.open[1] or config.minimized then TRF.PAD.set(false); return; end
@@ -5270,6 +5280,7 @@ pcall(function ()
             e.blocked = true;
             return true;
         end
+        if TRF.PAD.alertKey(e.button, (e.state or 0) ~= 0, 8, 12, 13) then e.blocked = true; return true; end   -- (LB, A, B)
     end);
     ashita.events.register('dinput_button', 'vengo_pad_d', function (e)
         if TRF.PAD.on and e.button == 56 and (e.state or 0) >= 128 then -- (Share / Select on most pads)
@@ -5277,6 +5288,7 @@ pcall(function ()
             e.blocked = true;
             return true;
         end
+        if TRF.PAD.alertKey(e.button, (e.state or 0) >= 128, 52, 49, 50) then e.blocked = true; return true; end -- (L1, Cross, Circle)
     end);
 end);
 
@@ -6585,6 +6597,12 @@ drawAlert = function()
         local left = ALERT.pop_at - os.time();
         imgui.TextColored(left <= 60 and { C.hp[1], C.hp[2], C.hp[3], 1 } or C.active, popWords(left));
         imgui.Spacing();
+        local padCmd = TRF.PAD.alertCmd;                         -- (LB + A / LB + B on a controller)
+        TRF.PAD.alertCmd = nil;
+        if padCmd == 'dismiss' then ALERT.dismissed = true;
+        elseif padCmd == 'go' then
+            if isActive(v) then ARMED = nil; msg('Cancelled.'); else warpTo(v); end
+        end
         if isActive(v) then
             if button('CANCEL##vengo_alert_go', { 160, 38 }, true) then ARMED = nil; msg('Cancelled.'); end
         elseif TRF.trailShowing(v) then
@@ -6595,6 +6613,7 @@ drawAlert = function()
         warpTip(v);
         imgui.SameLine(0, 10);
         if button('DISMISS##vengo_alert_x', { 140, 38 }, true) then ALERT.dismissed = true; end
+        if TRF.PAD.seen then imgui.TextColored(C.muted, 'Controller:  LB + A  ' .. (isActive(v) and 'cancel' or (TRF.trailShowing(v) and 'stop' or 'GO')) .. '      LB + B  dismiss'); end
     end
     imgui.End();
     if pushed then imgui.PopFont(); end
