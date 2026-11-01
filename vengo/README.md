@@ -50,7 +50,7 @@ database. Everything resets at JP midnight and is kept per character (`dailies_<
 
 VenGo asks the CatsEyeXI server for your points the way Trove's Points tab does, and shows each group where it belongs:
 Venture points (EXP, Battle) on VENTURES, Summit points on SUMMIT, Daily points on DAILIES, and the CatsEyeXI group
-(Domain Shards, Dynamis RP, DKP, Gob Scraps, Muiridian Favor and so on) on its own **CATSEYEXI POINTS** tab
+(Domain Shards, Dynamis RP, DKP, Gob Scraps, Muiridian Favor and so on) on its own **CATSEYEXI** tab
 (`/vengo points`). They update every minute while one of those tabs is open; REFRESH asks again straight away.
 
 ## Live data

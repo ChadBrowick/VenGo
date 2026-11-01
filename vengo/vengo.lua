@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.40';
+addon.version = '4.41';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1696,7 +1696,7 @@ local WIN_W = SW + 30 + MARGIN + FULL_ROW + 50;         -- starting size; the wi
 local WIN_H = 700;
 local MIN_W, MIN_H = 640, 460;
 
-local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'DAILIES', 'CATSEYEXI POINTS', 'VNM ARMOR', 'ULTIMATES', 'LUMORIA', 'ODIOUS CODEX', 'SETTINGS', 'SPECIAL THANKS' };
+local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'DAILIES', 'CATSEYEXI', 'VNM ARMOR', 'ULTIMATES', 'LUMORIA', 'ODIOUS CODEX', 'SETTINGS', 'SPECIAL THANKS' };
 ui.tab = ui.tab or 1;
 
 local function statusText()
@@ -2406,7 +2406,7 @@ local function sidebar(dl, x0, y0, sw)
             dl:AddRectFilled({ x0, y }, { x0 + sw, y + ih }, u32({ 1, 1, 1, 0.04 }), 4);
         end
         local _, nh = imgui.CalcTextSize(n);
-        local label = (n == 'CATSEYEXI POINTS') and 'CatsEyeXI points' or (n:sub(1, 1) .. n:sub(2):lower());
+        local label = (n == 'CATSEYEXI') and 'CatsEyeXI' or (n:sub(1, 1) .. n:sub(2):lower());
         if not on then dl:AddCircleFilled({ x0 + 10, y + ih / 2 + 1 }, 1.6, u32(C.muted), 8); end
         dl:AddText({ x0 + (on and 14 or 18), y + (ih - nh) / 2 }, u32(on and { 1, 1, 1, 1 } or (over and { 1, 1, 1, 1 } or C.text)), label);
         imgui.SetCursorScreenPos({ x0, y });
@@ -3735,7 +3735,7 @@ function TRF.PT.group(name)
     for _, e in ipairs(P.list) do if e.group:lower() == name then out[#out + 1] = e; end end
     return out;
 end
--- The groups that aren't shown on a tab of their own (they go on CATSEYEXI POINTS)
+-- The groups that aren't shown on a tab of their own (they go on the CATSEYEXI tab)
 function TRF.PT.others()
     local P = TRF.PT;
     local seen, order = {}, {};
@@ -5888,9 +5888,9 @@ end
 
 TRF.ptTab = function()
     local P = TRF.PT;
-    section('CatsEyeXI points');
+    section('CatsEyeXI');
     TRF.refreshRow('Points', P.at, P.pending, function () P.ask(true); end);
-    P.block('catseyexi', 'CatsEyeXI', 3);
+    P.block('catseyexi', 'Points', 3);
     for _, g in ipairs(P.others()) do P.block(g:lower(), g, 3); end
     imgui.Spacing();
     hint('Your Dailies, Ventures and Summit points are on those tabs. Updated from the CatsEyeXI server every minute while one of these tabs is open.');
