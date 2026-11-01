@@ -29,6 +29,10 @@ showing the name and distance. It uses the game's own camera, so it sits on the 
 as you turn. It's a straight line: it shows the way, not the route round walls, and ends
 5 yalms from the square's middle. Settings: on/off, glow, and the chevrons' colour.
 
+By default the arrows come up on their own only once the zone's VNM is at 100% (or announced). Press GO in
+the zone to show them any time; turn off "Only when the VNM is at 100%" in Settings to have them whenever you're in
+a venture zone.
+
 ## Stars, controller and updates
 
 - **Stars:** the star beside a venture's GO button watches that zone; clicking a piece on the VNM ARMOR tab watches

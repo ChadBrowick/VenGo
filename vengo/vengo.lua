@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.46';
+addon.version = '4.47';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -71,6 +71,7 @@ local config = {
     logo_anim = true,          -- shine and petals on the logo
     trail = true,              -- the glowing path on the ground to the VNM
     trail_glow = true,         -- its glow
+    trail_full = true,         -- show it on its own only when the zone's VNM is at 100% (GO in the zone still shows it)
     trail_color = 'pink',      -- the chevrons' colour
     trail_style = 'solid',     -- lines | bands | solid
     theme = 'pink',            -- the window's accent colours (Settings > Colours)
@@ -169,7 +170,7 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
+    for _, k in ipairs({ 'transparent', 'minimized', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
                            'star_zones', 'star_items', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
@@ -3127,7 +3128,7 @@ end
 -- Where: the Venture Seal if it's loaded or remembered, else the middle of the VNM's grid square.
 local function trailTarget()
     local z = zone();
-    if TRAIL.zone_ ~= z then TRAIL.zone_, TRAIL.stopped, TRAIL.forced = z, nil, nil; end   -- (a new zone: GO / STOP start fresh)
+    if TRAIL.zone_ ~= z then TRAIL.zone_, TRAIL.stopped, TRAIL.forced, TRAIL.manual = z, nil, nil, nil; end   -- (a new zone: GO / STOP start fresh)
     local v = TRAIL.pick;
     if v and v.zone ~= z then v = nil; end
     if v == nil then
@@ -3138,6 +3139,8 @@ local function trailTarget()
         v = best;
     end
     if v == nil or TRAIL.stopped == v.key then return nil; end
+    -- On its own only once the VNM is at 100% (or announced); GO pressed in the zone shows it any time
+    if config.trail_full ~= false and (v.progress or 0) < 100 and not (ALERT and ALERT.v == v) and TRAIL.manual ~= v.key then return nil; end
     local gx, gy = gridToWorld(v.zone, v.grid, v.map);
     local sx, sy, sh, live = SL.find(z);
     if sx and (live or gx == nil or dist2d(sx, sy, gx, gy) < 120) then   -- (a remembered seal: only if it's near the VNM's square)
@@ -6015,7 +6018,7 @@ end
 
 -- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
 TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
-    'trail', 'trail_glow', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
+    'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
     'star_zones', 'star_items', 'star_chat', 'star_sound', 'check_updates' };
 function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
@@ -6086,6 +6089,7 @@ TRF.trailGo = function(v)
         msg(('Arrows to %s off. Press GO to show them again.'):fmt(v.nm or 'the VNM'));
     else
         TRAIL.stopped, TRAIL.pick, TRAIL.zone_ = nil, v, zone();
+        TRAIL.manual = v.key;                                     -- (shown even below 100%)
         if not config.trail then TRAIL.forced = v.key; end
         TRAIL.v = v;                                          -- (the button turns to STOP at once)
         msg(('Arrows on: follow them to %s (%s).'):fmt(v.nm or 'the VNM', v.grid or '?'));
@@ -6327,6 +6331,11 @@ trailSettings = function()
     if rowSwitch('##vengo_trail', 'Trail on the ground to the VNM', config.trail ~= false,
             'Glowing arrows on the ground from your feet to the VNM\'s grid square, in the venture\'s zone (and after GO)') then
         config.trail = not (config.trail ~= false);
+        saveSettings();
+    end
+    if rowSwitch('##vengo_trail_full', 'Only when the VNM is at 100%', config.trail_full ~= false,
+            'The arrows come up on their own only once the zone\'s VNM is at 100% (or announced). Pressing GO in the zone still shows them any time.') then
+        config.trail_full = not (config.trail_full ~= false);
         saveSettings();
     end
     if rowSwitch('##vengo_trail_glow', 'Glow', config.trail_glow ~= false, 'A soft glow around the arrows') then
