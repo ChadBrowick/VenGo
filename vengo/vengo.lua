@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.44';
+addon.version = '4.45';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -5268,6 +5268,37 @@ function TRF.PAD.alertKey(btn, down, lb, a, b)
     if down then P.alertCmd = (btn == a) and 'go' or 'dismiss'; end
     return true;
 end
+-- A small controller drawn in lines (body, grips, d-pad, buttons)
+function TRF.PAD.icon(dl, x, y, h, col)
+    local w = h * 1.6;
+    local c = u32(col);
+    dl:AddCircleFilled({ x + h * 0.42, y + h * 0.62 }, h * 0.38, c, 14);       -- (left grip)
+    dl:AddCircleFilled({ x + w - h * 0.42, y + h * 0.62 }, h * 0.38, c, 14);   -- (right grip)
+    dl:AddRectFilled({ x + h * 0.22, y + h * 0.12 }, { x + w - h * 0.22, y + h * 0.72 }, c, h * 0.3);
+    local k = u32({ 0.05, 0.04, 0.07, 1 });
+    local dx, dy, a = x + h * 0.48, y + h * 0.42, h * 0.17;                      -- (d-pad)
+    dl:AddRectFilled({ dx - a, dy - a * 0.35 }, { dx + a, dy + a * 0.35 }, k);
+    dl:AddRectFilled({ dx - a * 0.35, dy - a }, { dx + a * 0.35, dy + a }, k);
+    local bx, by, r = x + w - h * 0.48, y + h * 0.42, h * 0.075;                 -- (four buttons)
+    dl:AddCircleFilled({ bx, by - h * 0.13 }, r, k, 8); dl:AddCircleFilled({ bx, by + h * 0.13 }, r, k, 8);
+    dl:AddCircleFilled({ bx - h * 0.13, by }, r, k, 8); dl:AddCircleFilled({ bx + h * 0.13, by }, r, k, 8);
+    return w;
+end
+-- Under the alert's buttons: [controller]  LB + A  GO     LB + B  DISMISS (a little smaller than the rest)
+function TRF.PAD.alertHint(goWord)
+    imgui.SetWindowFontScale(0.85);
+    local dl = imgui.GetWindowDrawList();
+    local x, y = imgui.GetCursorScreenPos();
+    local lh = imgui.GetTextLineHeight();
+    local iw = TRF.PAD.icon(dl, x, y + lh * 0.02, lh, C.muted);
+    imgui.Dummy({ iw, lh });
+    local parts = { { 'LB + A', C.lav }, { goWord, C.text }, { 'LB + B', C.lav }, { 'DISMISS', C.text } };
+    for i, p_ in ipairs(parts) do
+        imgui.SameLine(0, (i == 1) and 10 or ((i == 3) and 22 or 8));
+        imgui.TextColored(p_[2], p_[1]);
+    end
+    imgui.SetWindowFontScale(1);
+end
 function TRF.PAD.frame()
     if not TRF.PAD.on then return; end
     if not ui.open[1] or config.minimized then TRF.PAD.set(false); return; end
@@ -6613,7 +6644,7 @@ drawAlert = function()
         warpTip(v);
         imgui.SameLine(0, 10);
         if button('DISMISS##vengo_alert_x', { 140, 38 }, true) then ALERT.dismissed = true; end
-        if TRF.PAD.seen then imgui.TextColored(C.muted, 'Controller:  LB + A  ' .. (isActive(v) and 'cancel' or (TRF.trailShowing(v) and 'stop' or 'GO')) .. '      LB + B  dismiss'); end
+        if TRF.PAD.seen then TRF.PAD.alertHint(isActive(v) and 'CANCEL' or (TRF.trailShowing(v) and 'STOP' or 'GO')); end
     end
     imgui.End();
     if pushed then imgui.PopFont(); end
