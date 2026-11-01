@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.41';
+addon.version = '4.42';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1406,6 +1406,8 @@ local WARP_OVERRIDES = {
              hp = { 'Aht Urhgan Whitegate' } },                       --   Whitegate Home Point #1
     [79] = { name = 'Nashmau',                                        -- Caedarva Mire
              hp = { 'Nashmau' } },                                    --   Nashmau Home Point
+    [118] = { name = 'Bibiki Bay', nm = 'puffer pugil',               -- Buburimu Peninsula (only for Puffer Pugil)
+              sg = { 'Bibiki Bay' } },                                --   Bibiki Bay Survival Guide
 };
 
 WARPS = nil;            -- { hp = { dest = {...}, npc = {...} }, sg = ..., uc = ... }
@@ -1506,6 +1508,7 @@ warpOptions = function(v)
     local out = { hp = {}, sg = {}, uc = {} };
     if WARPS == nil or v == nil then return out; end
     local ov = WARP_OVERRIDES[v.zone];
+    if ov and ov.nm and not tostring(v.nm or ''):lower():find(ov.nm, 1, true) then ov = nil; end   -- (an override for one VNM)
     if ov then
         for _, sys in ipairs({ 'hp', 'sg' }) do
             for _, alias in ipairs(ov[sys] or {}) do
@@ -1569,9 +1572,12 @@ warpTo = function(v)
         return;
     end
     local ov = WARP_OVERRIDES[v.zone];
+    if ov and ov.nm and not tostring(v.nm or ''):lower():find(ov.nm, 1, true) then ov = nil; end
     local ovZone = nil;
     if ov then
-        for _, d in ipairs(WARPS.hp.dest) do if d.alias == (ov.hp or {})[1] then ovZone = d.zone; end end
+        for _, sys in ipairs({ 'hp', 'sg' }) do
+            for _, d in ipairs(WARPS[sys].dest) do if d.alias == (ov[sys] or {})[1] then ovZone = d.zone; end end
+        end
     end
     if ov and ovZone and zone() == ovZone then
         msg(('You\'re in %s. Head into %s; %s is at %s.'):fmt(ov.name, v.zone_name, v.nm or 'the VNM', v.grid or '?'));
