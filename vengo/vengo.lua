@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.49';
+addon.version = '4.50';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -78,6 +78,7 @@ local config = {
     lite = false,              -- Lightweight mode: a quick preset for the sliders below
     star_zones = '',           -- starred venture zones
     star_items = '',           -- starred VNM armour pieces (item ids)
+    dl_pins = '',              -- pinned dailies, shown in a small tracker while VenGo is minimized
     star_chat = true,          -- chat warnings for starred VNMs
     star_sound = true,         -- and a sound
     check_updates = true,      -- look for new VenGo versions on GitHub
@@ -172,7 +173,7 @@ local function saveSettings()
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
     for _, k in ipairs({ 'transparent', 'minimized', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
-                           'star_zones', 'star_items', 'star_chat', 'star_sound', 'check_updates' }) do
+                           'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
         f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v)));
     end
@@ -5864,7 +5865,7 @@ end
 -- for kills and one per item you have to bring
 TRF.DL.COL = { new = 'muted', active = 'seal', ['return'] = 'gold', done = 'green' };
 TRF.DL.KIND = { active = 'on', ['return'] = 'done', done = 'own' };
-function TRF.DL.card(dl, id, name, r)
+function TRF.DL.card(dl, id, name, r, pin)
     local D = TRF.DL;
     local lh = imgui.GetTextLineHeight();
     local bars = {};
@@ -5901,6 +5902,15 @@ function TRF.DL.card(dl, id, name, r)
     dl:AddRect({ px, py }, { px + pw, py + ph }, u32({ col[1], col[2], col[3], 0.55 }), ph / 2, C.rall, 1);
     spaced(dl, px + 10, py + 3, tag, u32({ col[1], col[2], col[3], 1 }), 1.5);
     imgui.SetWindowFontScale(1);
+    if pin then                                                   -- (the pin, left of the pill)
+        local on = D.pinned(pin);
+        local qx, qy = px - 18, ty + lh / 2;
+        local qh, qc = TRF.hot('##vengo_dlp' .. id, qx - 11, qy - 11, 22, 22);
+        if qh then dl:AddCircleFilled({ qx, qy }, 11, u32({ 1, 1, 1, 0.07 }), 16); end
+        D.pinIcon(dl, qx, qy, 14, on and NEON2 or (qh and C.text or C.muted), on);
+        if qh then imgui.SetTooltip(on and 'Pinned: shown on screen while VenGo is minimized. Click to unpin.' or 'Pin: keep this on screen while VenGo is minimized'); end
+        if qc then D.togglePin(pin); end
+    end
 
     -- the task, with the NM or item as a link
     local tx, tyy = x + 30, ty + lh + 6;
@@ -5944,6 +5954,137 @@ function TRF.DL.card(dl, id, name, r)
     imgui.Dummy({ w, h + 6 });
 end
 
+-- Pins: a pinned daily stays on screen in a small tracker while VenGo is minimized or closed
+-- (kept in the settings as "g:Murdox,s:Defeat mobs")
+function TRF.DL.pinned(key) return TRF.ST.set('dl_pins')[key] or false; end
+function TRF.DL.togglePin(key)
+    local s = {};
+    for k in pairs(TRF.ST.set('dl_pins')) do s[k] = true; end
+    s[key] = (not s[key]) or nil;
+    TRF.ST.save('dl_pins', s);
+end
+-- A push-pin, leaning right: round head, collar, needle. Filled when on.
+function TRF.DL.pinIcon(dl, cx, cy, sz, col, on)
+    local c = u32({ col[1], col[2], col[3], on and 1 or 0.75 });
+    local hx, hy = cx + sz * 0.18, cy - sz * 0.18;
+    dl:AddLine({ hx - sz * 0.05, hy + sz * 0.05 }, { cx - sz * 0.42, cy + sz * 0.42 }, c, math.max(1.2, sz * 0.11));   -- (needle)
+    dl:AddLine({ hx - sz * 0.34, hy - sz * 0.02 }, { hx + sz * 0.02, hy + sz * 0.34 }, c, math.max(1.5, sz * 0.16));   -- (collar)
+    if on then dl:AddCircleFilled({ hx + sz * 0.08, hy - sz * 0.08 }, sz * 0.26, c, 16);
+    else dl:AddCircle({ hx + sz * 0.08, hy - sz * 0.08 }, sz * 0.24, c, 16, math.max(1.2, sz * 0.1)); end
+end
+-- The rows the tracker shows, in tab order
+function TRF.DL.pinnedRows()
+    local D = TRF.DL;
+    local rows = {};
+    for _, npc in ipairs(D.ORDER) do
+        if D.pinned('g:' .. npc) then local r = D.describe(npc); r.name, r.key = npc, 'g:' .. npc; rows[#rows + 1] = r; end
+    end
+    for _, k in ipairs(D.SEA) do
+        if D.pinned('s:' .. k) then local r = D.describeSea(k); r.name, r.key = r.title, 's:' .. k; rows[#rows + 1] = r; end
+    end
+    return rows;
+end
+-- The tracker: only when the full window isn't showing and something is pinned
+function TRF.DL.tracker()
+    local D = TRF.DL;
+    if ui.open[1] and not config.minimized then return; end
+    if (config.dl_pins or '') == '' then return; end
+    if D.status() == nil then return; end
+    local rows = D.pinnedRows();
+    if #rows == 0 then return; end
+    local needInv = false;
+    for _, r in ipairs(rows) do if r.items and r.state == 'active' then needInv = true; end end
+    if needInv then D.scanInv(); end
+
+    local nc, nv = pushTheme();
+    local pushed = pushFont(fonts.panel, 15);
+    local lh = imgui.GetTextLineHeight();
+    local W, P = 330, 12;
+    local heights, H = {}, P + lh + 10;
+    for i, r in ipairs(rows) do
+        local nb = 0;
+        if r.state == 'active' then nb = (r.total and 1 or 0) + (r.items and #r.items or 0); end
+        heights[i] = lh + 3 + lh + nb * (lh + 3) + 10;
+        H = H + heights[i];
+    end
+    H = H + P - 6;
+    imgui.SetNextWindowPos({ 60, 300 }, ImGuiCond_FirstUseEver);
+    imgui.SetNextWindowSize({ W, H }, ImGuiCond_Always);
+    local flags = bit.bor(ImGuiWindowFlags_NoTitleBar, ImGuiWindowFlags_NoResize, ImGuiWindowFlags_NoCollapse,
+        ImGuiWindowFlags_NoBackground, ImGuiWindowFlags_NoScrollbar, ImGuiWindowFlags_NoScrollWithMouse, ImGuiWindowFlags_NoFocusOnAppearing);
+    if imgui.Begin('VenGo dailies##vengo_dl_track', { true }, flags) then pcall(function ()   -- (an error still ends the window)
+        local dl = imgui.GetWindowDrawList();
+        local wx, wy = imgui.GetWindowPos();
+        local a = config.transparent and 0.62 or 0.92;
+        dl:AddRectFilled({ wx, wy }, { wx + W, wy + H }, u32({ C.pbg[1], C.pbg[2], C.pbg[3], a }), 10);
+        pcall(function ()
+            dl:AddRectFilledMultiColor({ wx + 10, wy }, { wx + W - 10, wy + 2 }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.9 }),
+                u32({ C.mp2[1], C.mp2[2], C.mp2[3], 0.9 }), u32({ C.mp2[1], C.mp2[2], C.mp2[3], 0.9 }), u32({ NEON2[1], NEON2[2], NEON2[3], 0.9 }));
+        end);
+        dl:AddRect({ wx, wy }, { wx + W, wy + H }, u32({ 1, 1, 1, 0.08 }), 10, C.rall, 1);
+        -- header: DAILIES and the time to the reset
+        local x, y = wx + P, wy + P;
+        imgui.SetWindowFontScale(0.85);
+        spaced(dl, x, y + 1, 'DAILIES', u32(C.label), 2);
+        local rt = TRF.dur(D.deadline() - os.time());
+        dl:AddText({ wx + W - P - imgui.CalcTextSize(rt), y + 1 }, u32(C.gold), rt);
+        imgui.SetWindowFontScale(1);
+        y = y + lh + 6;
+        dl:AddLine({ x, y }, { wx + W - P, y }, u32({ 1, 1, 1, 0.06 }), 1);
+        y = y + 6;
+        for i, r in ipairs(rows) do
+            local col = C[D.COL[r.state]] or C.muted;
+            local done = r.state == 'done';
+            dl:AddCircleFilled({ x + 4, y + lh / 2 }, 3.5, u32({ col[1], col[2], col[3], 1 }), 12);
+            dl:AddText({ x + 14, y }, u32(done and C.muted or C.text), r.name);
+            local tag = (r.state == 'active' and r.where and r.where ~= '') and r.where or D.TAG[r.state];
+            local nx = x + 14 + imgui.CalcTextSize(r.name);
+            imgui.SetWindowFontScale(0.85);
+            local maxW = wx + W - P - 26 - (nx + 10);
+            local t_ = tag;
+            while #t_ > 3 and imgui.CalcTextSize(t_) > maxW do t_ = t_:sub(1, -5) .. '...'; end
+            dl:AddText({ nx + 10, y + 2 }, u32((r.state == 'active') and C.lav or col), t_);
+            imgui.SetWindowFontScale(1);
+            -- the pin (click: unpin)
+            local px_, py_ = wx + W - P - 9, y + lh / 2;
+            local ph_, pc_ = TRF.hot('##vengo_dlt_pin' .. i, px_ - 10, py_ - 10, 20, 20);
+            D.pinIcon(dl, px_, py_, 14, ph_ and C.text or NEON2, true);
+            if ph_ then imgui.SetTooltip('Unpin'); end
+            if pc_ then D.togglePin(r.key); end
+            y = y + lh + 3;
+            -- the objective, smaller
+            imgui.SetWindowFontScale(0.88);
+            local task = done and 'Done for today' or (r.task or '');
+            local tmax = W - P * 2 - 14;
+            while #task > 3 and imgui.CalcTextSize(task) > tmax do task = task:sub(1, -5) .. '...'; end
+            dl:AddText({ x + 14, y }, u32(done and C.green or C.muted), task);
+            y = y + lh + 3;
+            if r.state == 'active' then
+                local bw = W - P * 2 - 14;
+                if r.total then TRF.bar(dl, x + 14, y, bw, lh, r.killed or 0, r.total); y = y + lh + 3; end
+                for _, it in ipairs(r.items or {}) do
+                    local have = D.have(it.name);
+                    local nm = it.name;
+                    local lw = 120;
+                    while #nm > 3 and imgui.CalcTextSize(nm) > lw do nm = nm:sub(1, -5) .. '...'; end
+                    dl:AddText({ x + 14, y }, u32(have >= it.count and C.green or C.muted), nm);
+                    TRF.bar(dl, x + 14 + lw + 8, y, bw - lw - 8, lh, have, it.count);
+                    y = y + lh + 3;
+                end
+            end
+            imgui.SetWindowFontScale(1);
+            y = y + 7;
+        end
+        imgui.SetWindowFontScale(1);
+        imgui.SetCursorScreenPos({ wx, wy });
+        imgui.Dummy({ W, H });
+    end); end
+    imgui.End();
+    if pushed then imgui.PopFont(); end
+    imgui.PopStyleVar(nv);
+    imgui.PopStyleColor(nc);
+end
+
 TRF.dlTab = function()
     local D = TRF.DL;
     local S = D.status();
@@ -5966,7 +6107,7 @@ TRF.dlTab = function()
     local n = 0;
     for _, npc in ipairs(D.ORDER) do if S.dailies[npc] and S.dailies[npc].status == 'complete' then n = n + 1; end end
     TRF.header(dl, 'Goblins of Lower Jeuno', { 0.96, 0.76, 0.32 }, ('%d / 5 done'):fmt(n));
-    for i, npc in ipairs(D.ORDER) do D.card(dl, 'g' .. i, npc, D.describe(npc)); end
+    for i, npc in ipairs(D.ORDER) do D.card(dl, 'g' .. i, npc, D.describe(npc), 'g:' .. npc); end
 
     -- Goldilox's dice
     local got = S.goldilox == S.deadline;
@@ -5993,10 +6134,10 @@ TRF.dlTab = function()
     local ns = 0;
     for _, key in ipairs(D.SEA) do if S.sea[key] and S.sea[key].completed then ns = ns + 1; end end
     TRF.header(dl, 'Palalumin (Sea)', { 0.45, 0.62, 1.0 }, ('%d / 3 done'):fmt(ns));
-    for i, key in ipairs(D.SEA) do local r = D.describeSea(key); D.card(dl, 's' .. i, r.title, r); end
+    for i, key in ipairs(D.SEA) do local r = D.describeSea(key); D.card(dl, 's' .. i, r.title, r, 's:' .. key); end
 
     imgui.Spacing();
-    hint('Talk to each goblin in Lower Jeuno (and Palalumin in the Grand Palace of Hu\'Xzoi) to pick up today\'s task; VenGo reads it from chat and follows your kills and the items in your inventory. If a finished Sea quest is missed, talk to Palalumin again. Click a name in violet to look it up on catseyexi.com.');
+    hint('Talk to each goblin in Lower Jeuno (and Palalumin in the Grand Palace of Hu\'Xzoi) to pick up today\'s task; VenGo reads it from chat and follows your kills and the items in your inventory. If a finished Sea quest is missed, talk to Palalumin again. Click a name in violet to look it up on catseyexi.com. Pin a daily to keep it on screen while VenGo is minimized.');
 end
 
 TRF.ptTab = function()
@@ -6027,7 +6168,7 @@ end
 TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
-    'star_zones', 'star_items', 'star_chat', 'star_sound', 'check_updates' };
+    'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' };
 function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
 function TRF.loadPresets()
     TRF.slots = {};
@@ -6915,6 +7056,7 @@ ashita.events.register('d3d_present', 'vengo_present', function ()
     pcall(TRF.UP.tick);
     pcall(TRF.BAG.step);
     drawUI();
+    pcall(TRF.DL.tracker);
     drawAlert();
     trailTick(now);
 end);

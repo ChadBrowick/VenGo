@@ -52,6 +52,10 @@ NPC to pick up the day's task; VenGo reads it from chat and shows its state (not
 the zone, kills, and how many of the wanted items you carry. Click a name in violet to look it up on the catseyexi.com
 database. Everything resets at JP midnight and is kept per character (`dailies_<id>.lua`).
 
+Click the pin on a daily to keep it on screen: while VenGo is minimized (or closed), a small DAILIES tracker shows each
+pinned daily with its objective, zone, kill and item bars, and the time to the reset. Drag it where you like; click its
+pin to unpin. It hides while the full window is open.
+
 ## Points
 
 VenGo asks the CatsEyeXI server for your points the way Trove's Points tab does, and shows each group where it belongs:
