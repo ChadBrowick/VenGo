@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.51';
+addon.version = '4.52';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -60,6 +60,7 @@ local MAX_ENTITY_IDX = 2303;
 local config = {
     transparent = false,       -- see-through window
     minimized = false,         -- shrunk to the little VenGo tag
+    strip = false,             -- shrunk to the venture bar (just the top venture)
     alerts = true,             -- watch chat for VNM announcements
     alert_sound = true,        -- play a sound with the alert
     alert90 = true,            -- a chat heads-up when a venture reaches 90%
@@ -171,7 +172,7 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
+    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
                            'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
@@ -2500,21 +2501,22 @@ local function topButtons(dl, wx, wy, ww)
         config.transparent = not config.transparent;
         saveSettings();
     end
-    -- minimise
+    -- the venture bar: just the top venture, in one row
     if iconButton(dl, '##vengo_min', xMin, by, bs, { C.acc[1], C.acc[2], C.acc[3], 0.22 },
-            'Minimise (click the VenGo tag to open it again)', function (cx, cy, r, col)
+            'Venture bar: just the highest venture, in one row (its open button brings VenGo back)', function (cx, cy, r, col)
                 dl:AddLine({ cx - r, cy + r * 0.6 }, { cx + r, cy + r * 0.6 }, col, 1.8);
             end) then
-        config.minimized = true;
+        config.strip, config.minimized = true, false;
         saveSettings();
     end
-    -- close
+    -- the VenGo orb
     if iconButton(dl, '##vengo_x', xClose, by, bs, { C.hp[1], C.hp[2], C.hp[3], 0.30 },
-            'Close (type /vengo to open it again)', function (cx, cy, r, col)
+            'Shrink to the VenGo orb (click it to open VenGo again; /vengo hides everything)', function (cx, cy, r, col)
                 dl:AddLine({ cx - r, cy - r }, { cx + r, cy + r }, col, 1.6);
                 dl:AddLine({ cx - r, cy + r }, { cx + r, cy - r }, col, 1.6);
             end) then
-        ui.open[1] = false;
+        config.minimized, config.strip = true, false;
+        saveSettings();
     end
 end
 
@@ -2774,6 +2776,58 @@ local function tabVentures(z)
     local showPool = (config.pool == 'all');
     local at = measureCols(list, showPool);
     for _, v in ipairs(list) do ventureRow(v, z, at, showPool); end
+end
+
+-- The venture bar (the _ button): one row, the venture furthest along right now (the one being announced
+-- first), with its star and GO button, and a button at the end to open VenGo again. Drag it by its edges.
+TRF.drawStrip = function()
+    local top = nil;
+    for _, v in ipairs(vdata.exp or {}) do
+        local p = (ALERT and ALERT.v == v) and 1000 or (v.progress or 0);
+        local tp = top and ((ALERT and ALERT.v == top) and 1000 or (top.progress or 0)) or -1;
+        if p > tp or (p == tp and (v.tier or 0) > (top.tier or 0)) then top = v; end
+    end
+    local nc, nv = pushTheme();
+    imgui.PushStyleVar(ImGuiStyleVar_WindowPadding, { 12, 7 });
+    imgui.PushStyleVar(ImGuiStyleVar_ItemSpacing, { 8, 4 });
+    imgui.PushStyleColor(ImGuiCol_WindowBg, { C.pbg[1], C.pbg[2], C.pbg[3], config.transparent and 0.62 or 0.92 });
+    imgui.PushStyleColor(ImGuiCol_Border, { 1, 1, 1, 0.08 });
+    imgui.PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1);
+    imgui.SetNextWindowPos({ 240, 120 }, ImGuiCond_FirstUseEver);
+    local flags = bit.bor(ImGuiWindowFlags_NoTitleBar, ImGuiWindowFlags_NoResize, ImGuiWindowFlags_NoCollapse,
+        ImGuiWindowFlags_AlwaysAutoResize, ImGuiWindowFlags_NoScrollbar, ImGuiWindowFlags_NoScrollWithMouse, ImGuiWindowFlags_NoFocusOnAppearing);
+    local pushed = pushFont(fonts.panel, 16);
+    if imgui.Begin('VenGo bar##vengo_strip', { true }, flags) then pcall(function ()
+        local dl = imgui.GetWindowDrawList();
+        local wx, wy = imgui.GetWindowPos();
+        local ww = imgui.GetWindowSize();
+        pcall(function ()                                         -- (the pink-to-violet line along the top)
+            dl:AddRectFilledMultiColor({ wx + 10, wy }, { wx + ww - 10, wy + 2 }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.9 }),
+                u32({ C.mp2[1], C.mp2[2], C.mp2[3], 0.9 }), u32({ C.mp2[1], C.mp2[2], C.mp2[3], 0.9 }), u32({ NEON2[1], NEON2[2], NEON2[3], 0.9 }));
+        end);
+        if top == nil then
+            imgui.AlignTextToFramePadding();
+            imgui.TextColored(C.muted, 'No ventures yet');
+        else
+            ventureRow(top, zone(), measureCols({ top }, true), true);
+        end
+        imgui.SameLine(0, 14);
+        local bx, by = imgui.GetCursorScreenPos();
+        local bs = imgui.GetFrameHeight();
+        if iconButton(dl, '##vengo_strip_open', bx, by, bs, { C.acc[1], C.acc[2], C.acc[3], 0.22 }, 'Open VenGo', function (cx, cy, r, col)
+                    dl:AddRect({ cx - r * 1.1, cy - r * 0.9 }, { cx + r * 1.1, cy + r * 0.9 }, col, 2, C.rall, 1.6);
+                    dl:AddLine({ cx - r * 1.1, cy - r * 0.35 }, { cx + r * 1.1, cy - r * 0.35 }, col, 1.4);
+                end) then
+            config.strip = false;
+            saveSettings();
+        end
+    end); end
+    imgui.End();
+    if pushed then imgui.PopFont(); end
+    imgui.PopStyleVar(3);
+    imgui.PopStyleColor(2);
+    imgui.PopStyleVar(nv);
+    imgui.PopStyleColor(nc);
 end
 
 -- Rows of text in columns, each as wide as its widest cell. The last column
@@ -5261,7 +5315,7 @@ function TRF.PAD.set(on)
     TRF.PAD.on = on;
     if on then
         ui.open[1] = true;
-        if config.minimized then config.minimized = false; saveSettings(); end
+        if config.minimized or config.strip then config.minimized, config.strip = false, false; saveSettings(); end
         TRF.PAD.focus = true;
         msg('VenGo has the controller: d-pad to move, A to press. Back / Select (or /vengo pad) gives it back.');
     else
@@ -5329,7 +5383,7 @@ function TRF.PAD.alertHint(goWord)
 end
 function TRF.PAD.frame()
     if not TRF.PAD.on then return; end
-    if not ui.open[1] or config.minimized then TRF.PAD.set(false); return; end
+    if not ui.open[1] or config.minimized or config.strip then TRF.PAD.set(false); return; end
     pcall(vana.gamepad.nav, true);
 end
 pcall(function ()
@@ -5996,7 +6050,7 @@ end
 -- The tracker: only when the full window isn't showing and something is pinned
 function TRF.DL.tracker()
     local D = TRF.DL;
-    if ui.open[1] and not config.minimized then return; end
+    if ui.open[1] and not config.minimized and not config.strip then return; end
     if (config.dl_pins or '') == '' then return; end
     if D.status() == nil then return; end
     local rows = D.pinnedRows();
@@ -6972,6 +7026,7 @@ end
 
 local function drawUI()
     if not ui.open[1] then return; end
+    if config.strip then TRF.drawStrip(); return; end
     if config.minimized then drawMini(); return; end
     local nc, nv = pushTheme();
     -- the resize grip in the bottom-right corner, in the panel's violet
@@ -7081,8 +7136,8 @@ ashita.events.register('command', 'vengo_command', function (e)
     local rest = table.concat(args, ' ', 3);
 
     if cmd == '' or cmd == 'show' or cmd == 'ui' then
-        if config.minimized and ui.open[1] then
-            config.minimized = false;
+        if (config.minimized or config.strip) and ui.open[1] then
+            config.minimized, config.strip = false, false;
             saveSettings();
         else
             ui.open[1] = not ui.open[1];

@@ -20,6 +20,9 @@ full ventures list, in YunaUI's style. It never fights.
 - Hover a GO button to see every warp that goes to that zone.
 - The big GO picks the venture at 100% (or the highest %).
 - VenGo never moves your character.
+- The window's top-right buttons: **_** shrinks VenGo to the **venture bar**, one row with the venture furthest along
+  right now (its star, GO, zone, VNM, grid, %, drops) and a button to open VenGo again. **X** shrinks it to the VenGo
+  orb; click the orb to open it. `/vengo` shows or hides everything.
 
 ## The trail
 
