@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.50';
+addon.version = '4.51';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -5907,7 +5907,7 @@ function TRF.DL.card(dl, id, name, r, pin)
         local qx, qy = px - 18, ty + lh / 2;
         local qh, qc = TRF.hot('##vengo_dlp' .. id, qx - 11, qy - 11, 22, 22);
         if qh then dl:AddCircleFilled({ qx, qy }, 11, u32({ 1, 1, 1, 0.07 }), 16); end
-        D.pinIcon(dl, qx, qy, 14, on and NEON2 or (qh and C.text or C.muted), on);
+        D.pinIcon(dl, qx, qy, 19, on and NEON2 or (qh and C.text or C.muted), on);
         if qh then imgui.SetTooltip(on and 'Pinned: shown on screen while VenGo is minimized. Click to unpin.' or 'Pin: keep this on screen while VenGo is minimized'); end
         if qc then D.togglePin(pin); end
     end
@@ -5963,14 +5963,23 @@ function TRF.DL.togglePin(key)
     s[key] = (not s[key]) or nil;
     TRF.ST.save('dl_pins', s);
 end
--- A push-pin, leaning right: round head, collar, needle. Filled when on.
+-- A dagger, point down-left (stuck in, like a pin): pommel, grip, cross-guard, blade. The blade is filled when on.
 function TRF.DL.pinIcon(dl, cx, cy, sz, col, on)
-    local c = u32({ col[1], col[2], col[3], on and 1 or 0.75 });
-    local hx, hy = cx + sz * 0.18, cy - sz * 0.18;
-    dl:AddLine({ hx - sz * 0.05, hy + sz * 0.05 }, { cx - sz * 0.42, cy + sz * 0.42 }, c, math.max(1.2, sz * 0.11));   -- (needle)
-    dl:AddLine({ hx - sz * 0.34, hy - sz * 0.02 }, { hx + sz * 0.02, hy + sz * 0.34 }, c, math.max(1.5, sz * 0.16));   -- (collar)
-    if on then dl:AddCircleFilled({ hx + sz * 0.08, hy - sz * 0.08 }, sz * 0.26, c, 16);
-    else dl:AddCircle({ hx + sz * 0.08, hy - sz * 0.08 }, sz * 0.24, c, 16, math.max(1.2, sz * 0.1)); end
+    local c = u32({ col[1], col[2], col[3], on and 1 or 0.8 });
+    local dx, dy = -0.7071, 0.7071;                               -- (along the dagger, toward the point)
+    local nx, ny = 0.7071, 0.7071;                                -- (across it)
+    local function at(t, n) return { cx + (dx * t + nx * (n or 0)) * sz, cy + (dy * t + ny * (n or 0)) * sz }; end
+    dl:AddCircleFilled(at(-0.47), sz * 0.085, c, 10);                                  -- (pommel)
+    dl:AddLine(at(-0.42), at(-0.2), c, math.max(1.5, sz * 0.13));                       -- (grip)
+    dl:AddLine(at(-0.18, -0.21), at(-0.18, 0.21), c, math.max(1.5, sz * 0.11));         -- (cross-guard)
+    local b1, b2, tip = at(-0.14, -0.085), at(-0.14, 0.085), at(0.52);
+    if on then
+        dl:AddTriangleFilled(b1, b2, tip, c);
+        dl:AddLine(at(-0.12), at(0.36), u32({ 1, 1, 1, 0.45 }), 1);                     -- (a glint down the middle)
+    else
+        local w = math.max(1, sz * 0.07);
+        dl:AddLine(b1, tip, c, w); dl:AddLine(b2, tip, c, w); dl:AddLine(b1, b2, c, w);
+    end
 end
 -- The rows the tracker shows, in tab order
 function TRF.DL.pinnedRows()
@@ -6048,7 +6057,7 @@ function TRF.DL.tracker()
             -- the pin (click: unpin)
             local px_, py_ = wx + W - P - 9, y + lh / 2;
             local ph_, pc_ = TRF.hot('##vengo_dlt_pin' .. i, px_ - 10, py_ - 10, 20, 20);
-            D.pinIcon(dl, px_, py_, 14, ph_ and C.text or NEON2, true);
+            D.pinIcon(dl, px_, py_, 18, ph_ and C.text or NEON2, true);
             if ph_ then imgui.SetTooltip('Unpin'); end
             if pc_ then D.togglePin(r.key); end
             y = y + lh + 3;
