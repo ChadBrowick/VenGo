@@ -66,6 +66,14 @@ Venture points (EXP, Battle) on VENTURES, Summit points on SUMMIT, Daily points 
 (Domain Shards, Dynamis RP, DKP, Gob Scraps, Muiridian Favor and so on) on its own **CATSEYEXI** tab
 (`/vengo points`). They update every minute while one of those tabs is open; REFRESH asks again straight away.
 
+## Voices
+
+Settings > VNM Alerts > **Voice** has a Windows speech voice say the VNM and its zone when it's announced, and again a
+minute before it pops: **Scottish female**, **Australian female**, **British male** or **Japanese female** (in Japanese).
+It uses the voices Windows has, through PowerShell in the background; add one in Windows under Settings > Time & language
+> Speech > Add voices (English (Australia), English (United Kingdom), Japanese), then press FIND VOICES. Windows has no
+Scottish voice, so that one uses the closest British female voice. TEST VOICE tries it.
+
 ## Live data
 
 The server sends the venture board (packet 0x1A3) on its own. VenGo reads it as it
