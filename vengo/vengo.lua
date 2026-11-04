@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.52';
+addon.version = '4.53';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -62,6 +62,8 @@ local config = {
     minimized = false,         -- shrunk to the little VenGo tag
     strip = false,             -- shrunk to the venture bar (just the top venture)
     alerts = true,             -- watch chat for VNM announcements
+    alert_chat = true,         -- VNM alerts and heads-ups as chat lines
+    alert_popup = true,        -- the VNM INCOMING pop-up window
     alert_sound = true,        -- play a sound with the alert
     alert90 = true,            -- a chat heads-up when a venture reaches 90%
     mode = 'ACE',              -- ACE or CW venture zones
@@ -116,6 +118,11 @@ local ui = { open = { true }, last = 'Pick a venture and press GO.', tab = 1 };
 local function msg(text)
     ui.last = text;
     print(chat.header(addon.name):append(chat.message(text)));
+end
+-- A VNM notification: in chat unless chat notifications are off (it still shows in VenGo's status line)
+function TRF.note(text)
+    if config.alert_chat == false then ui.last = text; return; end
+    msg(text);
 end
 
 local function mm() return AshitaCore:GetMemoryManager(); end
@@ -172,7 +179,7 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
+    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
                            'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
@@ -458,7 +465,7 @@ raiseAlert = function(v, line, source)
     ALERT = { v = v, at = now, pop_at = popAt, line = line, warned = false, source = source or 'chat' };
     if left == nil or left <= -600 then setPop(v, popAt, source or 'chat'); end
     local d = dropsOf(v);
-    msg(('VNM ALERT: %s in %s (%s) pops in about %s.%s Press GO in VenGo.'):fmt(v.nm, v.zone_name, v.grid or '?',
+    TRF.note(('VNM ALERT: %s in %s (%s) pops in about %s.%s Press GO in VenGo.'):fmt(v.nm, v.zone_name, v.grid or '?',
         fmtLeft(popAt - now), (d ~= '') and (' Drops: ' .. d .. '.') or ''));
     playAlertSound();
 end
@@ -506,7 +513,7 @@ tickAlert = function()
     if ALERT == nil then return; end
     local av = ALERT.v;
     if (av.progress or 0) < 100 and (av.prog_at or 0) > ALERT.at then
-        msg(('%s is no longer at 100%% (killed or reset). Alert closed.'):fmt(av.nm or 'The VNM'));
+        TRF.note(('%s is no longer at 100%% (killed or reset). Alert closed.'):fmt(av.nm or 'The VNM'));
         ALERT = nil;
         return;
     end
@@ -515,7 +522,7 @@ tickAlert = function()
     local left = ALERT.pop_at - os.time();
     if left <= 60 and not ALERT.warned then
         ALERT.warned = true;
-        msg(('%s pops in about a minute (%s).'):fmt(ALERT.v.nm, ALERT.v.zone_name));
+        TRF.note(('%s pops in about a minute (%s).'):fmt(ALERT.v.nm, ALERT.v.zone_name));
         playAlertSound();
     end
     if left < -900 then ALERT = nil; end
@@ -834,7 +841,7 @@ crossed = function(v, before)
         heads[v.key] = 100;
         if not (ALERT and ALERT.v == v and os.time() - ALERT.at < 900) then raiseAlert(v, '(venture board)', 'board'); end
     elseif now >= 90 and before < 90 and now < 100 and config.alert90 then
-        msg(('%s (%s) is at %d%%.'):fmt(v.nm, v.zone_name, now));
+        TRF.note(('%s (%s) is at %d%%.'):fmt(v.nm, v.zone_name, now));
     end
 end
 
@@ -5219,7 +5226,7 @@ function TRF.ST.why(v)
     return ' (drops ' .. table.concat(n, ', ') .. ((#p > 3) and ', ...' or '') .. ')';
 end
 function TRF.ST.ping(text)
-    if config.star_chat ~= false then msg('[Star] ' .. text); end
+    if config.star_chat ~= false then TRF.note('[Star] ' .. text); end
     if config.star_sound ~= false then
         local was = config.alert_sound;
         config.alert_sound = true;                               -- (its own switch, not the alert one)
@@ -5330,7 +5337,7 @@ function TRF.PAD.alertKey(btn, down, lb, a, b)
     P.seen = true;                                                -- (any button: there's a controller)
     if btn == lb then P.lb = down; return false; end
     if btn ~= a and btn ~= b then return false; end
-    if not P.lb or ALERT == nil or ALERT.dismissed then return false; end
+    if not P.lb or ALERT == nil or ALERT.dismissed or config.alert_popup == false then return false; end
     if down then P.alertCmd = (btn == a) and 'go' or 'dismiss'; end
     return true;
 end
@@ -6228,7 +6235,7 @@ TRF.sliders = function()
 end
 
 -- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
-TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
+TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
     'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' };
@@ -6705,6 +6712,16 @@ local function tabSettings()
         config.alert_sound = not config.alert_sound;
         saveSettings();
     end
+    if rowSwitch('##vengo_alert_chat', 'Chat notifications', config.alert_chat ~= false,
+            'VNM alerts, the minute-to-pop warning, the 90% heads-up and starred-VNM warnings as chat lines. Off: they only show in VenGo.') then
+        config.alert_chat = not (config.alert_chat ~= false);
+        saveSettings();
+    end
+    if rowSwitch('##vengo_alert_pop', 'Pop-up notification', config.alert_popup ~= false,
+            'The VNM INCOMING window with GO and DISMISS. Off: no window; the alert still shows in VenGo (and the orb glows).') then
+        config.alert_popup = not (config.alert_popup ~= false);
+        saveSettings();
+    end
     if button('TEST ALERT##vengo_test', { 240, 0 }) then
         AshitaCore:GetChatManager():QueueCommand(-1, '/vengo testalert');
     end
@@ -6790,7 +6807,7 @@ do
 -- The alert banner: top middle of the screen, over everything, until you
 -- dismiss it or press GO. Shows even when the VenGo window is closed or small.
 drawAlert = function()
-    if ALERT == nil or ALERT.dismissed then return; end
+    if ALERT == nil or ALERT.dismissed or config.alert_popup == false then return; end
     local v = ALERT.v;
     local starred = TRF.ST and TRF.ST.watched(v) or false;
     local gc = starred and C.gold or NEON2;                       -- (the glow: gold for a starred VNM)
