@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.56';
+addon.version = '4.57';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -7129,7 +7129,9 @@ drawAlert = function()
             imgui.TextColored(C.gold, why);
         end
 
-        imgui.TextColored(C.acc, ('%s  (%s)'):fmt(v.zone_name, v.grid or '?'));
+        local porter = tostring(v.notes or ''):match('%f[%a]([NSEW][EW]?)%s+[Pp]orter');   -- (Alzadaal: "SE porter" -> SE)
+        imgui.TextColored(C.acc, ('%s  (%s)%s'):fmt(v.zone_name, v.grid or '?', porter and ('  ' .. porter) or ''));
+        if porter and imgui.IsItemHovered() then imgui.SetTooltip(('Take the %s porter (%s)'):fmt(porter, v.notes)); end
         local d = dropsOf(v);
         if d ~= '' then
             imgui.TextColored(C.muted, 'Drops');
