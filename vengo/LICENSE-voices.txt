@@ -1,0 +1,15 @@
+VenGo's voice clips (the sounds folder)
+=======================================
+
+The spoken alerts in sounds\ were made with free text-to-speech voices, run offline with sherpa-onnx
+(https://github.com/k2-fsa/sherpa-onnx, Apache License 2.0). The clips are the voices' output; no voice model is
+included with VenGo.
+
+sounds\scot_f   Scottish female: the Piper voice "alba" (en_GB-alba-medium), trained on a Scottish English
+                speech corpus from the University of Edinburgh (https://datashare.ed.ac.uk/handle/10283/3270),
+                licensed CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
+
+sounds\gb_m     British male: Kokoro-82M by hexgrad (https://huggingface.co/hexgrad/Kokoro-82M), voice "bm_george",
+                Apache License 2.0.
+
+sounds\ja_f     Japanese female: Kokoro-82M by hexgrad, voice "jf_alpha", Apache License 2.0.

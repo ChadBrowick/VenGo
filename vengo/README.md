@@ -68,11 +68,10 @@ Venture points (EXP, Battle) on VENTURES, Summit points on SUMMIT, Daily points 
 
 ## Voices
 
-Settings > VNM Alerts > **Voice** has a Windows speech voice say the VNM and its zone when it's announced, and again a
-minute before it pops: **Scottish female**, **Australian female**, **British male** or **Japanese female** (in Japanese).
-It uses the voices Windows has, through PowerShell in the background; add one in Windows under Settings > Time & language
-> Speech > Add voices (English (Australia), English (United Kingdom), Japanese), then press FIND VOICES. Windows has no
-Scottish voice, so that one uses the closest British female voice. TEST VOICE tries it.
+Settings > VNM Alerts > **Voice** speaks the alert instead of the chime: **Scottish female**, **British male** or
+**Japanese female**. When a VNM is announced it says "V N M incoming!" and the VNM's name; a minute before it pops,
+its name and "One minute to the pop!" (the Japanese voice says it in Japanese). The voices are recorded clips in the
+`sounds` folder, so there's nothing to install. TEST VOICE tries it. Voice credits: `LICENSE-voices.txt`.
 
 ## Live data
 
@@ -103,6 +102,7 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 - **Thorny** for Uberwarp, which does the warps behind GO
 - **GUST** for the TeX Gyre Adventor font
 - **Dewin** for Goldilox: the DAILIES tab (MIT licence, `LICENSE-goldilox.txt`)
+- **alba** (University of Edinburgh, CC BY 4.0) and **Kokoro** (hexgrad, Apache 2.0) for the voices, made with **sherpa-onnx** (`LICENSE-voices.txt`)
 - **Loxley** for Trove: the VNM Armor, Ultimates, Lumoria and Odious Codex data, and how to ask for points (MIT licence, `LICENSE-trove.txt`)
 
 ## Credits and licence

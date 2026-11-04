@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.54';
+addon.version = '4.55';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -64,8 +64,7 @@ local config = {
     alerts = true,             -- watch chat for VNM announcements
     alert_chat = true,         -- VNM alerts and heads-ups as chat lines
     alert_popup = true,        -- the VNM INCOMING pop-up window
-    alert_voice = 'off',       -- a Windows voice that says the VNM: off | scot_f | au_f | gb_m | ja_f
-    alert_voice_name = '',     -- the Windows voice found for it
+    alert_voice = 'off',       -- a recorded voice that says the VNM: off | scot_f | gb_m | ja_f
     alert_sound = true,        -- play a sound with the alert
     alert90 = true,            -- a chat heads-up when a venture reaches 90%
     mode = 'ACE',              -- ACE or CW venture zones
@@ -181,7 +180,7 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'alert_voice_name', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
+    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
                            'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
@@ -469,8 +468,8 @@ raiseAlert = function(v, line, source)
     local d = dropsOf(v);
     TRF.note(('VNM ALERT: %s in %s (%s) pops in about %s.%s Press GO in VenGo.'):fmt(v.nm, v.zone_name, v.grid or '?',
         fmtLeft(popAt - now), (d ~= '') and (' Drops: ' .. d .. '.') or ''));
-    playAlertSound();
-    pcall(TRF.VO.say, 'incoming', v);
+    local ok_, spoke = pcall(TRF.VO.say, 'incoming', v);          -- (the voice, else the chime)
+    if not (ok_ and spoke) then playAlertSound(); end
 end
 
 local function logAnnouncement(line)
@@ -526,8 +525,8 @@ tickAlert = function()
     if left <= 60 and not ALERT.warned then
         ALERT.warned = true;
         TRF.note(('%s pops in about a minute (%s).'):fmt(ALERT.v.nm, ALERT.v.zone_name));
-        playAlertSound();
-        pcall(TRF.VO.say, 'minute', ALERT.v);
+        local ok_, spoke = pcall(TRF.VO.say, 'minute', ALERT.v);
+        if not (ok_ and spoke) then playAlertSound(); end
     end
     if left < -900 then ALERT = nil; end
 end
@@ -2926,6 +2925,7 @@ local THANKS = {
     { 'Commandobill, Seekey and Phatty', 'the ventures addon: the live venture board and the VNM list (drops, grid squares, notes)' },
     { 'Thorny', 'Uberwarp: the warps behind GO' },
     { 'GUST', 'the TeX Gyre Adventor font' },
+    { 'The alba, Kokoro and sherpa-onnx voices', 'the spoken VNM alerts: the Scottish (alba, University of Edinburgh, CC BY 4.0), British and Japanese (Kokoro by hexgrad, Apache 2.0) voices (LICENSE-voices.txt)' },
     { 'Dewin (Goldilox)', 'the DAILIES tab: the goblin and Palalumin dailies and how to read them from chat (MIT licence, LICENSE-goldilox.txt)' },
     { 'Loxley (Trove)', 'the VNM Armor, Ultimates, Lumoria and Odious Codex data, and how to ask the CatsEyeXI server for currency, points and Lumoria progress (MIT licence, LICENSE-trove.txt)' },
 };
@@ -6225,154 +6225,103 @@ TRF.ptTab = function()
 end
 
 ------------------------------------------------------------------------
--- VOICES: a VNM announced (and a minute before it pops) is spoken by one of Windows' own speech voices, through
--- PowerShell in the background. Windows has to have the voice: Settings > Time & language > Speech > Add voices.
+-- VOICES: recorded clips in the sounds folder (nothing to install). When a VNM is announced the voice says
+-- "V N M incoming!" and its name; a minute before it pops, its name and "One minute to the pop!".
+-- The clips were made with free voices: alba (Scottish English, CC BY 4.0) and Kokoro's George and Alpha
+-- (Apache 2.0); see LICENSE-voices.txt.
 ------------------------------------------------------------------------
-TRF.VO = { voices = nil, pending = nil, wrote = false,
+TRF.VO = { cache = {},
     PRESETS = {
         { 'off',    'OFF' },
-        { 'scot_f', 'SCOTTISH F', lang = 'en-GB', g = 'female', name = 'Scottish female', want = { 'heather', 'fiona', 'isla' },
-          pack = 'English (United Kingdom)', note = 'Windows has no Scottish voice yet; the closest British female voice speaks instead.' },
-        { 'au_f',   'AUSTRALIAN F', lang = 'en-AU', g = 'female', name = 'Australian female', want = { 'catherine', 'natasha' }, pack = 'English (Australia)' },
-        { 'gb_m',   'BRITISH M', lang = 'en-GB', g = 'male', name = 'British male', want = { 'george', 'ryan' }, pack = 'English (United Kingdom)' },
-        { 'ja_f',   'JAPANESE F', lang = 'ja-JP', g = 'female', name = 'Japanese female', want = { 'haruka', 'ayumi', 'nanami' }, pack = 'Japanese' },
+        { 'scot_f', 'SCOTTISH F', name = 'Scottish female' },
+        { 'gb_m',   'BRITISH M',  name = 'British male' },
+        { 'ja_f',   'JAPANESE F', name = 'Japanese female', ja = true },
     },
 };
-TRF.VO.SPEAK = [[
-$f = Join-Path $PSScriptRoot 'vengo_speak.txt'
-$lines = [System.IO.File]::ReadAllLines($f, [System.Text.Encoding]::UTF8)
-$want = $lines[0]
-$text = ($lines | Select-Object -Skip 1) -join ' '
-try {
-    Add-Type -AssemblyName System.Runtime.WindowsRuntime
-    $null = [Windows.Media.SpeechSynthesis.SpeechSynthesizer, Windows.Media.SpeechSynthesis, ContentType = WindowsRuntime]
-    $v = [Windows.Media.SpeechSynthesis.SpeechSynthesizer]::AllVoices | Where-Object { $_.DisplayName -eq $want } | Select-Object -First 1
-    if (-not $v) { throw 'not a Windows voice' }
-    $sy = New-Object Windows.Media.SpeechSynthesis.SpeechSynthesizer
-    $sy.Voice = $v
-    $m = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' })[0]
-    $t = $m.MakeGenericMethod([Windows.Media.SpeechSynthesis.SpeechSynthesisStream]).Invoke($null, @($sy.SynthesizeTextToStreamAsync($text)))
-    $t.Wait()
-    $st = [System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($t.Result)
-    (New-Object System.Media.SoundPlayer($st)).PlaySync()
-} catch {
-    Add-Type -AssemblyName System.Speech
-    $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
-    try { if ($want) { $s.SelectVoice($want) } } catch {}
-    $s.Speak($text)
-}
-]];
-TRF.VO.LIST = [[
-$out = New-Object System.Collections.Generic.List[string]
-try {
-    Add-Type -AssemblyName System.Runtime.WindowsRuntime
-    $null = [Windows.Media.SpeechSynthesis.SpeechSynthesizer, Windows.Media.SpeechSynthesis, ContentType = WindowsRuntime]
-    foreach ($v in [Windows.Media.SpeechSynthesis.SpeechSynthesizer]::AllVoices) { $out.Add("$($v.DisplayName)|$($v.Language)|$($v.Gender)") }
-} catch {}
-try {
-    Add-Type -AssemblyName System.Speech
-    $s = New-Object System.Speech.Synthesis.SpeechSynthesizer
-    foreach ($iv in $s.GetInstalledVoices()) { $i = $iv.VoiceInfo; $out.Add("$($i.Name)|$($i.Culture.Name)|$($i.Gender)") }
-} catch {}
-[System.IO.File]::WriteAllLines((Join-Path $PSScriptRoot 'vengo_voices.txt'), $out, (New-Object System.Text.UTF8Encoding($false)))
-]];
 function TRF.VO.preset(key) for _, p in ipairs(TRF.VO.PRESETS) do if p[1] == key then return p; end end return nil; end
-function TRF.VO.write()                                          -- (the two little PowerShell scripts, once a session)
+function TRF.VO.slug(s) return (tostring(s or ''):lower():gsub('[^%w]', '')); end
+-- A clip's sound data (its format bytes and samples), read once
+function TRF.VO.clip(voice, key)
     local V = TRF.VO;
-    if V.wrote then return true; end
-    for n, body in pairs({ ['vengo_speak.ps1'] = V.SPEAK, ['vengo_voices.ps1'] = V.LIST }) do
-        local f = io.open(addon.path .. n, 'wb');
-        if f == nil then return false; end
-        f:write(body); f:close();
-    end
-    V.wrote = true;
-    return true;
-end
-function TRF.VO.ps(script)
-    return TRF.UP.shell('powershell.exe', ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "%s"'):format(addon.path .. script));
-end
--- Which voices Windows has (asked in the background; read when the list appears)
-function TRF.VO.find()
-    local V = TRF.VO;
-    if not V.write() then return; end
-    os.remove(addon.path .. 'vengo_voices.txt');
-    V.voices, V.pending = nil, os.clock();
-    V.ps('vengo_voices.ps1');
-end
-function TRF.VO.poll()
-    local V = TRF.VO;
-    if not V.pending then return; end
-    if os.clock() - V.pending > 30 then V.pending = nil; V.voices = V.voices or {}; return; end
-    local f = io.open(addon.path .. 'vengo_voices.txt', 'rb');
-    if f == nil then return; end
+    local path = addon.path .. 'sounds\\' .. voice .. '\\' .. key .. '.wav';
+    local c = V.cache[path];
+    if c ~= nil then return c or nil; end
+    local f = io.open(path, 'rb');
+    if f == nil then V.cache[path] = false; return nil; end
     local s = f:read('*a'); f:close();
-    local list = {};
-    for line in s:gsub('^\239\187\191', ''):gmatch('[^\r\n]+') do
-        local n, l, g = line:match('^(.-)|(.-)|(.-)$');
-        if n and n ~= '' then list[#list + 1] = { name = n, lang = l:lower(), g = g:lower() }; end
-    end
-    V.voices, V.pending = list, nil;
-end
--- The installed voice for a preset: its language and gender, a preferred name first
-function TRF.VO.match(p)
-    local V = TRF.VO;
-    if p == nil or p.lang == nil or V.voices == nil then return nil; end
-    local best = nil;
-    for _, v in ipairs(V.voices) do
-        if v.lang == p.lang:lower() and v.g == p.g then
-            local low = v.name:lower();
-            for _, w in ipairs(p.want or {}) do if low:find(w, 1, true) then return v.name; end end
-            best = best or v.name;
+    local fmt, data = nil, nil;
+    local function u32(o) local a, b, c_, d = s:byte(o, o + 3); return a + b * 256 + c_ * 65536 + d * 16777216; end
+    if s:sub(1, 4) == 'RIFF' and s:sub(9, 12) == 'WAVE' then
+        local o = 13;
+        while o + 8 <= #s do
+            local id, n = s:sub(o, o + 3), u32(o + 4);
+            if id == 'fmt ' then fmt = s:sub(o + 8, o + 7 + n); elseif id == 'data' then data = s:sub(o + 8, o + 7 + n); end
+            o = o + 8 + n + (n % 2);
         end
     end
-    return best;
+    c = (fmt and data) and { fmt = fmt, data = data } or false;
+    V.cache[path] = c;
+    return c or nil;
 end
--- Speak: kind 'incoming' (announced) or 'minute' (about to pop)
+-- Join clips (with a short pause between) into one file and play it; true if it played
+function TRF.VO.play(voice, keys, need)
+    local V = TRF.VO;
+    if not V.clip(voice, need) then return false; end              -- (no phrase clip: the voice isn't there)
+    local parts, fmt = {}, nil;
+    for _, k in ipairs(keys) do
+        local c = V.clip(voice, k);                                 -- (a VNM without a clip of its name: just the phrase)
+        if c then
+            fmt = fmt or c.fmt;
+            if #parts > 0 then parts[#parts + 1] = string.rep('\0', 5760); end   -- (0.18 s at 16 kHz, 16-bit)
+            parts[#parts + 1] = c.data;
+        end
+    end
+    if fmt == nil then return false; end
+    local data = table.concat(parts);
+    local function le(n) return string.char(n % 256, math.floor(n / 256) % 256, math.floor(n / 65536) % 256, math.floor(n / 16777216) % 256); end
+    local file = addon.path .. 'vengo_say.wav';
+    local f = io.open(file, 'wb');
+    if f == nil then return false; end
+    f:write('RIFF', le(4 + 8 + #fmt + 8 + #data), 'WAVE', 'fmt ', le(#fmt), fmt, 'data', le(#data), data);
+    f:close();
+    local ok = pcall(function () ashita.misc.play_sound(file); end);
+    if not ok then
+        ok = pcall(function ()
+            local ffi = require('ffi');
+            pcall(ffi.cdef, 'int __stdcall PlaySoundA(const char* pszSound, void* hmod, uint32_t fdwSound);');
+            ffi.load('winmm').PlaySoundA(file, nil, 0x00020001);   -- SND_FILENAME | SND_ASYNC
+        end);
+    end
+    return ok;
+end
+-- Say it: kind 'incoming' (announced) or 'minute' (about to pop). True if the voice spoke (then no chime).
 function TRF.VO.say(kind, v)
     local V = TRF.VO;
     local p = V.preset(config.alert_voice or 'off');
-    if p == nil or p.lang == nil or v == nil then return; end
-    if not V.write() then return; end
-    local nm, zn = v.nm or 'the VNM', v.zone_name or '';
-    local text;
-    if p.lang == 'ja-JP' then
-        text = (kind == 'minute') and ('あと1分で、' .. nm .. 'が出現します。') or ('VNM出現！ ' .. nm .. '、' .. zn .. '。');
-    else
-        text = (kind == 'minute') and (nm .. ' pops in about a minute.') or ('V N M incoming! ' .. nm .. ', in ' .. zn .. '.');
-    end
-    local f = io.open(addon.path .. 'vengo_speak.txt', 'wb');
-    if f == nil then return; end
-    local name = V.match(p) or ((V.voices == nil) and (config.alert_voice_name or '') or '');
-    f:write(name .. '\r\n' .. text .. '\r\n'); f:close();
-    V.ps('vengo_speak.ps1');
+    if p == nil or p[1] == 'off' or v == nil then return false; end
+    local name = V.slug(v.nm);
+    local phrase = (kind == 'minute') and '_minute' or '_incoming';
+    local keys = { phrase, name };                                  -- ("V N M incoming!  Puffer Pugil")
+    if kind == 'minute' and not p.ja then keys = { name, phrase }; end   -- ("Puffer Pugil.  One minute to the pop!")
+    return V.play(p[1], keys, phrase);
 end
 -- Settings > VNM Alerts: the voice
 function TRF.VO.settings()
     local V = TRF.VO;
-    if V.voices == nil and not V.pending then V.find(); end
-    V.poll();
     imgui.AlignTextToFramePadding();
     imgui.TextColored(C.text, 'Voice');
-    tip('Says the VNM and its zone when it\'s announced, and again a minute before it pops');
-    local pk = pillChoice('##vengo_voice', V.PRESETS, config.alert_voice or 'off');
-    if pk then config.alert_voice, config.alert_voice_name = pk, ''; saveSettings(); end
+    tip('Says "V N M incoming!" and the VNM\'s name when it\'s announced, and its name and "One minute to the pop!" a minute before. It plays instead of the alert chime.');
+    local pk = pillChoice('##vengo_voice', V.PRESETS, (V.preset(config.alert_voice or 'off') and config.alert_voice) or 'off');
+    if pk then config.alert_voice = pk; saveSettings(); end
     local p = V.preset(config.alert_voice or 'off');
-    if p and p.lang then
-        local got = V.match(p);
-        if V.pending then hint('Looking for the voices Windows has...');
-        elseif got then
-            if config.alert_voice_name ~= got then config.alert_voice_name = got; saveSettings(); end
-            imgui.TextColored(C.green, 'Speaks with: ' .. got);
-            if p.note then hint(p.note); end
+    if p and p[1] ~= 'off' then
+        if V.clip(p[1], '_incoming') then
+            if button('TEST VOICE##vengo_vtest', { 0, 0 }, false, true) then V.say('incoming', { nm = 'Puffer Pugil' }); end
+            imgui.SameLine(0, 10);
+            imgui.TextColored(C.muted, p.ja and 'Speaks Japanese, then the VNM\'s name' or 'Recorded voice: nothing to install');
         else
-            imgui.TextColored(C.gold, ('No %s voice in Windows yet.'):fmt(p.name:lower()));
-            hint(('Add it in Windows: Settings > Time & language > Speech > Add voices > %s, then press FIND VOICES. Until then Windows\' default voice speaks.'):fmt(p.pack));
+            imgui.TextColored(C.gold, 'The voice clips are missing: the "sounds" folder should be in the vengo folder.');
         end
-        if button('TEST VOICE##vengo_vtest', { 0, 0 }, false, true) then
-            V.say('incoming', { nm = 'Puffer Pugil', zone_name = 'Buburimu Peninsula' });
-        end
-        imgui.SameLine(0, 10);
-        if button('FIND VOICES##vengo_vfind', { 0, 0 }, true, true) then V.find(); end
     end
 end
 
@@ -6391,7 +6340,7 @@ TRF.sliders = function()
 end
 
 -- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
-TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'alert_voice_name', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
+TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
     'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' };
