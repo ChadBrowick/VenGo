@@ -66,6 +66,12 @@ Venture points (EXP, Battle) on VENTURES, Summit points on SUMMIT, Daily points 
 (Domain Shards, Dynamis RP, DKP, Gob Scraps, Muiridian Favor and so on) on its own **CATSEYEXI** tab
 (`/vengo points`). They update every minute while one of those tabs is open; REFRESH asks again straight away.
 
+## Colours and your own background
+
+Settings > Colours has 19 accent colours and 14 backgrounds. **CHOOSE PICTURE** (under them) opens Windows' file picker:
+pick a PNG, JPG or BMP and it's copied into the `images` folder and shown behind the window, filling it without
+stretching. **Picture strength** sets how much of it shows through the background colour; REMOVE takes it away.
+
 ## Voices
 
 Settings > VNM Alerts > **Voice** speaks the alert instead of the chime: **Scottish female**, **British male** or

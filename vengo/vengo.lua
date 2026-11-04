@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.55';
+addon.version = '4.56';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -95,6 +95,8 @@ local config = {
     trail_speed = 5,           -- how fast they crawl (yalms a second)
     glow_q = 2,                -- glow passes (1 lighter, 2 fuller)
     bg = 'violet',             -- the window's background
+    bg_img = '',               -- your own picture behind the window (a file in images\)
+    bg_img_alpha = 0.45,       -- how much of it shows
     trail_size = 'medium',     -- small | medium | large
 };
 
@@ -180,7 +182,7 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
+    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'bg_img', 'bg_img_alpha', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
                            'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
@@ -1693,6 +1695,18 @@ C.accents = {
     { 'gold',    'Gold',          { 0.98, 0.78, 0.30 }, { 0.95, 0.52, 0.20 }, { 0.98, 0.88, 0.66 } },
     { 'crimson', 'Crimson',       { 1.00, 0.30, 0.36 }, { 0.72, 0.22, 0.50 }, { 0.98, 0.72, 0.76 } },
     { 'ice',     'Ice',           { 0.80, 0.90, 1.00 }, { 0.50, 0.62, 0.85 }, { 0.82, 0.86, 0.94 } },
+    { 'sakura',  'Sakura',        { 1.00, 0.66, 0.80 }, { 0.95, 0.80, 0.90 }, { 1.00, 0.86, 0.92 } },
+    { 'mint',    'Mint',          { 0.45, 1.00, 0.80 }, { 0.70, 0.95, 0.60 }, { 0.76, 0.98, 0.88 } },
+    { 'teal',    'Teal',          { 0.20, 0.85, 0.80 }, { 0.20, 0.55, 0.90 }, { 0.66, 0.90, 0.90 } },
+    { 'royal',   'Royal',         { 0.45, 0.50, 1.00 }, { 0.75, 0.40, 1.00 }, { 0.74, 0.76, 1.00 } },
+    { 'cyber',   'Cyber',         { 0.15, 0.95, 1.00 }, { 1.00, 0.25, 0.85 }, { 0.70, 0.92, 1.00 } },
+    { 'aurora',  'Aurora',        { 0.35, 1.00, 0.55 }, { 0.60, 0.35, 1.00 }, { 0.72, 0.96, 0.82 } },
+    { 'ember',   'Ember',         { 1.00, 0.42, 0.18 }, { 0.95, 0.75, 0.20 }, { 1.00, 0.78, 0.62 } },
+    { 'amber',   'Amber',         { 1.00, 0.70, 0.10 }, { 0.90, 0.40, 0.10 }, { 1.00, 0.86, 0.56 } },
+    { 'lime',    'Lime',          { 0.70, 1.00, 0.20 }, { 0.30, 0.85, 0.40 }, { 0.86, 1.00, 0.66 } },
+    { 'lilac',   'Lilac',         { 0.80, 0.62, 1.00 }, { 0.55, 0.62, 1.00 }, { 0.86, 0.80, 1.00 } },
+    { 'blood',   'Blood moon',    { 0.85, 0.10, 0.20 }, { 0.45, 0.05, 0.20 }, { 0.90, 0.60, 0.64 } },
+    { 'mono',    'Silver',        { 0.92, 0.92, 0.95 }, { 0.60, 0.62, 0.68 }, { 0.86, 0.86, 0.90 } },
 };
 C.bgs = {
     { 'violet',   'Violet black', { 0.068, 0.066, 0.088 }, { 0.165, 0.158, 0.205 }, { 0.090, 0.084, 0.115 }, { 0.060, 0.056, 0.080 } },
@@ -1701,6 +1715,14 @@ C.bgs = {
     { 'charcoal', 'Charcoal',     { 0.105, 0.105, 0.115 }, { 0.210, 0.210, 0.230 }, { 0.130, 0.130, 0.142 }, { 0.080, 0.080, 0.090 } },
     { 'plum',     'Plum',         { 0.090, 0.050, 0.085 }, { 0.215, 0.140, 0.205 }, { 0.120, 0.070, 0.112 }, { 0.070, 0.038, 0.066 } },
     { 'forest',   'Forest',       { 0.045, 0.075, 0.060 }, { 0.130, 0.190, 0.160 }, { 0.065, 0.100, 0.082 }, { 0.035, 0.058, 0.046 } },
+    { 'midnight', 'Midnight',     { 0.030, 0.035, 0.075 }, { 0.110, 0.120, 0.230 }, { 0.045, 0.052, 0.105 }, { 0.022, 0.026, 0.060 } },
+    { 'wine',     'Wine',         { 0.085, 0.030, 0.045 }, { 0.220, 0.100, 0.130 }, { 0.115, 0.045, 0.062 }, { 0.062, 0.020, 0.032 } },
+    { 'slate',    'Slate',        { 0.075, 0.090, 0.105 }, { 0.170, 0.200, 0.230 }, { 0.095, 0.112, 0.130 }, { 0.055, 0.066, 0.078 } },
+    { 'ocean',    'Deep sea',     { 0.025, 0.070, 0.085 }, { 0.090, 0.190, 0.220 }, { 0.035, 0.095, 0.115 }, { 0.018, 0.050, 0.062 } },
+    { 'cocoa',    'Cocoa',        { 0.085, 0.060, 0.045 }, { 0.210, 0.160, 0.125 }, { 0.112, 0.080, 0.060 }, { 0.060, 0.042, 0.030 } },
+    { 'dusk',     'Dusk',         { 0.075, 0.055, 0.100 }, { 0.200, 0.150, 0.250 }, { 0.100, 0.072, 0.132 }, { 0.055, 0.040, 0.075 } },
+    { 'steel',    'Steel',        { 0.105, 0.115, 0.130 }, { 0.230, 0.250, 0.280 }, { 0.135, 0.148, 0.165 }, { 0.080, 0.088, 0.100 } },
+    { 'void',     'Void',         { 0.010, 0.010, 0.014 }, { 0.090, 0.090, 0.110 }, { 0.022, 0.022, 0.030 }, { 0.006, 0.006, 0.010 } },
 };
 function C.find(list, key) for _, e in ipairs(list) do if e[1] == key then return e; end end return list[1]; end
 function C.apply()
@@ -2308,6 +2330,7 @@ local function imageTex(name)
     end);
     return IMAGES[name] or nil;
 end
+TRF.imageTex = imageTex;
 
 -- The panel, ChadcoreMenu style: a dark violet-grey card with small rounded
 -- corners, a thin lavender edge, and a pink-to-violet line across the top
@@ -2316,6 +2339,7 @@ local function frame(dl, x, y, w, h)
     x, y, w, h = x + 4, y + 4, w - 8, h - 8;
     local clear = config.transparent;
     dl:AddRectFilled({ x, y }, { x + w, y + h }, u32({ C.panel[1], C.panel[2], C.panel[3], clear and 0.45 or 0.97 }), r);
+    if TRF.BGI then pcall(TRF.BGI.draw, dl, x, y, w, h, r); end      -- (your own picture, if you chose one)
     dl:AddRect({ x, y }, { x + w, y + h }, u32({ 0.55, 0.46, 0.85, clear and 0.30 or 0.45 }), r, C.rall, 1);
     pcall(function ()
         dl:AddRectFilledMultiColor({ x + 14, y + 8 }, { x + w - 14, y + 10 },
@@ -6325,6 +6349,130 @@ function TRF.VO.settings()
     end
 end
 
+------------------------------------------------------------------------
+-- YOUR OWN BACKGROUND: a picture you choose (Windows' file picker, through PowerShell) is copied into the
+-- images folder and drawn behind the panel, filling it without stretching, under a tint of the background colour.
+------------------------------------------------------------------------
+TRF.BGI = { pending = nil, dims = {} };
+TRF.BGI.PICK = [[
+Add-Type -AssemblyName System.Windows.Forms
+$out = Join-Path $PSScriptRoot 'vengo_pick.txt'
+$d = New-Object System.Windows.Forms.OpenFileDialog
+$d.Title = 'VenGo: choose a background picture'
+$d.Filter = 'Pictures (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp'
+$owner = New-Object System.Windows.Forms.Form
+$owner.TopMost = $true
+$name = ''
+if ($d.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {
+    $ext = [System.IO.Path]::GetExtension($d.FileName).ToLower()
+    $name = 'custom_bg_' + [DateTime]::Now.ToString('yyyyMMddHHmmss') + $ext
+    Copy-Item -LiteralPath $d.FileName -Destination (Join-Path $PSScriptRoot ('images\' + $name))
+}
+[System.IO.File]::WriteAllText($out, $name)
+]];
+-- Start the picker (in the background; VenGo keeps running)
+function TRF.BGI.choose()
+    local B = TRF.BGI;
+    local f = io.open(addon.path .. 'vengo_pick.ps1', 'wb');
+    if f == nil then return; end
+    f:write(B.PICK); f:close();
+    os.remove(addon.path .. 'vengo_pick.txt');
+    B.pending = os.clock();
+    TRF.UP.shell('powershell.exe', ('-NoProfile -NonInteractive -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%s"'):format(addon.path .. 'vengo_pick.ps1'));
+end
+function TRF.BGI.poll()
+    local B = TRF.BGI;
+    if not B.pending or os.clock() - (B.lastPoll or 0) < 0.5 then return; end
+    B.lastPoll = os.clock();
+    if os.clock() - B.pending > 600 then B.pending = nil; return; end
+    local f = io.open(addon.path .. 'vengo_pick.txt', 'rb');
+    if f == nil then return; end
+    local name = (f:read('*a') or ''):gsub('%s+$', ''); f:close();
+    os.remove(addon.path .. 'vengo_pick.txt');
+    B.pending = nil;
+    if name ~= '' and name:match('^custom_bg_[%w_]+%.%w+$') then
+        local old = config.bg_img or '';
+        if old ~= '' and old ~= name then os.remove(addon.path .. 'images\\' .. old); end
+        config.bg_img = name;
+        saveSettings();
+    end
+end
+-- A picture's width and height, read from its header (PNG, JPEG, BMP)
+function TRF.BGI.size(name)
+    local B = TRF.BGI;
+    if B.dims[name] ~= nil then return B.dims[name] or nil; end
+    B.dims[name] = false;
+    local f = io.open(addon.path .. 'images\\' .. name, 'rb');
+    if f == nil then return nil; end
+    local s = f:read(65536) or ''; f:close();
+    local function be16(o) local a, b = s:byte(o, o + 1); return (a or 0) * 256 + (b or 0); end
+    local function be32(o) return be16(o) * 65536 + be16(o + 2); end
+    local function le32(o) local a, b, c, d = s:byte(o, o + 3); return (a or 0) + (b or 0) * 256 + (c or 0) * 65536 + (d or 0) * 16777216; end
+    local w, h = nil, nil;
+    if s:sub(1, 8) == '\137PNG\r\n\26\n' then w, h = be32(17), be32(21);
+    elseif s:sub(1, 2) == 'BM' then w, h = le32(19), math.abs(le32(23) >= 2147483648 and (le32(23) - 4294967296) or le32(23));
+    elseif s:sub(1, 2) == '\255\216' then
+        local o = 3;
+        while o < #s - 9 do
+            if s:byte(o) ~= 255 then o = o + 1;
+            else
+                local m = s:byte(o + 1);
+                if m >= 192 and m <= 207 and m ~= 196 and m ~= 200 and m ~= 204 then h, w = be16(o + 5), be16(o + 7); break; end
+                o = o + 2 + be16(o + 2);
+            end
+        end
+    end
+    if w and h and w > 0 and h > 0 then B.dims[name] = { w, h }; end
+    return B.dims[name] or nil;
+end
+-- Behind the panel: the picture, cropped to fill it, then the background colour over it (strength: how much shows)
+function TRF.BGI.draw(dl, x, y, w, h, r)
+    local name = config.bg_img or '';
+    if name == '' then return; end
+    local tex = TRF.imageTex and TRF.imageTex(name);
+    if tex == nil then return; end
+    local d = TRF.BGI.size(name) or { w, h };
+    local u0, v0, u1, v1 = 0, 0, 1, 1;
+    local ia, pa = d[1] / d[2], w / h;
+    if ia > pa then local k = pa / ia; u0, u1 = (1 - k) / 2, (1 + k) / 2;      -- (wider: trim the sides)
+    else local k = ia / pa; v0, v1 = (1 - k) / 2, (1 + k) / 2; end            -- (taller: trim top and bottom)
+    local st = math.max(0.05, math.min(1, tonumber(config.bg_img_alpha) or 0.45));
+    local a = config.transparent and st * 0.6 or st;
+    local ok = pcall(dl.AddImageRounded, dl, tex.ptr, { x, y }, { x + w, y + h }, { u0, v0 }, { u1, v1 }, u32({ 1, 1, 1, a }), r);
+    if not ok then pcall(dl.AddImage, dl, tex.ptr, { x, y }, { x + w, y + h }, { u0, v0 }, { u1, v1 }, u32({ 1, 1, 1, a })); end
+end
+-- Settings > Colours: the picture
+function TRF.BGI.settings()
+    local B = TRF.BGI;
+    B.poll();
+    local x0 = imgui.GetCursorPosX();
+    imgui.AlignTextToFramePadding();
+    imgui.TextColored(C.text, 'Your picture');
+    tip('A picture of your own behind the window (PNG, JPG or BMP)');
+    imgui.SameLine(x0 + 130);
+    if B.pending then
+        imgui.TextColored(C.muted, 'Choose a picture in the window that opened...');
+        imgui.SameLine(0, 10);
+        if button('CANCEL##vengo_bgi_c', { 0, 0 }, true, true) then B.pending = nil; end
+    else
+        if button('CHOOSE PICTURE##vengo_bgi', { 0, 0 }, false, true) then B.choose(); end
+        if (config.bg_img or '') ~= '' then
+            imgui.SameLine(0, 10);
+            if button('REMOVE##vengo_bgi_x', { 0, 0 }, true, true) then
+                os.remove(addon.path .. 'images\\' .. config.bg_img);
+                config.bg_img = '';
+                saveSettings();
+            end
+        end
+    end
+    if (config.bg_img or '') ~= '' then
+        if TRF.imageTex(config.bg_img) == nil then
+            imgui.TextColored(C.gold, 'That picture couldn\'t be loaded. Try a smaller PNG or JPG (4096 pixels wide or less).');
+        end
+        TRF.slider('##vengo_bgi_a', 'Picture strength', 'bg_img_alpha', 0.05, 1.0, '%.2f', 'How much of the picture shows through the background colour (lower keeps text easier to read)');
+    end
+end
+
 TRF.sliders = function()
     section('Arrows');
     TRF.slider('##vengo_s_scale', 'Size', 'trail_scale', 0.4, 2.5, '%.2fx', 'How big each arrow is (Small 0.70, Medium 1.00, Large 1.40)');
@@ -6341,7 +6489,7 @@ end
 
 -- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
 TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
-    'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'lite',
+    'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'bg_img', 'bg_img_alpha', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
     'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' };
 function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
@@ -6768,8 +6916,11 @@ local function tabSettings()
     local function swatches(id, list, cur, draw)
         local dl = imgui.GetWindowDrawList();
         local picked = nil;
-        imgui.SameLine(ROW_W - #list * 34 + 6);
+        local fit = math.max(4, math.floor((ROW_W - 130) / 34));    -- (how many fit in a row beside the label)
+        local per = math.ceil(#list / math.ceil(#list / fit));      -- (rows of even length)
+        local x0 = imgui.GetCursorPosX();
         for i, e in ipairs(list) do
+            if (i - 1) % per == 0 then imgui.SameLine(x0 + 130); end
             local x, y = imgui.GetCursorScreenPos();
             local h = imgui.GetFrameHeight();
             if imgui.InvisibleButton(id .. e[1], { 30, h }) then picked = e[1]; end
@@ -6777,7 +6928,8 @@ local function tabSettings()
             draw(dl, cx, cy, e);
             if (cur or list[1][1]) == e[1] then dl:AddCircle({ cx, cy }, 12.5, u32({ 1, 1, 1, 0.9 }), 24, 1.5); end
             if imgui.IsItemHovered() then imgui.SetTooltip(e[2]); end
-            if i < #list then imgui.SameLine(0, 4); end
+            if i < #list and i % per ~= 0 then imgui.SameLine(0, 4); end
+            if i < #list and i % per == 0 then imgui.Dummy({ 1, 0 }); end   -- (next row)
         end
         return picked;
     end
@@ -6804,7 +6956,8 @@ local function tabSettings()
         dl:AddCircle({ cx, cy }, 9, u32({ 1, 1, 1, 0.25 }), 24, 1);
     end);
     if bgc then config.bg = bgc; C.apply(); saveSettings(); end
-    hint('Accent: the edges, highlights, switches and bars. Background: the panel itself. See-through mode still works with every colour.');
+    pcall(TRF.BGI.settings);
+    hint('Accent: the edges, highlights, switches and bars. Background: the panel itself. Your picture sits on the panel; the strength slider sets how much of it shows. See-through mode still works with every colour.');
 
     section('VNM Alerts');
     if rowSwitch('##vengo_alerts', 'Alert when a VNM is announced', config.alerts == true,
