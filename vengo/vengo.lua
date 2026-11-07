@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.57';
+addon.version = '4.58';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -95,6 +95,8 @@ local config = {
     trail_speed = 5,           -- how fast they crawl (yalms a second)
     glow_q = 2,                -- glow passes (1 lighter, 2 fuller)
     bg = 'violet',             -- the window's background
+    style = 'classic',         -- classic | phantom (red, black and white, slanted)
+    ph_accent = 'Red', ph_slab = 'Black', ph_edge = 'White',   -- Phantom's colours
     bg_img = '',               -- your own picture behind the window (a file in images\)
     bg_img_alpha = 0.45,       -- how much of it shows
     trail_size = 'medium',     -- small | medium | large
@@ -182,7 +184,7 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'bg_img', 'bg_img_alpha', 'lite',
+    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
                            'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
@@ -1736,6 +1738,7 @@ function C.apply()
     set(C.acc, soft); set(C.label, { soft[1] * 0.97, soft[2] * 0.99, soft[3] }); set(C.lav, { math.min(1, soft[1] * 1.03), math.min(1, soft[2] * 1.06), math.min(1, soft[3] * 1.03) });
     local b = C.find(C.bgs, config.bg);
     set(C.pbg, b[3]); set(C.pframe, b[4]); set(C.panel, b[5]); set(C.well, b[6]);
+    if TRF.PH then TRF.PH.apply(); end                               -- (Phantom's colours over these)
 end
 
 local SW, ROW_W, MARGIN = 200, 760, 8;
@@ -1771,15 +1774,192 @@ local function loadFonts()
         or add(win .. 'GOTHIC.TTF', 18) or add(win .. 'segoeui.ttf', 17);
     fonts.title = add(addon.path .. 'fonts\\texgyreadventor-regular.otf', 22) or add(win .. 'bahnschrift.ttf', 22);
     fonts.big   = add(addon.path .. 'fonts\\texgyreadventor-regular.otf', 24) or fonts.title;
+    fonts.ph    = add(addon.path .. 'fonts\\texgyreheroscn-bold.otf', 18);   -- (Phantom: a bold narrow face,
+    fonts.phH   = add(addon.path .. 'fonts\\Inter-Black.otf', 34);           --  a heavy one for titles)
 end
 local function newFont(f)
     local ok, ls = pcall(function () return f.LegacySize; end);
     return ok and ls ~= nil;
 end
 local function pushFont(f, size)
+    if TRF.PH and TRF.PH.on() then                                -- (Phantom: its own faces)
+        if f == fonts.panel and fonts.ph then f, size = fonts.ph, (size or 16) * 1.12;
+        elseif (f == fonts.title or f == fonts.big) and fonts.phH then f = fonts.phH; end
+    end
     if f == nil then return false; end
     if newFont(f) then return (pcall(imgui.PushFont, f, size)); end
     return (pcall(imgui.PushFont, f));
+end
+
+------------------------------------------------------------------------
+-- PHANTOM STYLE (Settings > Colours > Style): red, black and white, slanted, as ChadcoreMenu's Phantom style.
+-- The panel is a black slab edged white on a red one; titles are heavy cut-out letters; the menu is dark strips with
+-- the page you're on as a white slab and a red slash. Its fonts (TeX Gyre Heros Cn Bold, Inter Black) are in fonts\.
+------------------------------------------------------------------------
+TRF.PH = {
+    ACC  = { { 'Red', { 0.92, 0.04, 0.08 }, { 0.72, 0.02, 0.06 }, { 0.95, 0.12, 0.14 } },
+             { 'Crimson', { 0.75, 0.02, 0.18 }, { 0.55, 0.01, 0.12 }, { 0.90, 0.20, 0.32 } },
+             { 'Blue', { 0.10, 0.45, 0.98 }, { 0.05, 0.28, 0.75 }, { 0.35, 0.65, 1.00 } },
+             { 'Gold', { 0.98, 0.72, 0.08 }, { 0.80, 0.50, 0.04 }, { 1.00, 0.80, 0.30 } },
+             { 'Pink', { 1.00, 0.25, 0.60 }, { 0.80, 0.12, 0.45 }, { 1.00, 0.45, 0.72 } },
+             { 'Green', { 0.15, 0.85, 0.40 }, { 0.08, 0.60, 0.28 }, { 0.40, 0.95, 0.60 } },
+             { 'Purple', { 0.62, 0.30, 1.00 }, { 0.45, 0.18, 0.85 }, { 0.74, 0.55, 1.00 } } },
+    SLAB = { { 'Black', { 0.035, 0.030, 0.035 } }, { 'Charcoal', { 0.10, 0.10, 0.11 } }, { 'Navy', { 0.04, 0.06, 0.13 } }, { 'Wine', { 0.12, 0.03, 0.05 } } },
+    EDGE = { { 'White', { 0.97, 0.96, 0.94 } }, { 'Cream', { 0.98, 0.92, 0.80 } }, { 'Silver', { 0.78, 0.80, 0.84 } }, { 'Black', { 0.06, 0.06, 0.06 } } },
+    edge = { 0.97, 0.96, 0.94 }, sel = { 0.04, 0.04, 0.04, 1 }, orig = nil,
+};
+function TRF.PH.on() return config.style == 'phantom'; end
+function TRF.PH.pick(L, v) for _, t in ipairs(L) do if t[1] == v then return t; end end return L[1]; end
+-- The palette: Phantom's over the theme's (text, slab, accent, edge); the theme's back when it's off
+function TRF.PH.apply()
+    local P = TRF.PH;
+    local function set(dst, src) dst[1], dst[2], dst[3] = src[1], src[2], src[3]; end
+    if P.orig == nil then P.orig = { text = { unpack(C.text) }, muted = { unpack(C.muted) } }; end
+    set(C.text, P.orig.text); set(C.muted, P.orig.muted);
+    if not P.on() then return; end
+    local ac, sl, ed = P.pick(P.ACC, config.ph_accent), P.pick(P.SLAB, config.ph_slab), P.pick(P.EDGE, config.ph_edge);
+    set(C.text, { 0.97, 0.96, 0.94 }); set(C.muted, { 0.76, 0.74, 0.72 });
+    set(NEON2, ac[2]); set(C.hp, ac[2]); set(C.mp2, ac[3]); set(NEON, ac[3]);
+    set(C.acc, ac[4]); set(C.lav, ac[4]); set(C.label, ed[2]);
+    local s = sl[2];
+    set(C.pbg, s); set(C.panel, s);
+    set(C.pframe, { s[1] + 0.10, s[2] + 0.10, s[3] + 0.11 }); set(C.well, { s[1] * 0.5 + 0.06, s[2] * 0.5 + 0.055, s[3] * 0.5 + 0.06 });
+    P.edge = { ed[2][1], ed[2][2], ed[2][3] };
+    P.sel = (ed[1] == 'Black') and { 0.97, 0.96, 0.94, 1 } or { 0.04, 0.04, 0.04, 1 };
+end
+-- Drawing pieces: a four-cornered shape (in one piece, else two triangles), its edge, and drawing past the window
+function TRF.PH.q(dl, a, b, c, d, e, f, g, h, col)
+    local ok = TRF.PH.qok ~= false and pcall(dl.AddQuadFilled, dl, { a, b }, { c, d }, { e, f }, { g, h }, col);
+    if ok then TRF.PH.qok = true; return; end
+    TRF.PH.qok = false;
+    dl:AddTriangleFilled({ a, b }, { c, d }, { e, f }, col); dl:AddTriangleFilled({ a, b }, { e, f }, { g, h }, col);
+end
+function TRF.PH.ql(dl, a, b, c, d, e, f, g, h, col, th)
+    dl:AddLine({ a, b }, { c, d }, col, th); dl:AddLine({ c, d }, { e, f }, col, th);
+    dl:AddLine({ e, f }, { g, h }, col, th); dl:AddLine({ g, h }, { a, b }, col, th);
+end
+function TRF.PH.clip(dl) pcall(function () dl:PushClipRect({ -10000, -10000 }, { 20000, 20000 }, false); end); end
+function TRF.PH.unclip(dl) pcall(function () dl:PopClipRect(); end); end
+function TRF.PH.font(f, size)                                    -- (a face at a size: true if it was pushed)
+    if f == nil then return false; end
+    local ok_ = pcall(function () return f.LegacySize; end);
+    if ok_ then return (pcall(imgui.PushFont, f, size)); end
+    return (pcall(imgui.PushFont, f));
+end
+-- The panel: a slanted slab edged in white, a red one behind it sticking out down and to the right
+function TRF.PH.frame(dl, x, y, w, h)
+    local P = TRF.PH;
+    local a = config.transparent and 0.6 or 1;
+    local k, q = math.min(12, w * 0.03), 3;
+    P.clip(dl);
+    P.q(dl, x + 4, y + k + 8, x + w + 12, y + 2, x + w + 10, y + h + 10, x + 8, y + h + k + 12, u32({ C.hp[1], C.hp[2], C.hp[3], a }));
+    P.q(dl, x - q, y + k, x + w + q, y - q, x + w + q * 0.4, y + h + q, x - q * 0.4, y + h + k + q, u32({ C.panel[1], C.panel[2], C.panel[3], config.transparent and 0.55 or 0.98 }));
+    if TRF.BGI then pcall(TRF.BGI.draw, dl, x, y + k, w, h - k, 0); end
+    P.ql(dl, x - q, y + k, x + w + q, y - q, x + w + q * 0.4, y + h + q, x - q * 0.4, y + h + k + q, u32({ P.edge[1], P.edge[2], P.edge[3], a }), 3);
+    P.unclip(dl);
+end
+-- A title as cut-out letters: heavy black ones edged white, the first bigger, one turned white-on-black, on a black
+-- slab with red shards behind. base: where the letters stand. Returns how wide it was.
+function TRF.PH.badge(dl, x, base, t, s)
+    t = tostring(t or ''):upper();
+    if t == '' then return 0; end
+    local seed = 0; for i = 1, #t do seed = (seed * 31 + t:byte(i)) % 9973; end
+    local inv, cnt = nil, 0;
+    for i = 2, #t do if t:sub(i, i):match('%a') then cnt = cnt + 1; if cnt == ((#t >= 6) and 4 or 2) then inv = i; end end end
+    local f = fonts.phH or fonts.title;
+    local SZ, ws, total = {}, {}, 0;
+    for i = 1, #t do
+        local ch = t:sub(i, i);
+        local sz = ((i == 1) and 44 or ({ 31, 34, 36, 32, 35 })[((seed + i * 7) % 5) + 1]) * s;
+        local pushed = TRF.PH.font(f, sz);
+        local w = (ch == ' ') and sz * 0.42 or imgui.CalcTextSize(ch);
+        if pushed then imgui.PopFont(); end
+        SZ[i], ws[i] = sz, w; total = total + w + 1.2 * s;
+    end
+    local top, bot = base - 42 * s, base + 6 * s;
+    local x0, x1 = x - 9 * s, x + total + 9 * s;
+    local red, wht, blk = u32({ C.hp[1], C.hp[2], C.hp[3], 1 }), u32({ TRF.PH.edge[1], TRF.PH.edge[2], TRF.PH.edge[3], 1 }), u32({ 0.03, 0.03, 0.03, 1 });
+    local P = TRF.PH;
+    P.clip(dl);
+    dl:AddTriangleFilled({ x0 - 18 * s, bot - 2 * s }, { x0 + 40 * s, top + 4 * s }, { x1 + 46 * s, top - 12 * s }, red);
+    dl:AddTriangleFilled({ x1 - 30 * s, top + 12 * s }, { x1 + 52 * s, bot + 4 * s }, { x0 + 24 * s, bot + 10 * s }, red);
+    dl:AddTriangleFilled({ x0 - 6 * s, top + 8 * s }, { x0 + 46 * s, top - 14 * s }, { x0 + 24 * s, top + 14 * s }, red);
+    P.q(dl, x0 - 3 * s, top - 3 * s, x1 + 3 * s, top - 7 * s, x1 + 6 * s, bot + 3 * s, x0 - 1 * s, bot + 6 * s, wht);
+    P.q(dl, x0, top, x1, top - 4 * s, x1 + 3 * s, bot, x0 + 2 * s, bot + 3 * s, blk);
+    local cx = x;
+    for i = 1, #t do
+        local ch = t:sub(i, i);
+        if ch ~= ' ' then
+            local pushed = P.font(f, SZ[i]);
+            local lh = imgui.GetTextLineHeight();
+            local ly = base - lh * 0.92 + (((seed + i) % 3) - 1) * 1.2 * s;
+            if i == inv then
+                P.q(dl, cx - 2 * s, ly + lh * 0.16, cx + ws[i] + 2 * s, ly + lh * 0.12, cx + ws[i] + 3 * s, ly + lh * 0.96, cx - 1 * s, ly + lh * 0.98, wht);
+                dl:AddText({ cx, ly }, blk, ch);
+            else
+                local o = 2.4 * s;
+                for _, d in ipairs({ { -o, 0 }, { o, 0 }, { 0, -o }, { 0, o }, { -o, -o }, { o, o }, { -o, o }, { o, -o } }) do dl:AddText({ cx + d[1], ly + d[2] }, wht, ch); end
+                dl:AddText({ cx, ly }, blk, ch);
+            end
+            if pushed then imgui.PopFont(); end
+        end
+        cx = cx + ws[i] + 1.2 * s;
+    end
+    P.unclip(dl);
+    return x1 - x;
+end
+-- The header: the page's name as cut-out letters, "VenGo" and the version beside it
+function TRF.PH.header(dl, x0, y0, name)
+    local w = TRF.PH.badge(dl, x0 + 4, y0 + 44, name, 0.82);
+    local x = x0 + w + 30;
+    local pushed = TRF.PH.font(fonts.phH or fonts.title, 24);
+    local ven = imgui.CalcTextSize('Ven');
+    local y = y0 + 16;
+    dl:AddText({ x, y }, u32(C.text), 'Ven');
+    dl:AddText({ x + ven, y }, u32({ C.hp[1], C.hp[2], C.hp[3], 1 }), 'Go');
+    local gw = imgui.CalcTextSize('Go');
+    local _, th = imgui.CalcTextSize('VenGo');
+    if pushed then imgui.PopFont(); end
+    local vs = 'v' .. tostring(addon.version or '');
+    local _, vh = imgui.CalcTextSize(vs);
+    dl:AddText({ x + ven + gw + 8, y + th - vh - 2 }, u32(C.muted), vs);
+end
+-- One menu entry: a dark slanted strip (staggered a little, like steps); the page you're on is a white slab with a
+-- red slash running past its edge and a pointer bobbing at its left
+function TRF.PH.sideItem(dl, k, x0, y, sw, ih, on, over, label)
+    local P = TRF.PH;
+    local sx = ((k % 3) - 1) * 3;
+    if on then
+        P.clip(dl);
+        local red = u32({ C.hp[1], C.hp[2], C.hp[3], 0.97 });
+        P.q(dl, x0 - 6, y - 2, x0 + sw * 0.6, y - 7, x0 + sw * 0.62, y + ih + 6, x0 - 2, y + ih + 5, red);
+        dl:AddTriangleFilled({ x0 + sw * 0.5, y - 7 }, { x0 + sw + 26, y - 4 }, { x0 + sw * 0.6, y + ih * 0.5 }, red);
+        dl:AddTriangleFilled({ x0 + sw * 0.55, y + ih * 0.35 }, { x0 + sw + 20, y + ih + 7 }, { x0 + sw * 0.5, y + ih + 6 }, red);
+        P.q(dl, x0 + 6, y + 1, x0 + sw - 8, y - 3, x0 + sw - 12, y + ih + 1, x0 + 4, y + ih + 3, u32({ P.edge[1], P.edge[2], P.edge[3], 1 }));
+        local bob = math.sin(os.clock() * 5) * 1.5;
+        dl:AddTriangleFilled({ x0 - 16 + bob, y + 4 }, { x0 + 2 + bob, y + ih / 2 }, { x0 - 16 + bob, y + ih - 4 }, u32({ 0.03, 0.03, 0.03, 1 }));
+        dl:AddTriangleFilled({ x0 - 13 + bob, y + 8 }, { x0 - 2 + bob, y + ih / 2 }, { x0 - 13 + bob, y + ih - 8 }, u32({ P.edge[1], P.edge[2], P.edge[3], 1 }));
+        P.unclip(dl);
+    else
+        local c = over and { 0.24, 0.22, 0.23, 0.98 } or { 0.14, 0.13, 0.14, 0.95 };
+        P.q(dl, x0 + 4 + sx, y + 3, x0 + sw - 6 + sx, y, x0 + sw - 9 + sx, y + ih - 1, x0 + 1 + sx, y + ih + 1, u32(c));
+    end
+    local _, nh = imgui.CalcTextSize(label);
+    dl:AddText({ x0 + 16 + (on and 0 or sx), y + (ih - nh) / 2 }, u32(on and P.sel or (over and { 1, 1, 1, 1 } or C.text)), label:upper());
+end
+-- A section's name: white capitals on a small black slab edged white, a red shard behind, a thin line after
+function TRF.PH.section(dl, x0, y0, text)
+    local P = TRF.PH;
+    local t = text:upper();
+    local w, lh = imgui.CalcTextSize(t);
+    lh = imgui.GetTextLineHeight();
+    local x1, y1 = x0 + w + 28, y0 + lh + 4;
+    P.q(dl, x0 + 2, y0 + 4, x1 + 8, y0 + 1, x1 + 6, y1 + 4, x0 + 5, y1 + 6, u32({ C.hp[1], C.hp[2], C.hp[3], 1 }));
+    P.q(dl, x0 - 2, y0 - 1, x1, y0 - 3, x1 - 2, y1, x0, y1 + 1, u32({ 0.03, 0.03, 0.03, 1 }));
+    P.ql(dl, x0 - 2, y0 - 1, x1, y0 - 3, x1 - 2, y1, x0, y1 + 1, u32({ P.edge[1], P.edge[2], P.edge[3], 1 }), 1.5);
+    dl:AddText({ x0 + 9, y0 + 1 }, u32({ P.edge[1], P.edge[2], P.edge[3], 1 }), t);
+    dl:AddLine({ x1 + 14, y0 + lh / 2 + 2 }, { x0 + ROW_W, y0 + lh / 2 + 2 }, u32({ C.hp[1], C.hp[2], C.hp[3], 0.35 }), 1.5);
+    return lh + 6;
 end
 
 local function pushTheme()
@@ -1851,6 +2031,7 @@ local function section(text)
     local dl = imgui.GetWindowDrawList();
     local x0, y0 = imgui.GetCursorScreenPos();
     local lh = imgui.GetTextLineHeight();
+    if TRF.PH and TRF.PH.on() then imgui.Dummy({ ROW_W, TRF.PH.section(dl, x0 + 2, y0, text) }); return; end
     local tw = spaced(dl, x0, y0, text:upper(), u32(C.label), 2.5);
     dl:AddLine({ x0 + tw + 14, y0 + lh / 2 }, { x0 + ROW_W, y0 + lh / 2 }, u32({ 1, 1, 1, 0.06 }), 1);
     imgui.Dummy({ ROW_W, lh + 2 });
@@ -2337,6 +2518,11 @@ TRF.imageTex = imageTex;
 local function frame(dl, x, y, w, h)
     local r = 10;
     x, y, w, h = x + 4, y + 4, w - 8, h - 8;
+    if TRF.PH.on() then
+        TRF.PH.frame(dl, x, y, w, h);
+        dl:AddLine({ x + SW - 8, y + 70 }, { x + SW - 8, y + h - 16 }, u32({ 1, 1, 1, 0.08 }), 1);
+        return;
+    end
     local clear = config.transparent;
     dl:AddRectFilled({ x, y }, { x + w, y + h }, u32({ C.panel[1], C.panel[2], C.panel[3], clear and 0.45 or 0.97 }), r);
     if TRF.BGI then pcall(TRF.BGI.draw, dl, x, y, w, h, r); end      -- (your own picture, if you chose one)
@@ -2352,6 +2538,7 @@ end
 -- The header: the page's name in small spaced capitals, "VenGo" under it
 local function header(dl, x0, y0)
     local tabName = TABS[ui.tab] or 'VENTURES';
+    if TRF.PH.on() then return TRF.PH.header(dl, x0, y0, tabName); end
     spaced(dl, x0, y0, tabName, u32(C.label), 2.5);
     local lh = imgui.GetTextLineHeight();
     local pushed = pushFont(fonts.title, 22);
@@ -2443,7 +2630,9 @@ local function sidebar(dl, x0, y0, sw)
         end
         local on = (ui.tab == k);
         local over = mx >= x0 and mx < x0 + sw and my >= y and my < y + ih;
-        if on then
+        if TRF.PH.on() then
+            TRF.PH.sideItem(dl, k, x0, y, sw, ih, on, over, (n == 'CATSEYEXI') and 'CatsEyeXI' or n);
+        elseif on then
             pcall(function ()
                 dl:AddRectFilledMultiColor({ x0, y }, { x0 + sw, y + ih },
                     u32({ 0.78, 0.25, 0.52, 0.55 }), u32({ 0.78, 0.25, 0.52, 0 }),
@@ -2457,8 +2646,10 @@ local function sidebar(dl, x0, y0, sw)
         end
         local _, nh = imgui.CalcTextSize(n);
         local label = (n == 'CATSEYEXI') and 'CatsEyeXI' or (n:sub(1, 1) .. n:sub(2):lower());
-        if not on then dl:AddCircleFilled({ x0 + 10, y + ih / 2 + 1 }, 1.6, u32(C.muted), 8); end
-        dl:AddText({ x0 + (on and 14 or 18), y + (ih - nh) / 2 }, u32(on and { 1, 1, 1, 1 } or (over and { 1, 1, 1, 1 } or C.text)), label);
+        if not TRF.PH.on() then
+            if not on then dl:AddCircleFilled({ x0 + 10, y + ih / 2 + 1 }, 1.6, u32(C.muted), 8); end
+            dl:AddText({ x0 + (on and 14 or 18), y + (ih - nh) / 2 }, u32(on and { 1, 1, 1, 1 } or (over and { 1, 1, 1, 1 } or C.text)), label);
+        end
         imgui.SetCursorScreenPos({ x0, y });
         if imgui.InvisibleButton('##vengo_side' .. k, { sw, ih }) then ui.tab = k; end
         y = y + ih + 2;
@@ -2949,6 +3140,7 @@ local THANKS = {
     { 'Commandobill, Seekey and Phatty', 'the ventures addon: the live venture board and the VNM list (drops, grid squares, notes)' },
     { 'Thorny', 'Uberwarp: the warps behind GO' },
     { 'GUST', 'the TeX Gyre Adventor font' },
+    { 'Phantom style', 'the red, black and white slanted look, from ChadcoreMenu; its fonts are Inter Black (Rasmus Andersson, SIL Open Font License, fonts\\OFL-Inter.txt) and TeX Gyre Heros Cn Bold (GUST Font License, fonts\\GUST-texgyreheroscn.txt)' },
     { 'The alba, Kokoro and sherpa-onnx voices', 'the spoken VNM alerts: the Scottish (alba, University of Edinburgh, CC BY 4.0), British and Japanese (Kokoro by hexgrad, Apache 2.0) voices (LICENSE-voices.txt)' },
     { 'Dewin (Goldilox)', 'the DAILIES tab: the goblin and Palalumin dailies and how to read them from chat (MIT licence, LICENSE-goldilox.txt)' },
     { 'Loxley (Trove)', 'the VNM Armor, Ultimates, Lumoria and Odious Codex data, and how to ask the CatsEyeXI server for currency, points and Lumoria progress (MIT licence, LICENSE-trove.txt)' },
@@ -6489,7 +6681,7 @@ end
 
 -- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
 TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
-    'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'bg_img', 'bg_img_alpha', 'lite',
+    'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
     'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' };
 function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
@@ -6940,6 +7132,40 @@ local function tabSettings()
                 { cx + math.cos(b1) * r, cy + math.sin(b1) * r }, u32({ c[1], c[2], c[3], 1 }));
         end
     end
+    -- the style: VenGo's own, or Phantom (red, black and white, slanted)
+    local sx0 = imgui.GetCursorPosX();
+    imgui.AlignTextToFramePadding();
+    imgui.TextColored(C.text, 'Style');
+    tip('Classic: VenGo\'s own look. Phantom: red, black and white, slanted, with cut-out titles (like ChadcoreMenu\'s Phantom style).');
+    imgui.SameLine(sx0 + 130);
+    local stl = pillChoice('##vengo_style', { { 'classic', 'CLASSIC' }, { 'phantom', 'PHANTOM' } }, config.style or 'classic');
+    if stl then config.style = stl; C.apply(); saveSettings(); end
+    if TRF.PH.on() then                                           -- (Phantom's own picks: accent, slab, edge)
+        local P = TRF.PH;
+        local function L(src) local out = {}; for _, e in ipairs(src) do out[#out + 1] = { e[1], e[1], e[2], e[3], e[4] }; end return out; end
+        imgui.AlignTextToFramePadding();
+        imgui.TextColored(C.text, 'Accent');
+        local pa = swatches('##vengo_pha_', L(P.ACC), config.ph_accent or 'Red', function (dl, cx, cy, e)
+            dl:AddCircleFilled({ cx, cy }, 11, u32({ e[3][1], e[3][2], e[3][3], 0.25 }), 24);
+            half(dl, cx, cy, 8, math.pi * 0.75, e[3]);
+            half(dl, cx, cy, 8, math.pi * 1.75, e[4]);
+        end);
+        if pa then config.ph_accent = pa; C.apply(); saveSettings(); end
+        imgui.AlignTextToFramePadding();
+        imgui.TextColored(C.text, 'Slab');
+        local ps = swatches('##vengo_phs_', L(P.SLAB), config.ph_slab or 'Black', function (dl, cx, cy, e)
+            dl:AddCircleFilled({ cx, cy }, 9, u32({ e[3][1], e[3][2], e[3][3], 1 }), 24);
+            dl:AddCircle({ cx, cy }, 9, u32({ 1, 1, 1, 0.35 }), 24, 1);
+        end);
+        if ps then config.ph_slab = ps; C.apply(); saveSettings(); end
+        imgui.AlignTextToFramePadding();
+        imgui.TextColored(C.text, 'Edge');
+        local pe = swatches('##vengo_phe_', L(P.EDGE), config.ph_edge or 'White', function (dl, cx, cy, e)
+            dl:AddCircleFilled({ cx, cy }, 9, u32({ e[3][1], e[3][2], e[3][3], 1 }), 24);
+            dl:AddCircle({ cx, cy }, 9, u32({ 1, 1, 1, 0.35 }), 24, 1);
+        end);
+        if pe then config.ph_edge = pe; C.apply(); saveSettings(); end
+    else
     imgui.AlignTextToFramePadding();
     imgui.TextColored(C.text, 'Accent');
     local ac = swatches('##vengo_th_', C.accents, config.theme, function (dl, cx, cy, e)
@@ -6956,6 +7182,7 @@ local function tabSettings()
         dl:AddCircle({ cx, cy }, 9, u32({ 1, 1, 1, 0.25 }), 24, 1);
     end);
     if bgc then config.bg = bgc; C.apply(); saveSettings(); end
+    end
     pcall(TRF.BGI.settings);
     hint('Accent: the edges, highlights, switches and bars. Background: the panel itself. Your picture sits on the panel; the strength slider sets how much of it shows. See-through mode still works with every colour.');
 

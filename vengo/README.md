@@ -68,6 +68,12 @@ Venture points (EXP, Battle) on VENTURES, Summit points on SUMMIT, Daily points 
 
 ## Colours and your own background
 
+**Style** (Settings > Colours): **Classic** is VenGo's own look; **Phantom** is red, black and white and slanted, like
+ChadcoreMenu's Phantom style: the panel a black slab edged white on a red one, the page's name in cut-out letters, the
+menu as dark strips with the page you're on a white slab and a red slash, and a bold narrow font. Phantom has its own
+colour picks: accent, slab and edge. Its fonts are in `fonts` (Inter Black, SIL Open Font License; TeX Gyre Heros Cn
+Bold, GUST Font License).
+
 Settings > Colours has 19 accent colours and 14 backgrounds. **CHOOSE PICTURE** (under them) opens Windows' file picker:
 pick a PNG, JPG or BMP and it's copied into the `images` folder and shown behind the window, filling it without
 stretching. **Picture strength** sets how much of it shows through the background colour; REMOVE takes it away.
@@ -108,6 +114,7 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 - **Thorny** for Uberwarp, which does the warps behind GO
 - **GUST** for the TeX Gyre Adventor font
 - **Dewin** for Goldilox: the DAILIES tab (MIT licence, `LICENSE-goldilox.txt`)
+- **Inter** (Rasmus Andersson) and **TeX Gyre Heros** (GUST) for the Phantom style's fonts
 - **alba** (University of Edinburgh, CC BY 4.0) and **Kokoro** (hexgrad, Apache 2.0) for the voices, made with **sherpa-onnx** (`LICENSE-voices.txt`)
 - **Loxley** for Trove: the VNM Armor, Ultimates, Lumoria and Odious Codex data, and how to ask for points (MIT licence, `LICENSE-trove.txt`)
 
