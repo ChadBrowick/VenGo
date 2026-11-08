@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.62';
+addon.version = '4.63';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1871,7 +1871,17 @@ function TRF.PH.frame(dl, x, y, w, h)
 end
 -- A title as cut-out letters: heavy black ones edged white, the first bigger, one turned white-on-black, on a black
 -- slab with red shards behind. base: where the letters stand. Returns how wide it was.
-function TRF.PH.badge(dl, x, base, t, s)
+-- A five-pointed star (filled from its middle): cx, cy its centre, r its points, turned by rot
+function TRF.PH.star(dl, cx, cy, r, rot, col)
+    local pts = {};
+    for i = 0, 9 do
+        local a = rot - math.pi / 2 + i * math.pi / 5;
+        local rr = (i % 2 == 0) and r or r * 0.45;
+        pts[#pts + 1] = { cx + math.cos(a) * rr, cy + math.sin(a) * rr };
+    end
+    for i = 1, 10 do dl:AddTriangleFilled({ cx, cy }, pts[i], pts[(i % 10) + 1], col); end
+end
+function TRF.PH.badge(dl, x, base, t, s, acc, star)
     t = tostring(t or ''):upper();
     if t == '' then return 0; end
     local seed = 0; for i = 1, #t do seed = (seed * 31 + t:byte(i)) % 9973; end
@@ -1889,9 +1899,19 @@ function TRF.PH.badge(dl, x, base, t, s)
     end
     local top, bot = base - 42 * s, base + 6 * s;
     local x0, x1 = x - 9 * s, x + total + 9 * s;
-    local red, wht, blk = u32({ C.hp[1], C.hp[2], C.hp[3], 1 }), u32({ TRF.PH.edge[1], TRF.PH.edge[2], TRF.PH.edge[3], 1 }), u32({ 0.03, 0.03, 0.03, 1 });
+    acc = acc or C.hp;
+    local red, wht, blk = u32({ acc[1], acc[2], acc[3], 1 }), u32({ TRF.PH.edge[1], TRF.PH.edge[2], TRF.PH.edge[3], 1 }), u32({ 0.03, 0.03, 0.03, 1 });
     local P = TRF.PH;
     P.clip(dl);
+    if star then                                                  -- (a big star behind it, turning slowly; a dark one inside)
+        local cx, cy, r = (x0 + x1) / 2, (top + bot) / 2, (bot - top) * 1.15;
+        local rot = math.sin(os.clock() * 0.8) * 0.12 - 0.2;
+        P.star(dl, cx, cy, r + 5 * s, rot, u32({ 0.03, 0.03, 0.03, 1 }));
+        P.star(dl, cx, cy, r, rot, red);
+        P.star(dl, cx, cy, r * 0.62, rot, u32({ acc[1] * 0.55, acc[2] * 0.55, acc[3] * 0.55, 1 }));
+        P.star(dl, x0 - 4 * s, top + 2 * s, r * 0.42, -rot, red);        -- (two small ones at the ends)
+        P.star(dl, x1 + 6 * s, bot - 2 * s, r * 0.36, rot * 1.5, red);
+    end
     dl:AddTriangleFilled({ x0 - 18 * s, bot - 2 * s }, { x0 + 40 * s, top + 4 * s }, { x1 + 46 * s, top - 12 * s }, red);
     dl:AddTriangleFilled({ x1 - 30 * s, top + 12 * s }, { x1 + 52 * s, bot + 4 * s }, { x0 + 24 * s, bot + 10 * s }, red);
     dl:AddTriangleFilled({ x0 - 6 * s, top + 8 * s }, { x0 + 46 * s, top - 14 * s }, { x0 + 24 * s, top + 14 * s }, red);
@@ -7388,8 +7408,9 @@ drawAlert = function()
             sx = x0 + 20;
         end
         if ph then                                                -- (Phantom: the title in cut-out letters)
-            local bw = TRF.PH.badge(dl, sx + 4, y0 + 42, starred and 'Starred VNM!' or 'VNM incoming!', 0.78);
-            imgui.Dummy({ bw + (sx - x0) + 10, 52 });
+            local bw = TRF.PH.badge(dl, sx + 4, y0 + (starred and 52 or 42), starred and 'Starred VNM!' or 'VNM incoming!', 0.78,
+                starred and C.gold or nil, starred);              -- (starred: gold, on a star)
+            imgui.Dummy({ bw + (sx - x0) + 10, starred and 66 or 52 });
         else
             local w = spaced(dl, sx, y0, starred and 'STARRED VNM INCOMING' or 'VNM INCOMING',
                 u32({ gc[1], gc[2], gc[3], 0.7 + 0.3 * pulse }), 3);
