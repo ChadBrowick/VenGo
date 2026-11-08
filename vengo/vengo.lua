@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.61';
+addon.version = '4.62';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1964,18 +1964,22 @@ function TRF.PH.button(dl, x, y, w, h, name, lw, lh, sp, quiet, small, hov, act)
     local P = TRF.PH;
     local k = math.min(6, h * 0.18);
     local red = u32({ C.hp[1], C.hp[2], C.hp[3], 1 });
-    P.clip(dl);
-    if not quiet then
+    -- (drawn inside the window's clip: in a scrolling list, a button out of view stays out of view)
+    local light = not quiet and not small;                       -- (the big main button: a white slab)
+    if light then
         if hov or act then P.q(dl, x + 4, y + k + 4, x + w + 7, y + 2, x + w + 4, y + h + 5, x + 2, y + h + 4, red); end
         P.q(dl, x, y + k, x + w, y, x + w - 2, y + h - 1, x + 1, y + h, u32(act and { 0.80, 0.79, 0.77, 1 } or { P.edge[1], P.edge[2], P.edge[3], 1 }));
+    elseif not quiet then                                         -- (a small main button, as on each row: dark, edged in the accent)
+        local c = act and { 0.30, 0.28, 0.29, 1 } or (hov and { 0.24, 0.22, 0.23, 1 } or { 0.15, 0.14, 0.15, 1 });
+        P.q(dl, x, y + k, x + w, y, x + w - 2, y + h - 1, x + 1, y + h, u32(c));
+        P.ql(dl, x, y + k, x + w, y, x + w - 2, y + h - 1, x + 1, y + h, u32({ C.hp[1], C.hp[2], C.hp[3], hov and 1 or 0.75 }), 1.5);
     else
         local c = act and { 0.30, 0.28, 0.29, 1 } or (hov and { 0.22, 0.20, 0.21, 1 } or { 0.13, 0.12, 0.13, 1 });
         P.q(dl, x, y + k, x + w, y, x + w - 2, y + h - 1, x + 1, y + h, u32(c));
-        if hov then dl:AddLine({ x + 6, y + h + 2 }, { x + w - 4, y + h }, red, 2); end
+        if hov then dl:AddLine({ x + 6, y + h - 1 }, { x + w - 4, y + h - 3 }, red, 2); end
     end
-    P.unclip(dl);
     if small then imgui.SetWindowFontScale(0.82); end
-    TRF.spaced(dl, x + (w - lw) / 2, y + (h - lh) / 2 + k * 0.3, name, u32(quiet and C.text or P.sel), sp);
+    TRF.spaced(dl, x + (w - lw) / 2, y + (h - lh) / 2 + k * 0.3, name, u32(light and P.sel or C.text), sp);
     if small then imgui.SetWindowFontScale(1); end
 end
 -- The VNM alert's panel: a black slab edged white on a red (gold for a starred VNM) one that pulses out behind it
