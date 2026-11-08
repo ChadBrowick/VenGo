@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.59';
+addon.version = '4.60';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1246,8 +1246,14 @@ end
 local function siteCheck(alerts)
     if not SITE.pending then return; end
     local data = jsonDecode(readAll(siteTmp()));
-    if data and data.ventures then
+    if data and data.ventures and (data.success == false or data.mock) then
+        -- (the site sent its placeholder, not the board: keep what we have and ask again in 10 minutes)
         SITE.pending = false;
+        SITE.err = 'catseyexi.com sent placeholder data; trying again soon';
+        SITE.retryAt = os.time() + 600;
+        os.remove(siteTmp());
+    elseif data and data.ventures then
+        SITE.pending, SITE.retryAt = false, nil;
         SITE.data, SITE.at, SITE.err = data, os.time(), nil;
         pcall(function ()
             local f = io.open(siteFile(), 'wb');
@@ -1267,7 +1273,9 @@ end
 -- The last download, so the list is filled in right after a reload
 siteLoadCache = function()
     local data = jsonDecode(readAll(siteFile()));
-    if data and data.ventures then
+    if data and data.ventures and (data.success == false or data.mock) then
+        SITE.at = nil;                                               -- (a placeholder was saved: fetch the real board)
+    elseif data and data.ventures then
         SITE.data = data;
         local chunk = loadfile(siteMetaFile());
         local ok, m = false, nil;
@@ -1281,6 +1289,7 @@ end
 local function siteDue()
     if SITE.at == nil then return true; end
     local now = os.time();
+    if SITE.retryAt and now >= SITE.retryAt then return true; end
     if now - SITE.at >= SITE_MAX_AGE then return true; end
     if SITE.resetAt and now >= SITE.resetAt + SITE_AFTER_RESET then return true; end
     return false;
