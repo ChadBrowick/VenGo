@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.60';
+addon.version = '4.61';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1432,6 +1432,8 @@ local WARP_OVERRIDES = {
              hp = { 'Aht Urhgan Whitegate' } },                       --   Whitegate Home Point #1
     [79] = { name = 'Nashmau',                                        -- Caedarva Mire
              hp = { 'Nashmau' } },                                    --   Nashmau Home Point
+    [173] = { name = 'Zeruhn Mines',                                  -- Korroloka Tunnel
+              sg = { 'Zeruhn Mines' } },                              --   Zeruhn Mines Survival Guide
     [91] = { name = "Crawlers' Nest [S]",                             -- Rolanberry Fields [S]
              sg = { "Crawlers' Nest [S]" } },                         --   Crawlers' Nest [S] Survival Guide
     [123] = { name = 'Kazham',                                        -- Yuhtunga Jungle (it has no Home Point)
