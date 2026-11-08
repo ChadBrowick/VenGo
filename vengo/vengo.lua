@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.58';
+addon.version = '4.59';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1947,6 +1947,38 @@ function TRF.PH.sideItem(dl, k, x0, y, sw, ih, on, over, label)
     local _, nh = imgui.CalcTextSize(label);
     dl:AddText({ x0 + 16 + (on and 0 or sx), y + (ih - nh) / 2 }, u32(on and P.sel or (over and { 1, 1, 1, 1 } or C.text)), label:upper());
 end
+-- A button: a slanted slab. The main one white with black letters, a red shard behind it when the mouse is on it;
+-- the quiet ones dark with white letters and a red line under them on the mouse. (Returns nothing: the click is the caller's.)
+function TRF.PH.button(dl, x, y, w, h, name, lw, lh, sp, quiet, small, hov, act)
+    local P = TRF.PH;
+    local k = math.min(6, h * 0.18);
+    local red = u32({ C.hp[1], C.hp[2], C.hp[3], 1 });
+    P.clip(dl);
+    if not quiet then
+        if hov or act then P.q(dl, x + 4, y + k + 4, x + w + 7, y + 2, x + w + 4, y + h + 5, x + 2, y + h + 4, red); end
+        P.q(dl, x, y + k, x + w, y, x + w - 2, y + h - 1, x + 1, y + h, u32(act and { 0.80, 0.79, 0.77, 1 } or { P.edge[1], P.edge[2], P.edge[3], 1 }));
+    else
+        local c = act and { 0.30, 0.28, 0.29, 1 } or (hov and { 0.22, 0.20, 0.21, 1 } or { 0.13, 0.12, 0.13, 1 });
+        P.q(dl, x, y + k, x + w, y, x + w - 2, y + h - 1, x + 1, y + h, u32(c));
+        if hov then dl:AddLine({ x + 6, y + h + 2 }, { x + w - 4, y + h }, red, 2); end
+    end
+    P.unclip(dl);
+    if small then imgui.SetWindowFontScale(0.82); end
+    TRF.spaced(dl, x + (w - lw) / 2, y + (h - lh) / 2 + k * 0.3, name, u32(quiet and C.text or P.sel), sp);
+    if small then imgui.SetWindowFontScale(1); end
+end
+-- The VNM alert's panel: a black slab edged white on a red (gold for a starred VNM) one that pulses out behind it
+function TRF.PH.alertFrame(dl, x, y, w, h, gc, pulse)
+    local P = TRF.PH;
+    local k = math.min(12, w * 0.03);
+    local o = 9 + 5 * pulse;
+    P.clip(dl);
+    P.q(dl, x + 6, y + k + o + 6, x + w + o + 10, y + 4, x + w + o + 8, y + h + o + 4, x + 10, y + h + k + o + 6, u32({ gc[1], gc[2], gc[3], 0.25 * pulse }));
+    P.q(dl, x + 4, y + k + 9, x + w + 12, y + 3, x + w + 10, y + h + 11, x + 8, y + h + k + 13, u32({ gc[1], gc[2], gc[3], 1 }));
+    P.q(dl, x - 3, y + k, x + w + 3, y - 3, x + w + 1, y + h + 3, x - 1, y + h + k + 3, u32({ C.panel[1], C.panel[2], C.panel[3], config.transparent and 0.75 or 0.98 }));
+    P.ql(dl, x - 3, y + k, x + w + 3, y - 3, x + w + 1, y + h + 3, x - 1, y + h + k + 3, u32({ P.edge[1], P.edge[2], P.edge[3], 1 }), 3);
+    P.unclip(dl);
+end
 -- A section's name: white capitals on a small black slab edged white, a red shard behind, a thin line after
 function TRF.PH.section(dl, x0, y0, text)
     local P = TRF.PH;
@@ -1996,6 +2028,7 @@ local function spaced(dl, x, y, str, col, gap)
     end
     return cx - x - gap;
 end
+TRF.spaced = spaced;
 local function spacedW(str, gap)
     local w = 0;
     for i = 1, #str do w = w + imgui.CalcTextSize(str:sub(i, i)) + gap; end
@@ -2061,6 +2094,7 @@ local function button(label, size, quiet, small)
     local clicked = imgui.InvisibleButton(label, { w, h });
     local hov, act = imgui.IsItemHovered(), imgui.IsItemActive();
     local dl = imgui.GetWindowDrawList();
+    if TRF.PH and TRF.PH.on() then return TRF.PH.button(dl, x, y, w, h, name, lw, lh, sp, quiet, small, hov, act) or clicked; end
     local rr = 6;
     local fill = { 0.12, 0.11, 0.155, 1 };
     if hov or act then fill = act and { 0.18, 0.17, 0.23, 1 } or { 0.15, 0.14, 0.19, 1 }; end
@@ -7299,10 +7333,12 @@ drawAlert = function()
     local gc = starred and C.gold or NEON2;                       -- (the glow: gold for a starred VNM)
     local nc, nv = pushTheme();
     local pulse = 0.55 + 0.45 * math.sin(os.clock() * 4);
-    imgui.PushStyleColor(ImGuiCol_WindowBg, { 0.05, 0.04, 0.07, config.transparent and 0.70 or 0.95 });
-    imgui.PushStyleColor(ImGuiCol_Border, { gc[1], gc[2], gc[3], 0.65 + 0.35 * pulse });
-    imgui.PushStyleVar(ImGuiStyleVar_WindowPadding, { 22, 16 });
-    imgui.PushStyleVar(ImGuiStyleVar_WindowBorderSize, 3);
+    local ph = TRF.PH.on();
+    if ph then gc = starred and C.gold or C.hp; end
+    imgui.PushStyleColor(ImGuiCol_WindowBg, { 0.05, 0.04, 0.07, ph and 0 or (config.transparent and 0.70 or 0.95) });
+    imgui.PushStyleColor(ImGuiCol_Border, { gc[1], gc[2], gc[3], ph and 0 or (0.65 + 0.35 * pulse) });
+    imgui.PushStyleVar(ImGuiStyleVar_WindowPadding, ph and { 30, 20 } or { 22, 16 });
+    imgui.PushStyleVar(ImGuiStyleVar_WindowBorderSize, ph and 0 or 3);
     imgui.PushStyleVar(ImGuiStyleVar_WindowRounding, 10);
     nc, nv = nc + 2, nv + 3;
     local ds = imgui.GetIO().DisplaySize;
@@ -7312,8 +7348,13 @@ drawAlert = function()
     local pushed = pushFont(fonts.panel, 16);
     if imgui.Begin('VenGo alert##vengo_alert', { true }, flags) then
         local dl = imgui.GetWindowDrawList();
+        if ph then                                                -- (Phantom: the slanted slab, drawn behind what follows)
+            local wx, wy = imgui.GetWindowPos();
+            local ww, wh = imgui.GetWindowSize();
+            TRF.PH.alertFrame(dl, wx + 6, wy + 6, ww - 12, wh - 12, gc, pulse);
+        end
         -- a bright glow all round the banner, behind it, pulsing
-        pcall(function ()
+        if not ph then pcall(function ()
             local wx, wy = imgui.GetWindowPos();
             local ww, wh = imgui.GetWindowSize();
             local bg = imgui.GetBackgroundDrawList and imgui.GetBackgroundDrawList() or nil;
@@ -7323,7 +7364,7 @@ drawAlert = function()
                 local a = (0.20 - i * 0.02) * (0.55 + 0.45 * pulse) * (starred and 1.3 or 1);
                 bg:AddRect({ wx - g, wy - g }, { wx + ww + g, wy + wh + g }, u32({ gc[1], gc[2], gc[3], math.max(0, a) }), 10 + g, C.rall, 3);
             end
-        end);
+        end); end
         local x0, y0 = imgui.GetCursorScreenPos();
         local lh = imgui.GetTextLineHeight();
         local sx = x0;
@@ -7331,9 +7372,14 @@ drawAlert = function()
             TRF.ST.draw(dl, x0 + 7, y0 + lh / 2, 7, { C.gold[1], C.gold[2], C.gold[3], 0.7 + 0.3 * pulse }, true);
             sx = x0 + 20;
         end
-        local w = spaced(dl, sx, y0, starred and 'STARRED VNM INCOMING' or 'VNM INCOMING',
-            u32({ gc[1], gc[2], gc[3], 0.7 + 0.3 * pulse }), 3);
-        imgui.Dummy({ w + (sx - x0), lh });
+        if ph then                                                -- (Phantom: the title in cut-out letters)
+            local bw = TRF.PH.badge(dl, sx + 4, y0 + 42, starred and 'Starred VNM!' or 'VNM incoming!', 0.78);
+            imgui.Dummy({ bw + (sx - x0) + 10, 52 });
+        else
+            local w = spaced(dl, sx, y0, starred and 'STARRED VNM INCOMING' or 'VNM INCOMING',
+                u32({ gc[1], gc[2], gc[3], 0.7 + 0.3 * pulse }), 3);
+            imgui.Dummy({ w + (sx - x0), lh });
+        end
 
         local tp = pushFont(fonts.big, 26);
         if not tp then imgui.SetWindowFontScale(1.35); end
