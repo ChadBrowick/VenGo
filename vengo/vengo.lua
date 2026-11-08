@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.63';
+addon.version = '4.64';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1939,9 +1939,45 @@ function TRF.PH.badge(dl, x, base, t, s, acc, star)
     P.unclip(dl);
     return x1 - x;
 end
+-- Titles made ahead as pictures (images\ph_*.png): the letters in a white-rimmed black sticker with the Japanese
+-- under them, as ChadcoreMenu's. Name, its width and height, the picture's.
+TRF.PH.IMG = { ['VENTURES'] = { 'ph_ventures', 248, 90, 256, 128 }, ['HELM'] = { 'ph_helm', 145, 85, 256, 128 }, ['FISHING'] = { 'ph_fishing', 190, 87, 256, 128 }, ['DYNAMIS'] = { 'ph_dynamis', 224, 93, 256, 128 }, ['HUNTER'] = { 'ph_hunter', 196, 87, 256, 128 }, ['SUMMIT'] = { 'ph_summit', 193, 91, 256, 128 }, ['DAILIES'] = { 'ph_dailies', 186, 89, 256, 128 }, ['CATSEYEXI'] = { 'ph_catseyexi', 263, 96, 512, 128 }, ['VNM ARMOR'] = { 'ph_vnm_armor', 291, 95, 512, 128 }, ['ULTIMATES'] = { 'ph_ultimates', 264, 96, 512, 128 }, ['LUMORIA'] = { 'ph_lumoria', 215, 91, 256, 128 }, ['ODIOUS CODEX'] = { 'ph_odious_codex', 339, 99, 512, 128 }, ['SETTINGS'] = { 'ph_settings', 230, 91, 256, 128 }, ['SPECIAL THANKS'] = { 'ph_special_thanks', 381, 103, 512, 128 }, ['VNM INCOMING!'] = { 'ph_vnm_incoming', 360, 100, 512, 128 }, ['STARRED VNM!'] = { 'ph_starred_vnm', 339, 98, 512, 128 } };
+-- A title, its top at y: the picture with shards (accent, or gold) and a star behind it if asked, or cut-out letters
+-- when there's no picture. Returns its width and height.
+function TRF.PH.title(dl, x, y, t, s, acc, star)
+    local P = TRF.PH;
+    local im = P.IMG[tostring(t or ''):upper()];
+    local tex = im and TRF.imageTex and TRF.imageTex(im[1] .. '.png');
+    if tex == nil then
+        P.badge(dl, x + 9 * s, y + 46 * s, t, s, acc, star);
+        return 0, 56 * s;
+    end
+    acc = acc or C.hp;
+    local w, h = im[2] * s, im[3] * s;
+    local x0, x1, top, bot = x, x + w, y, y + h;
+    local red = u32({ acc[1], acc[2], acc[3], 1 });
+    P.clip(dl);
+    if star then                                                  -- (a big star behind, rocking gently; two small ones)
+        local cx, cy, r = (x0 + x1) / 2 + 10 * s, (top + bot) / 2, h * 0.86;
+        local rot = math.sin(os.clock() * 0.8) * 0.12 - 0.2;
+        P.star(dl, cx, cy, r + 5 * s, rot, u32({ 0.03, 0.03, 0.03, 1 }));
+        P.star(dl, cx, cy, r, rot, red);
+        P.star(dl, cx, cy, r * 0.62, rot, u32({ acc[1] * 0.55, acc[2] * 0.55, acc[3] * 0.55, 1 }));
+        P.star(dl, x0 + 4 * s, top + 8 * s, r * 0.36, -rot, red);
+        P.star(dl, x1 - 2 * s, bot - 12 * s, r * 0.3, rot * 1.5, red);
+    else                                                          -- (the shards, as on ChadcoreMenu's titles)
+        dl:AddTriangleFilled({ x0 - 6 * s, bot - 14 * s }, { x0 + 40 * s, top + 22 * s }, { x1 + 30 * s, top + 4 * s }, red);
+        dl:AddTriangleFilled({ x1 - 60 * s, top + 26 * s }, { x1 + 34 * s, bot - 6 * s }, { x0 + 30 * s, bot - 2 * s }, red);
+        dl:AddTriangleFilled({ x0 + 6 * s, top + 18 * s }, { x0 + 52 * s, top + 2 * s }, { x0 + 30 * s, top + 30 * s }, red);
+    end
+    pcall(dl.AddImage, dl, tex.ptr, { x0, top }, { x1, bot }, { 0, 0 }, { im[2] / im[4], im[3] / im[5] }, u32({ 1, 1, 1, 1 }));
+    P.unclip(dl);
+    return w, h;
+end
 -- The header: the page's name as cut-out letters, "VenGo" and the version beside it
 function TRF.PH.header(dl, x0, y0, name)
-    local w = TRF.PH.badge(dl, x0 + 4, y0 + 44, name, 0.82);
+    local w = TRF.PH.title(dl, x0 - 4, y0 - 8, name, 0.78);
+    if w == 0 then w = TRF.PH.badge(dl, x0 + 4, y0 + 44, name, 0.82); end
     local x = x0 + w + 30;
     local pushed = TRF.PH.font(fonts.phH or fonts.title, 24);
     local ven = imgui.CalcTextSize('Ven');
@@ -3209,7 +3245,7 @@ local THANKS = {
     { 'Commandobill, Seekey and Phatty', 'the ventures addon: the live venture board and the VNM list (drops, grid squares, notes)' },
     { 'Thorny', 'Uberwarp: the warps behind GO' },
     { 'GUST', 'the TeX Gyre Adventor font' },
-    { 'Phantom style', 'the red, black and white slanted look, from ChadcoreMenu; its fonts are Inter Black (Rasmus Andersson, SIL Open Font License, fonts\\OFL-Inter.txt) and TeX Gyre Heros Cn Bold (GUST Font License, fonts\\GUST-texgyreheroscn.txt)' },
+    { 'Phantom style', 'the red, black and white slanted look, from ChadcoreMenu; its fonts are Inter Black (Rasmus Andersson, SIL Open Font License, fonts\\OFL-Inter.txt) and TeX Gyre Heros Cn Bold (GUST Font License, fonts\\GUST-texgyreheroscn.txt); the Japanese in its titles is Noto Sans CJK (Google, SIL Open Font License)' },
     { 'The alba, Kokoro and sherpa-onnx voices', 'the spoken VNM alerts: the Scottish (alba, University of Edinburgh, CC BY 4.0), British and Japanese (Kokoro by hexgrad, Apache 2.0) voices (LICENSE-voices.txt)' },
     { 'Dewin (Goldilox)', 'the DAILIES tab: the goblin and Palalumin dailies and how to read them from chat (MIT licence, LICENSE-goldilox.txt)' },
     { 'Loxley (Trove)', 'the VNM Armor, Ultimates, Lumoria and Odious Codex data, and how to ask the CatsEyeXI server for currency, points and Lumoria progress (MIT licence, LICENSE-trove.txt)' },
@@ -7408,9 +7444,9 @@ drawAlert = function()
             sx = x0 + 20;
         end
         if ph then                                                -- (Phantom: the title in cut-out letters)
-            local bw = TRF.PH.badge(dl, sx + 4, y0 + (starred and 52 or 42), starred and 'Starred VNM!' or 'VNM incoming!', 0.78,
+            local bw, bh = TRF.PH.title(dl, sx - 4, y0 - 4, starred and 'Starred VNM!' or 'VNM incoming!', 0.8,
                 starred and C.gold or nil, starred);              -- (starred: gold, on a star)
-            imgui.Dummy({ bw + (sx - x0) + 10, starred and 66 or 52 });
+            imgui.Dummy({ math.max(bw, 200) + (sx - x0), bh });
         else
             local w = spaced(dl, sx, y0, starred and 'STARRED VNM INCOMING' or 'VNM INCOMING',
                 u32({ gc[1], gc[2], gc[3], 0.7 + 0.3 * pulse }), 3);
