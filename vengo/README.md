@@ -106,6 +106,17 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 
 `ventures.lua` is only a fallback until the game or the website sends the board.
 
+## Japanese / 日本語
+
+The **EN / JP** switch at the top of the window, left of the round buttons, puts VenGo in Japanese: the tabs, buttons,
+settings, hints and tooltips, the pop-up and the chat lines (sent to the game in Shift-JIS). Names from the game (zones,
+NMs, items, jobs) stay in English, as the game data is. The words are in `lang_jp.lua`; the Japanese is drawn in Noto
+Sans CJK JP, cut down to the letters VenGo uses (`fonts`, SIL Open Font License, `fonts/OFL-NotoSansCJK.txt`). The
+choice is saved with your settings.
+
+ウィンドウ上部(丸いボタンの左)の **EN / JP** スイッチでVenGoを日本語表示にできます。タブ、ボタン、設定、ヒント、
+ポップアップ、チャットのメッセージが日本語になります。エリア名・NM名・アイテム名・ジョブはゲームのデータどおり英語のままです。
+
 ## Special thanks
 
 - **Vekien** for the VanaCore project
@@ -115,6 +126,7 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 - **GUST** for the TeX Gyre Adventor font
 - **Dewin** for Goldilox: the DAILIES tab (MIT licence, `LICENSE-goldilox.txt`)
 - **Inter** (Rasmus Andersson) and **TeX Gyre Heros** (GUST) for the Phantom style's fonts
+- **Noto Sans CJK** (Adobe and Google, SIL Open Font License) for the Japanese
 - **alba** (University of Edinburgh, CC BY 4.0) and **Kokoro** (hexgrad, Apache 2.0) for the voices, made with **sherpa-onnx** (`LICENSE-voices.txt`)
 - **Loxley** for Trove: the VNM Armor, Ultimates, Lumoria and Odious Codex data, and how to ask for points (MIT licence, `LICENSE-trove.txt`)
 

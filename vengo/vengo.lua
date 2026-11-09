@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.64';
+addon.version = '4.65';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -65,6 +65,7 @@ local config = {
     alert_chat = true,         -- VNM alerts and heads-ups as chat lines
     alert_popup = true,        -- the VNM INCOMING pop-up window
     alert_voice = 'off',       -- a recorded voice that says the VNM: off | scot_f | gb_m | ja_f
+    lang = 'en',               -- the window's language: en | jp (the switch at the top)
     alert_sound = true,        -- play a sound with the alert
     alert90 = true,            -- a chat heads-up when a venture reaches 90%
     mode = 'ACE',              -- ACE or CW venture zones
@@ -122,7 +123,7 @@ local ui = { open = { true }, last = 'Pick a venture and press GO.', tab = 1 };
 
 local function msg(text)
     ui.last = text;
-    print(chat.header(addon.name):append(chat.message(text)));
+    print(chat.header(addon.name):append(chat.message(TRF.LANG and TRF.LANG.chat(text) or text)));
 end
 -- A VNM notification: in chat unless chat notifications are off (it still shows in VenGo's status line)
 function TRF.note(text)
@@ -184,7 +185,7 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
+    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
                            'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
@@ -1787,6 +1788,9 @@ local function loadFonts()
     fonts.big   = add(addon.path .. 'fonts\\texgyreadventor-regular.otf', 24) or fonts.title;
     fonts.ph    = add(addon.path .. 'fonts\\texgyreheroscn-bold.otf', 18);   -- (Phantom: a bold narrow face,
     fonts.phH   = add(addon.path .. 'fonts\\Inter-Black.otf', 34);           --  a heavy one for titles)
+    fonts.jp    = add(addon.path .. 'fonts\\NotoSansJP-Medium-VenGo.otf', 16);   -- (Japanese: Noto Sans JP, cut down to
+    fonts.jpB   = add(addon.path .. 'fonts\\NotoSansJP-Bold-VenGo.otf', 18);     --  the letters VenGo uses)
+    fonts.jpH   = add(addon.path .. 'fonts\\NotoSansJP-Black-VenGo.otf', 30);
 end
 local function newFont(f)
     local ok, ls = pcall(function () return f.LegacySize; end);
@@ -1797,9 +1801,210 @@ local function pushFont(f, size)
         if f == fonts.panel and fonts.ph then f, size = fonts.ph, (size or 16) * 1.12;
         elseif (f == fonts.title or f == fonts.big) and fonts.phH then f = fonts.phH; end
     end
+    f, size = TRF.LANG.face(f, size);                             -- (Japanese: its own faces)
     if f == nil then return false; end
     if newFont(f) then return (pcall(imgui.PushFont, f, size)); end
     return (pcall(imgui.PushFont, f));
+end
+
+------------------------------------------------------------------------
+-- JAPANESE (the EN / JP switch at the top of the window). The words come from lang_jp.lua; they're put in where
+-- the text is drawn and measured (Text, tooltips, CalcTextSize, the draw list's AddText, spaced capitals), so the
+-- layout measures the Japanese. Lines put together from pieces are matched by their shape ({1}, {2}...); names
+-- from the game stay in English. Japanese is drawn in Noto Sans CJK JP (fonts\, cut down to the letters needed).
+------------------------------------------------------------------------
+TRF.LANG = { cache = {}, n = 0, live = false };
+function TRF.LANG.on() return config.lang == 'jp' and TRF.LANG.D ~= nil and fonts.jp ~= nil; end
+function TRF.LANG.load()
+    local L = TRF.LANG;
+    local ok, d = pcall(dofile, addon.path .. 'lang_jp.lua');
+    if not ok or type(d) ~= 'table' or type(d.T) ~= 'table' then return false; end
+    L.D, L.lc, L.F, L.pre = d, {}, {}, {};
+    for en, jp in pairs(d.T) do
+        L.lc[en:lower()] = jp;
+        if en:find('%%[%-%d%.]*[sdf]') then                       -- (a line with numbers or names put in: its shape)
+            local p, i, specs = '^', 1, {};
+            while i <= #en do
+                local c = en:sub(i, i);
+                local spec = (c == '%') and en:match('^%%[%-%d%.]*[sdf]', i) or nil;
+                if c == '%' and en:sub(i + 1, i + 1) == '%' then p, i = p .. '%%', i + 2;
+                elseif spec then
+                    specs[#specs + 1] = spec;
+                    p, i = p .. ((spec:sub(-1) == 's') and '(.-)' or '([%-%d%.]+)'), i + #spec;
+                else
+                    p, i = p .. (c:find('[%^%$%(%)%%%.%[%]%*%+%-%?]') and ('%' .. c) or c), i + 1;
+                end
+            end
+            L.F[#L.F + 1] = { p .. '$', jp, specs, #en };
+        elseif #en >= 3 and (en:sub(-1) == ' ' or en:sub(-1) == '(') then
+            L.pre[#L.pre + 1] = { en, jp };                       -- (the start of a line, the rest put on after it)
+        end
+    end
+    table.sort(L.F, function (a, b) return a[4] > b[4]; end);
+    table.sort(L.pre, function (a, b) return #a[1] > #b[1]; end);
+    L.cache, L.n = {}, 0;
+    return true;
+end
+function TRF.LANG.fill(t, caps, depth)
+    return (t:gsub('{(%d)}', function (k) return TRF.LANG.look(caps[tonumber(k)] or '', depth + 1); end));
+end
+function TRF.LANG.look(s, depth)
+    if s == '' or not s:find('%a') then return s; end
+    local L = TRF.LANG;
+    local body, id = s:match('^(.-)(##.*)$');
+    if body then return L.look(body, depth) .. id; end
+    local t = L.D.T[s] or L.lc[s:lower()];
+    if t then return t; end
+    if depth > 2 then return s; end
+    for _, p in ipairs(L.D.P or {}) do
+        local caps = { s:match(p[1]) };
+        if caps[1] ~= nil then return L.fill(p[2], caps, depth); end
+    end
+    for _, f in ipairs(L.F) do
+        local caps = { s:match(f[1]) };
+        if caps[1] ~= nil then return L.fill(f[2], caps, depth); end
+    end
+    for _, p in ipairs(L.pre) do
+        if s:sub(1, #p[1]) == p[1] then return p[2] .. L.look(s:sub(#p[1] + 1), depth + 1); end
+    end
+    return s;
+end
+function TRF.LANG.tr(s)
+    local L = TRF.LANG;
+    if type(s) ~= 'string' or L.D == nil then return s; end
+    local c = L.cache[s];
+    if c then return c; end
+    local ok, r = pcall(L.look, s, 0);
+    if not ok or type(r) ~= 'string' then r = s; end
+    if L.n > 4000 then L.cache, L.n = {}, 0; end
+    L.cache[s], L.n = r, L.n + 1;
+    return r;
+end
+-- A format for imgui (a slider's): the Japanese with the format's own %d / %.1f back in place
+function TRF.LANG.fmt(f)
+    local L = TRF.LANG;
+    if not L.live or type(f) ~= 'string' or L.D == nil then return f; end
+    local jp = L.D.T[f];
+    if jp == nil then return f; end
+    local specs = {};
+    for sp in f:gmatch('%%[%-%d%.]*[sdf]') do specs[#specs + 1] = sp; end
+    return (jp:gsub('%%', '%%%%'):gsub('{(%d)}', function (k) return specs[tonumber(k)] or ''; end));
+end
+-- The face to draw with: in Japanese, Noto Sans JP (bold in Phantom; black for titles)
+function TRF.LANG.face(f, size)
+    if not TRF.LANG.live then return f, size; end
+    if f == fonts.panel or f == fonts.ph then
+        return ((TRF.PH and TRF.PH.on()) and fonts.jpB or fonts.jp) or f, (size or 16) * 0.94;
+    elseif f == fonts.title or f == fonts.big then return fonts.jpB or f, size;
+    elseif f == fonts.phH then return fonts.jpH or f, size; end
+    return f, size;
+end
+-- Put the translation in at the places text is drawn and measured (once; each one only translates in Japanese)
+function TRF.LANG.hook()
+    local L = TRF.LANG;
+    if L.o == nil then
+        L.o = {};
+        local o, tr = L.o, L.tr;
+        for _, k in ipairs({ 'TextColored', 'SetTooltip', 'CalcTextSize', 'Text', 'TextWrapped', 'TextDisabled', 'SliderFloat', 'SliderInt' }) do o[k] = imgui[k]; end
+        if o.TextColored then imgui.TextColored = function (c, t, ...) if L.live then t = tr(t); end return o.TextColored(c, t, ...); end end
+        if o.SetTooltip then imgui.SetTooltip = function (t, ...) if L.live then t = tr(t); end return o.SetTooltip(t, ...); end end
+        if o.CalcTextSize then imgui.CalcTextSize = function (t, ...) if L.live then t = tr(t); end return o.CalcTextSize(t, ...); end end
+        if o.Text then imgui.Text = function (t, ...) if L.live then t = tr(t); end return o.Text(t, ...); end end
+        if o.TextWrapped then imgui.TextWrapped = function (t, ...) if L.live then t = tr(t); end return o.TextWrapped(t, ...); end end
+        if o.TextDisabled then imgui.TextDisabled = function (t, ...) if L.live then t = tr(t); end return o.TextDisabled(t, ...); end end
+        if o.SliderFloat then imgui.SliderFloat = function (a, b, c, d, e, ...) return o.SliderFloat(a, b, c, d, L.fmt(e), ...); end end
+        if o.SliderInt then imgui.SliderInt = function (a, b, c, d, e, ...) return o.SliderInt(a, b, c, d, L.fmt(e), ...); end end
+    end
+    if L.dl == nil then                                           -- (the draw lists' AddText, through their metatable)
+        L.dl = false;
+        pcall(function ()
+            local dl = imgui.GetBackgroundDrawList();
+            local mt = dl and debug.getmetatable(dl);
+            if mt == nil then return; end
+            local tr = L.tr;
+            local function wrap(orig)
+                return function (self, a, b, c, d, e, ...)
+                    if L.live then
+                        if type(c) == 'string' then c = tr(c); elseif type(e) == 'string' then e = tr(e); end
+                    end
+                    return orig(self, a, b, c, d, e, ...);
+                end
+            end
+            local ix = mt.__index;
+            if type(ix) == 'table' and type(ix.AddText) == 'function' then
+                ix.AddText = wrap(ix.AddText);
+                L.dl = true;
+            elseif type(ix) == 'function' then
+                local w;
+                mt.__index = function (self, k)
+                    if k == 'AddText' then
+                        if w == nil then w = wrap(ix(self, k)); end
+                        return w;
+                    end
+                    return ix(self, k);
+                end
+                L.dl = true;
+            end
+        end);
+    end
+end
+-- Each frame: Japanese on or off (the hooks look at this, not at the settings)
+function TRF.LANG.frame()
+    local L = TRF.LANG;
+    if config.lang == 'jp' and L.D == nil and not L.tried then L.tried = true; L.load(); end
+    L.live = L.on();
+    if L.live and (L.o == nil or L.dl == nil) then L.hook(); end
+end
+-- A chat line in Japanese: translated, and in Shift-JIS for the game
+function TRF.LANG.chat(text)
+    local L = TRF.LANG;
+    if config.lang ~= 'jp' or L.D == nil then return text; end
+    local t = L.tr(text);
+    local ok, s = pcall(function () return vana.encoding.to_shift_jis(t); end);
+    return (ok and type(s) == 'string') and s or text;
+end
+-- The EN / JP switch (top of the window): two halves, the language on in the accent
+function TRF.LANG.toggle(dl, x, y, h)
+    local L = TRF.LANG;
+    local w = 58;
+    imgui.SetCursorScreenPos({ x, y });
+    local clicked = imgui.InvisibleButton('##vengo_lang', { w, h });
+    local hov = imgui.IsItemHovered();
+    local jp = config.lang == 'jp';
+    local ph = TRF.PH and TRF.PH.on();
+    local acc = ph and C.hp or C.acc;
+    local half = w / 2;
+    local bg = u32({ 0.08, 0.07, 0.10, 0.9 });
+    local on = u32({ acc[1], acc[2], acc[3], 0.95 });
+    if ph then
+        TRF.PH.q(dl, x, y + 3, x + w, y, x + w - 2, y + h, x + 1, y + h + 1, bg);
+        local a = jp and half or 0;
+        TRF.PH.q(dl, x + a + 2, y + 4, x + a + half - 1, y + 2, x + a + half - 2, y + h - 1, x + a + 2, y + h - 1, on);
+    else
+        dl:AddRectFilled({ x, y }, { x + w, y + h }, bg, h / 2);
+        dl:AddRectFilled({ x + (jp and half or 0) + 2, y + 2 }, { x + (jp and w or half) - 2, y + h - 2 }, on, (h - 4) / 2);
+        dl:AddRect({ x, y }, { x + w, y + h }, u32({ acc[1], acc[2], acc[3], hov and 0.9 or 0.45 }), h / 2, C.rall, 1);
+    end
+    local was = L.live;
+    L.live = false;                                               -- (EN and JP are themselves; JP drawn in the Japanese face)
+    local tw = (L.o and L.o.CalcTextSize or imgui.CalcTextSize)('EN');
+    local _, th = imgui.CalcTextSize('EN');
+    imgui.SetWindowFontScale(0.8);
+    tw, th = tw * 0.8, th * 0.8;
+    dl:AddText({ x + (half - tw) / 2, y + (h - th) / 2 }, u32(jp and C.muted or (ph and TRF.PH.sel or { 1, 1, 1, 1 })), 'EN');
+    dl:AddText({ x + half + (half - tw) / 2, y + (h - th) / 2 }, u32(jp and (ph and TRF.PH.sel or { 1, 1, 1, 1 }) or C.muted), 'JP');
+    imgui.SetWindowFontScale(1);
+    L.live = was;
+    if hov then imgui.SetTooltip(jp and '言語: 日本語 (クリックで英語)' or 'Language: English (click for Japanese)'); end
+    if clicked then
+        config.lang = jp and 'en' or 'jp';
+        if config.lang == 'jp' and L.D == nil then L.load(); end
+        if config.lang == 'jp' and (L.D == nil or fonts.jp == nil) then
+            config.lang = 'en';
+            msg('Japanese needs lang_jp.lua and fonts\\NotoSansJP-*-VenGo.otf in the vengo folder.');
+        end
+        saveSettings();
+    end
 end
 
 ------------------------------------------------------------------------
@@ -1852,6 +2057,7 @@ end
 function TRF.PH.clip(dl) pcall(function () dl:PushClipRect({ -10000, -10000 }, { 20000, 20000 }, false); end); end
 function TRF.PH.unclip(dl) pcall(function () dl:PopClipRect(); end); end
 function TRF.PH.font(f, size)                                    -- (a face at a size: true if it was pushed)
+    f, size = TRF.LANG.face(f, size);
     if f == nil then return false; end
     local ok_ = pcall(function () return f.LegacySize; end);
     if ok_ then return (pcall(imgui.PushFont, f, size)); end
@@ -2091,18 +2297,33 @@ end
 
 -- Text with letter spacing (section names, buttons)
 local function spaced(dl, x, y, str, col, gap)
+    local L = TRF.LANG;
+    local was = L.live;
+    if was then                                                    -- (Japanese: the whole line first, closer letters)
+        str = L.tr(str);
+        if str:find('[\128-\255]') then gap = gap * 0.25; end
+        L.live = false;
+    end
     local cx = x;
-    for i = 1, #str do
-        local ch = str:sub(i, i);
+    for ch in str:gmatch('[%z\1-\127\194-\244][\128-\191]*') do   -- (a letter at a time, UTF-8 ones whole)
         dl:AddText({ cx, y }, col, ch);
         cx = cx + imgui.CalcTextSize(ch) + gap;
     end
+    L.live = was;
     return cx - x - gap;
 end
 TRF.spaced = spaced;
 local function spacedW(str, gap)
+    local L = TRF.LANG;
+    local was = L.live;
+    if was then
+        str = L.tr(str);
+        if str:find('[\128-\255]') then gap = gap * 0.25; end
+        L.live = false;
+    end
     local w = 0;
-    for i = 1, #str do w = w + imgui.CalcTextSize(str:sub(i, i)) + gap; end
+    for ch in str:gmatch('[%z\1-\127\194-\244][\128-\191]*') do w = w + imgui.CalcTextSize(ch) + gap; end
+    L.live = was;
     return w - gap;
 end
 
@@ -2822,6 +3043,7 @@ local function topButtons(dl, wx, wy, ww)
     local xClose = wx + ww - 24 - bs;
     local xMin   = xClose - bs - 8;
     local xClear = xMin - bs - 8;
+    pcall(TRF.LANG.toggle, dl, xClear - 58 - 12, by, bs);     -- (EN / JP)
     -- see-through on / off
     if iconButton(dl, '##vengo_clear', xClear, by, bs, { C.acc[1], C.acc[2], C.acc[3], 0.22 },
             config.transparent and 'Solid window' or 'See-through window', function (cx, cy, r, col)
@@ -3245,6 +3467,7 @@ local THANKS = {
     { 'Commandobill, Seekey and Phatty', 'the ventures addon: the live venture board and the VNM list (drops, grid squares, notes)' },
     { 'Thorny', 'Uberwarp: the warps behind GO' },
     { 'GUST', 'the TeX Gyre Adventor font' },
+    { 'Noto Sans CJK', 'the Japanese (Adobe and Google, SIL Open Font License, fonts\\OFL-NotoSansCJK.txt)' },
     { 'Phantom style', 'the red, black and white slanted look, from ChadcoreMenu; its fonts are Inter Black (Rasmus Andersson, SIL Open Font License, fonts\\OFL-Inter.txt) and TeX Gyre Heros Cn Bold (GUST Font License, fonts\\GUST-texgyreheroscn.txt); the Japanese in its titles is Noto Sans CJK (Google, SIL Open Font License)' },
     { 'The alba, Kokoro and sherpa-onnx voices', 'the spoken VNM alerts: the Scottish (alba, University of Edinburgh, CC BY 4.0), British and Japanese (Kokoro by hexgrad, Apache 2.0) voices (LICENSE-voices.txt)' },
     { 'Dewin (Goldilox)', 'the DAILIES tab: the goblin and Palalumin dailies and how to read them from chat (MIT licence, LICENSE-goldilox.txt)' },
@@ -6785,7 +7008,7 @@ TRF.sliders = function()
 end
 
 -- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
-TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
+TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
     'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' };
@@ -7733,6 +7956,7 @@ end
 
 ashita.events.register('d3d_present', 'vengo_present', function ()
     local now = os.clock();
+    pcall(TRF.LANG.frame);
     tickAlert();
     tickArm(now);
     pollBoard(now);
@@ -7879,6 +8103,7 @@ end);
 ashita.events.register('load', 'vengo_load', function ()
     loadFonts();
     loadSettings();
+    if config.lang == 'jp' then pcall(TRF.LANG.load); end
     pcall(C.apply);
     loadVentures();
     loadVnmDb(true);
