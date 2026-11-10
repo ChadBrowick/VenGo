@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.66';
+addon.version = '4.67';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -96,7 +96,7 @@ local config = {
     trail_speed = 5,           -- how fast they crawl (yalms a second)
     glow_q = 2,                -- glow passes (1 lighter, 2 fuller)
     bg = 'violet',             -- the window's background
-    style = 'classic',         -- classic | phantom (red, black and white, slanted)
+    style = 'classic',         -- classic | phantom (red, black and white, slanted) | neon (ChadcoreMenu's Neon)
     ph_accent = 'Red', ph_slab = 'Black', ph_edge = 'White',   -- Phantom's colours
     bg_img = '',               -- your own picture behind the window (a file in images\)
     bg_img_alpha = 0.45,       -- how much of it shows
@@ -1759,7 +1759,7 @@ local WIN_W = SW + 30 + MARGIN + FULL_ROW + 50;         -- starting size; the wi
 local WIN_H = 700;
 local MIN_W, MIN_H = 640, 460;
 
-local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'DAILIES', 'CATSEYEXI', 'VNM ARMOR', 'ULTIMATES', 'LUMORIA', 'ODIOUS CODEX', 'SETTINGS', 'SPECIAL THANKS' };
+local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'DAILIES', 'CATSEYEXI', 'VNM ARMOR', 'ULTIMATES', 'LUMORIA', 'ODIOUS CODEX', 'SPARK VENDOR', 'SETTINGS', 'SPECIAL THANKS' };
 ui.tab = ui.tab or 1;
 
 local function statusText()
@@ -1788,6 +1788,7 @@ local function loadFonts()
     fonts.big   = add(addon.path .. 'fonts\\texgyreadventor-regular.otf', 24) or fonts.title;
     fonts.ph    = add(addon.path .. 'fonts\\texgyreheroscn-bold.otf', 18);   -- (Phantom: a bold narrow face,
     fonts.phH   = add(addon.path .. 'fonts\\Inter-Black.otf', 34);           --  a heavy one for titles)
+    fonts.ne    = add(addon.path .. 'fonts\\texgyretermes-bolditalic.otf', 26);   -- (Neon: titles and menu rows, italic serif)
     fonts.jp    = add(addon.path .. 'fonts\\NotoSansJP-Medium-VenGo.otf', 16);   -- (Japanese: Noto Sans JP, cut down to
     fonts.jpB   = add(addon.path .. 'fonts\\NotoSansJP-Bold-VenGo.otf', 18);     --  the letters VenGo uses)
     fonts.jpH   = add(addon.path .. 'fonts\\NotoSansJP-Black-VenGo.otf', 30);
@@ -1830,7 +1831,8 @@ function TRF.LANG.load()
                 if c == '%' and en:sub(i + 1, i + 1) == '%' then p, i = p .. '%%', i + 2;
                 elseif spec then
                     specs[#specs + 1] = spec;
-                    p, i = p .. ((spec:sub(-1) == 's') and '(.-)' or '([%-%d%.]+)'), i + #spec;
+                    local nxt = en:match('^%%[%-%d%.]*[sdf]', i + #spec);    -- (a %s right before another: one word)
+                    p, i = p .. ((spec:sub(-1) == 's') and (nxt and '(%S*)' or '(.-)') or '([%-%d%.]+)'), i + #spec;
                 else
                     p, i = p .. (c:find('[%^%$%(%)%%%.%[%]%*%+%-%?]') and ('%' .. c) or c), i + 1;
                 end
@@ -1855,7 +1857,7 @@ function TRF.LANG.look(s, depth)
     if body then return L.look(body, depth) .. id; end
     local t = L.D.T[s] or L.lc[s:lower()];
     if t then return t; end
-    if depth > 2 then return s; end
+    if depth > 3 then return s; end
     for _, p in ipairs(L.D.P or {}) do
         local caps = { s:match(p[1]) };
         if caps[1] ~= nil then return L.fill(p[2], caps, depth); end
@@ -1893,6 +1895,7 @@ end
 -- The face to draw with: in Japanese, Noto Sans JP (bold in Phantom; black for titles)
 function TRF.LANG.face(f, size)
     if not TRF.LANG.live then return f, size; end
+    if f == fonts.ne then return fonts.jpB or f, (size or 18) * 0.9; end
     if f == fonts.panel or f == fonts.ph then
         return ((TRF.PH and TRF.PH.on()) and fonts.jpB or fonts.jp) or f, (size or 16) * 0.94;
     elseif f == fonts.title or f == fonts.big then return fonts.jpB or f, size;
@@ -2024,7 +2027,7 @@ TRF.PH = {
     EDGE = { { 'White', { 0.97, 0.96, 0.94 } }, { 'Cream', { 0.98, 0.92, 0.80 } }, { 'Silver', { 0.78, 0.80, 0.84 } }, { 'Black', { 0.06, 0.06, 0.06 } } },
     edge = { 0.97, 0.96, 0.94 }, sel = { 0.04, 0.04, 0.04, 1 }, orig = nil,
 };
-function TRF.PH.on() return config.style == 'phantom'; end
+function TRF.PH.on() return config.style == 'phantom' or config.style == 'neon'; end   -- (Neon rides on Phantom's plumbing)
 function TRF.PH.pick(L, v) for _, t in ipairs(L) do if t[1] == v then return t; end end return L[1]; end
 -- The palette: Phantom's over the theme's (text, slab, accent, edge); the theme's back when it's off
 function TRF.PH.apply()
@@ -2065,6 +2068,7 @@ function TRF.PH.font(f, size)                                    -- (a face at a
 end
 -- The panel: a slanted slab edged in white, a red one behind it sticking out down and to the right
 function TRF.PH.frame(dl, x, y, w, h)
+    if TRF.NE.on() then return TRF.NE.panel(dl, x, y, x + w, y + h, 1); end
     local P = TRF.PH;
     local a = config.transparent and 0.6 or 1;
     local k, q = math.min(12, w * 0.03), 3;
@@ -2147,11 +2151,16 @@ function TRF.PH.badge(dl, x, base, t, s, acc, star)
 end
 -- Titles made ahead as pictures (images\ph_*.png): the letters in a white-rimmed black sticker with the Japanese
 -- under them, as ChadcoreMenu's. Name, its width and height, the picture's.
-TRF.PH.IMG = { ['VENTURES'] = { 'ph_ventures', 248, 90, 256, 128 }, ['HELM'] = { 'ph_helm', 145, 85, 256, 128 }, ['FISHING'] = { 'ph_fishing', 190, 87, 256, 128 }, ['DYNAMIS'] = { 'ph_dynamis', 224, 93, 256, 128 }, ['HUNTER'] = { 'ph_hunter', 196, 87, 256, 128 }, ['SUMMIT'] = { 'ph_summit', 193, 91, 256, 128 }, ['DAILIES'] = { 'ph_dailies', 186, 89, 256, 128 }, ['CATSEYEXI'] = { 'ph_catseyexi', 263, 96, 512, 128 }, ['VNM ARMOR'] = { 'ph_vnm_armor', 291, 95, 512, 128 }, ['ULTIMATES'] = { 'ph_ultimates', 264, 96, 512, 128 }, ['LUMORIA'] = { 'ph_lumoria', 215, 91, 256, 128 }, ['ODIOUS CODEX'] = { 'ph_odious_codex', 339, 99, 512, 128 }, ['SETTINGS'] = { 'ph_settings', 230, 91, 256, 128 }, ['SPECIAL THANKS'] = { 'ph_special_thanks', 381, 103, 512, 128 }, ['VNM INCOMING!'] = { 'ph_vnm_incoming', 360, 100, 512, 128 }, ['STARRED VNM!'] = { 'ph_starred_vnm', 339, 98, 512, 128 } };
+TRF.PH.IMG = { ['VENTURES'] = { 'ph_ventures', 248, 90, 256, 128 }, ['HELM'] = { 'ph_helm', 145, 85, 256, 128 }, ['FISHING'] = { 'ph_fishing', 190, 87, 256, 128 }, ['DYNAMIS'] = { 'ph_dynamis', 224, 93, 256, 128 }, ['HUNTER'] = { 'ph_hunter', 196, 87, 256, 128 }, ['SUMMIT'] = { 'ph_summit', 193, 91, 256, 128 }, ['DAILIES'] = { 'ph_dailies', 186, 89, 256, 128 }, ['CATSEYEXI'] = { 'ph_catseyexi', 263, 96, 512, 128 }, ['VNM ARMOR'] = { 'ph_vnm_armor', 291, 95, 512, 128 }, ['ULTIMATES'] = { 'ph_ultimates', 264, 96, 512, 128 }, ['LUMORIA'] = { 'ph_lumoria', 215, 91, 256, 128 }, ['ODIOUS CODEX'] = { 'ph_odious_codex', 339, 99, 512, 128 }, ['SPARK VENDOR'] = { 'ph_spark_vendor', 346, 97, 512, 128 }, ['SETTINGS'] = { 'ph_settings', 230, 91, 256, 128 }, ['SPECIAL THANKS'] = { 'ph_special_thanks', 381, 103, 512, 128 }, ['VNM INCOMING!'] = { 'ph_vnm_incoming', 360, 100, 512, 128 }, ['STARRED VNM!'] = { 'ph_starred_vnm', 339, 98, 512, 128 } };
 -- A title, its top at y: the picture with shards (accent, or gold) and a star behind it if asked, or cut-out letters
 -- when there's no picture. Returns its width and height.
 function TRF.PH.title(dl, x, y, t, s, acc, star)
     local P = TRF.PH;
+    if TRF.NE.on() then                                           -- (Neon: its own title, the Japanese under it)
+        local key = tostring(t or ''):upper();
+        local w = TRF.NE.title(dl, x + 18, y + 54, t, 0.85, acc, TRF.NE.ICON[key], TRF.NE.jp(key));
+        return w + 10, 70;
+    end
     local im = P.IMG[tostring(t or ''):upper()];
     local tex = im and TRF.imageTex and TRF.imageTex(im[1] .. '.png');
     if tex == nil then
@@ -2182,6 +2191,7 @@ function TRF.PH.title(dl, x, y, t, s, acc, star)
 end
 -- The header: the page's name as cut-out letters, "VenGo" and the version beside it
 function TRF.PH.header(dl, x0, y0, name)
+    if TRF.NE.on() then return TRF.NE.header(dl, x0, y0, name); end
     local w = TRF.PH.title(dl, x0 - 4, y0 - 8, name, 0.78);
     if w == 0 then w = TRF.PH.badge(dl, x0 + 4, y0 + 44, name, 0.82); end
     local x = x0 + w + 30;
@@ -2200,6 +2210,7 @@ end
 -- One menu entry: a dark slanted strip (staggered a little, like steps); the page you're on is a white slab with a
 -- red slash running past its edge and a pointer bobbing at its left
 function TRF.PH.sideItem(dl, k, x0, y, sw, ih, on, over, label)
+    if TRF.NE.on() then return TRF.NE.sideItem(dl, k, x0, y, sw, ih, on, over, label); end
     local P = TRF.PH;
     local sx = ((k % 3) - 1) * 3;
     if on then
@@ -2223,6 +2234,7 @@ end
 -- A button: a slanted slab. The main one white with black letters, a red shard behind it when the mouse is on it;
 -- the quiet ones dark with white letters and a red line under them on the mouse. (Returns nothing: the click is the caller's.)
 function TRF.PH.button(dl, x, y, w, h, name, lw, lh, sp, quiet, small, hov, act)
+    if TRF.NE.on() then return TRF.NE.button(dl, x, y, w, h, name, lw, lh, sp, quiet, small, hov, act); end
     local P = TRF.PH;
     local k = math.min(6, h * 0.18);
     local red = u32({ C.hp[1], C.hp[2], C.hp[3], 1 });
@@ -2246,6 +2258,7 @@ function TRF.PH.button(dl, x, y, w, h, name, lw, lh, sp, quiet, small, hov, act)
 end
 -- The VNM alert's panel: a black slab edged white on a red (gold for a starred VNM) one that pulses out behind it
 function TRF.PH.alertFrame(dl, x, y, w, h, gc, pulse)
+    if TRF.NE.on() then return TRF.NE.alertFrame(dl, x, y, w, h, gc, pulse); end
     local P = TRF.PH;
     local k = math.min(12, w * 0.03);
     local o = 9 + 5 * pulse;
@@ -2258,6 +2271,7 @@ function TRF.PH.alertFrame(dl, x, y, w, h, gc, pulse)
 end
 -- A section's name: white capitals on a small black slab edged white, a red shard behind, a thin line after
 function TRF.PH.section(dl, x0, y0, text)
+    if TRF.NE.on() then return TRF.NE.section(dl, x0, y0, text); end
     local P = TRF.PH;
     local t = text:upper();
     local w, lh = imgui.CalcTextSize(t);
@@ -2269,6 +2283,387 @@ function TRF.PH.section(dl, x0, y0, text)
     dl:AddText({ x0 + 9, y0 + 1 }, u32({ P.edge[1], P.edge[2], P.edge[3], 1 }), t);
     dl:AddLine({ x1 + 14, y0 + lh / 2 + 2 }, { x0 + ROW_W, y0 + lh / 2 + 2 }, u32({ C.hp[1], C.hp[2], C.hp[3], 0.35 }), 1.5);
     return lh + 6;
+end
+
+------------------------------------------------------------------------
+-- NEON (Settings > Colours > Style): ChadcoreMenu 3.57's "Neon" look, from its chadcore_ui bundle, copied into
+-- VenGo (nothing of ChadcoreMenu's is needed). Dark slabs in a glowing double line of the accent, italic serif
+-- titles with an icon box and the Japanese under them, menu rows that lean, a spark running round the title.
+-- It rides on Phantom's plumbing (its fonts, palette and the places it draws); TRF.PH.* hand over to these.
+------------------------------------------------------------------------
+TRF.NE = { INK = { 0.035, 0.035, 0.042 }, STRIP = { 0.10, 0.10, 0.115 },
+    ICON = { VENTURES = 11, HELM = 8, FISHING = 10, DYNAMIS = 4, HUNTER = 13, SUMMIT = 6, DAILIES = 12, CATSEYEXI = 9,
+             ['VNM ARMOR'] = 1, ULTIMATES = 0, LUMORIA = 3, ['ODIOUS CODEX'] = 12, ['SPARK VENDOR'] = 7, SETTINGS = 'gear',
+             ['SPECIAL THANKS'] = 2, ['VNM INCOMING!'] = 13, ['STARRED VNM!'] = 6 },
+    JP = { ['VNM INCOMING!'] = 'VNM出現', ['STARRED VNM!'] = 'スターVNM' } };
+function TRF.NE.on() return config.style == 'neon'; end
+function TRF.NE.col(a) local c = C.acc; return u32({ c[1], c[2], c[3], a or 1 }); end
+-- a convex outline, filled (in one path, else as a fan of triangles)
+function TRF.NE.fill(dl, P, col)
+    local N = TRF.NE;
+    if #P < 3 then return; end
+    if N.pok ~= false then
+        local ok = pcall(function ()
+            dl:PathClear();
+            for i = 1, #P do dl:PathLineTo(P[i]); end
+            dl:PathFillConvex(col);
+        end);
+        if ok then N.pok = true; return; end
+        N.pok = false; pcall(function () dl:PathClear(); end);
+    end
+    for i = 2, #P - 1 do dl:AddTriangleFilled(P[1], P[i], P[i + 1], col); end
+end
+-- the outline pushed out by o all round (in, if negative)
+function TRF.NE.grow(P, o)
+    local n = #P;
+    local cx, cy = 0, 0;
+    for _, p in ipairs(P) do cx, cy = cx + p[1] / n, cy + p[2] / n; end
+    local function nrm(u, w)
+        local ex, ey = w[1] - u[1], w[2] - u[2];
+        local l = math.sqrt(ex * ex + ey * ey); if l < 0.001 then l = 0.001; end
+        local nx, ny = ey / l, -ex / l;
+        if ((u[1] + w[1]) / 2 - cx) * nx + ((u[2] + w[2]) / 2 - cy) * ny < 0 then nx, ny = -nx, -ny; end
+        return nx, ny;
+    end
+    local out = {};
+    for i = 1, n do
+        local a, p, b = P[(i - 2) % n + 1], P[i], P[i % n + 1];
+        local n1x, n1y = nrm(a, p);
+        local n2x, n2y = nrm(p, b);
+        local mx, my = n1x + n2x, n1y + n2y;
+        local ml = math.sqrt(mx * mx + my * my); if ml < 0.001 then mx, my, ml = n1x, n1y, 1; end
+        mx, my = mx / ml, my / ml;
+        local dd = mx * n1x + my * n1y; if dd < 0.35 then dd = 0.35; end
+        out[i] = { p[1] + mx * o / dd, p[2] + my * o / dd };
+    end
+    return out;
+end
+function TRF.NE.outline(dl, P, col, th)
+    for i = 1, #P do local p, q = P[i], P[i % #P + 1]; dl:AddLine(p, q, col, th); end
+end
+-- shapes in the neon frame: a soft glow, the bright line, the dark inside, a thin line just inside that
+function TRF.NE.frame(dl, shapes, s, c, a)
+    local N = TRF.NE;
+    c = c or C.acc; a = a or 1;
+    for _, P in ipairs(shapes) do N.fill(dl, N.grow(P, 8 * s), u32({ c[1], c[2], c[3], 0.14 * a })); end
+    for _, P in ipairs(shapes) do N.fill(dl, N.grow(P, 5 * s), u32({ c[1], c[2], c[3], 0.30 * a })); end
+    for _, P in ipairs(shapes) do N.fill(dl, N.grow(P, 2.6 * s), u32({ math.min(1, c[1] + 0.15), math.min(1, c[2] + 0.15), math.min(1, c[3] + 0.15), a })); end
+    for _, P in ipairs(shapes) do N.fill(dl, P, u32({ 0.045 + c[1] * 0.04, 0.045 + c[2] * 0.04, 0.055 + c[3] * 0.04, a })); end
+    for _, P in ipairs(shapes) do N.outline(dl, N.grow(P, -3.2 * s), u32({ c[1], c[2], c[3], 0.55 * a }), 1.1 * s); end
+end
+-- a bright spark running round an outline, a fading trail behind it (once round in about 3 s)
+function TRF.NE.pulse(dl, E, s, c, a, seed)
+    c = c or C.acc; a = a or 1;
+    local len, segs = 0, {};
+    for i = 1, #E do local p, q = E[i], E[i % #E + 1]; local d = math.sqrt((q[1] - p[1]) ^ 2 + (q[2] - p[2]) ^ 2); segs[i] = d; len = len + d; end
+    if len < 1 then return; end
+    local function at(t)
+        t = t % len;
+        for i = 1, #E do
+            if t <= segs[i] then local p, q = E[i], E[i % #E + 1]; local u = t / math.max(0.001, segs[i]); return p[1] + (q[1] - p[1]) * u, p[2] + (q[2] - p[2]) * u; end
+            t = t - segs[i];
+        end
+        return E[1][1], E[1][2];
+    end
+    local head = (os.clock() + (seed or 0)) * (len / 3.0);
+    local trail = math.min(len * 0.22, 200 * s);
+    for j = 12, 1, -1 do
+        local ax, ay = at(head - trail * j / 12); local bx, by = at(head - trail * (j - 1) / 12);
+        local u = 1 - (j - 1) / 12;
+        if math.abs(ax - bx) + math.abs(ay - by) < trail then
+            dl:AddLine({ ax, ay }, { bx, by }, u32({ c[1], c[2], c[3], 0.35 * u * a }), 6 * s * u);
+            dl:AddLine({ ax, ay }, { bx, by }, u32({ 1, 1, 1, 0.9 * u * u * a }), 1.8 * s);
+        end
+    end
+    local hx, hy = at(head);
+    dl:AddCircleFilled({ hx, hy }, 4.5 * s, u32({ c[1], c[2], c[3], 0.45 * a }), 10);
+    dl:AddCircleFilled({ hx, hy }, 2.2 * s, u32({ 1, 1, 1, a }), 8);
+end
+-- writing with a black edge
+function TRF.NE.text(dl, x, y, t, c, a, o)
+    c = c or C.text; a = a or 1; o = o or 1;
+    local blk = u32({ 0, 0, 0, 0.9 * a });
+    for k = 0, 7 do local an = k * math.pi / 4; dl:AddText({ x + math.cos(an) * o, y + math.sin(an) * o }, blk, t); end
+    dl:AddText({ x, y }, u32({ c[1], c[2], c[3], a }), t);
+end
+-- italic serif capitals, the first letter of the title bigger, a metal sheen (the lower half greyer). Returns the width.
+-- (English as it stands, in either language: the Japanese goes under it, as on ChadcoreMenu)
+function TRF.NE.caps(dl, x, base, t, big, small, s, a, measure)
+    local L = TRF.LANG;
+    local was = L.live;
+    L.live = false;
+    a = a or 1;
+    local cx, first = x, true;
+    for word in tostring(t):upper():gmatch('%S+') do
+        for _, p in ipairs({ { word:sub(1, 1), first and big or small * 1.12 }, { word:sub(2), small } }) do
+            if p[1] ~= '' then
+                local pushed = TRF.PH.font(fonts.ne or fonts.title, p[2]);
+                local w = imgui.CalcTextSize(p[1]);
+                if not measure then
+                    local lh = imgui.GetTextLineHeight();
+                    local ty = base - lh * 0.80;
+                    for k = 0, 7 do local an = k * math.pi / 4; dl:AddText({ cx + math.cos(an) * 1.6 * s, ty + math.sin(an) * 1.6 * s + 1 * s }, u32({ 0, 0, 0, 0.9 * a }), p[1]); end
+                    dl:AddText({ cx, ty }, u32({ 0.97, 0.97, 1, a }), p[1]);
+                    pcall(function ()
+                        dl:PushClipRect({ cx - 4 * s, ty + lh * 0.50 }, { cx + w + 6 * s, ty + lh * 1.2 }, true);
+                        dl:AddText({ cx, ty }, u32({ 0.70, 0.72, 0.78, a }), p[1]);
+                        dl:PopClipRect();
+                    end);
+                end
+                if pushed then imgui.PopFont(); end
+                cx = cx + w;
+            end
+        end
+        cx = cx + small * 0.30;
+        first = false;
+    end
+    L.live = was;
+    return cx - small * 0.30 - x;
+end
+-- an icon: a number on the sheet (images\ne_icons.png: 14 in a row, 96 px each), or 'gear' / 'list' (drawn)
+function TRF.NE.icon(dl, cx, cy, r, kind, s, c, a)
+    c = c or C.acc; a = a or 1;
+    local wht = u32({ 0.90, 0.92, 0.96, a });
+    if type(kind) == 'number' then
+        local sh = TRF.imageTex and TRF.imageTex('ne_icons.png');
+        local R = r * 1.25;
+        if sh and pcall(dl.AddImage, dl, sh.ptr, { cx - R, cy - R }, { cx + R, cy + R }, { kind * 96 / 2048, 0 }, { (kind + 1) * 96 / 2048, 0.75 }, u32({ 1, 1, 1, a })) then return; end
+        kind = 'list';
+    end
+    if kind == 'gear' then
+        for k = 0, 7 do
+            local an = k * math.pi / 4;
+            local ca, sa = math.cos(an), math.sin(an);
+            local px, py = -sa, ca;
+            local r0, r1, hw = r * 0.6, r * 1.02, r * 0.2;
+            TRF.PH.q(dl, cx + ca * r0 + px * hw, cy + sa * r0 + py * hw, cx + ca * r1 + px * hw * 0.8, cy + sa * r1 + py * hw * 0.8,
+               cx + ca * r1 - px * hw * 0.8, cy + sa * r1 - py * hw * 0.8, cx + ca * r0 - px * hw, cy + sa * r0 - py * hw, wht);
+        end
+        dl:AddCircleFilled({ cx, cy }, r * 0.74, wht, 24);
+        dl:AddCircleFilled({ cx, cy }, r * 0.40, u32({ 0.05, 0.05, 0.07, a }), 20);
+        dl:AddCircle({ cx, cy }, r * 0.30, u32({ c[1], c[2], c[3], a }), 20, 2 * s);
+    else
+        local w, h = r * 1.25, r * 0.30;
+        for i = -1, 1 do dl:AddRectFilled({ cx - w * 0.35, cy + i * r * 0.52 - h / 2 }, { cx + w * 0.9, cy + i * r * 0.52 + h / 2 }, wht); end
+        dl:AddTriangleFilled({ cx - w * 0.95, cy - r * 0.30 }, { cx - w * 0.55, cy }, { cx - w * 0.95, cy + r * 0.30 }, u32({ c[1], c[2], c[3], a }));
+    end
+end
+-- The title (ChadcoreMenu's): a dark leaning bar in the neon frame, an icon box at its left, the name in serif
+-- capitals, the Japanese under it, two stripes at its end, a spark running round. y: where the bar's foot sits
+-- (less 6). Returns its width from x and the bar's top.
+function TRF.NE.title(dl, x, y, t, s, c, icon, jp)
+    local N = TRF.NE;
+    c = c or C.acc;
+    t = tostring(t or ''):upper();
+    local jh = (jp and fonts.jp) and 9 * s or 0;
+    local bh = 40 * s + jh;
+    local bot = y + 6 * s;
+    local top = bot - bh;
+    local K = bh * 0.55;
+    local nw = N.caps(dl, 0, 0, t, 32 * s, 24 * s, s, 1, true);
+    local iw = 62 * s;
+    local ix0 = x - 18 * s;
+    local bx0 = ix0 + iw - 6 * s;
+    local bx1 = bx0 + nw + 110 * s;
+    local e, ek = 7 * s, 7 * s * 0.55;
+    local I = { { ix0 + K + ek, top - e }, { ix0 + iw + K + ek, top - e }, { ix0 + iw - ek, bot + e }, { ix0 - ek, bot + e } };
+    local B = { { bx0 + K, top }, { bx1 + K, top }, { bx1, bot }, { bx0, bot } };
+    TRF.PH.clip(dl);
+    N.frame(dl, { B }, s, c);
+    N.frame(dl, { I }, s, c);
+    for i = 0, 1 do                                              -- (two stripes at the right end)
+        local sx = bx1 - 44 * s + i * 20 * s;
+        TRF.PH.q(dl, sx + K * 0.86, top + 5 * s, sx + 12 * s + K * 0.86, top + 5 * s, sx + 12 * s + K * 0.14, bot - 5 * s, sx + K * 0.14, bot - 5 * s, u32({ c[1], c[2], c[3], 0.35 + 0.25 * i }));
+    end
+    dl:AddLine({ (bx0 + bx1) / 2 - 20 * s, bot + 2.6 * s }, { (bx0 + bx1) / 2 + 50 * s, bot + 2.6 * s }, u32({ 1, 1, 1, 0.55 }), 1.5 * s);
+    N.icon(dl, ix0 + iw / 2 + K / 2, (top + bot) / 2, 15 * s, icon or 'list', s, c);
+    N.caps(dl, bx0 + K + 14 * s, bot - 10 * s - jh, t, 32 * s, 24 * s, s);
+    if jh > 0 then                                               -- (the Japanese, small, centred under the name)
+        local L = TRF.LANG;
+        local was = L.live;
+        L.live = false;
+        local pushed = TRF.PH.font(fonts.jp, 11 * s);
+        local jx = bx0 + K * 0.3 + 14 * s + nw / 2 - imgui.CalcTextSize(jp) / 2;
+        local jy = bot - 8 * s - jh;
+        dl:AddText({ jx + 1, jy + 1 }, u32({ 0, 0, 0, 1 }), jp);
+        dl:AddText({ jx, jy }, u32({ 0.92, 0.92, 0.95, 1 }), jp);
+        if pushed then imgui.PopFont(); end
+        L.live = was;
+    end
+    N.pulse(dl, B, s, c, 1, 0);
+    N.pulse(dl, I, s, c, 0.8, 1.3);
+    TRF.PH.unclip(dl);
+    return bx1 + K - x, top - e;
+end
+-- A tab's Japanese name (from lang_jp.lua, read once even in English: it goes under the title)
+function TRF.NE.jp(name)
+    local N, L = TRF.NE, TRF.LANG;
+    if N.JP[name] then return N.JP[name]; end
+    if L.D == nil and not N.triedLang then N.triedLang = true; pcall(L.load); end
+    local d = L.D and L.D.T;
+    return d and (d[name] or (L.lc and L.lc[name:lower()])) or nil;
+end
+-- The panel: an upright dark slab in a glowing double line, its bottom-right corner cut
+function TRF.NE.panel(dl, x0, y0, x1, y1, s, c, a, glow)
+    local N = TRF.NE;
+    c = c or C.acc; a = a or 1; glow = glow or 1;
+    local n = 12 * s;
+    local P = { { x0, y0 }, { x1, y0 }, { x1, y1 - n }, { x1 - n, y1 }, { x0, y1 } };
+    TRF.PH.clip(dl);
+    N.fill(dl, N.grow(P, 9 * s * glow), u32({ c[1], c[2], c[3], 0.10 * a * glow }));
+    N.fill(dl, N.grow(P, 6 * s), u32({ c[1], c[2], c[3], 0.22 * a }));
+    N.fill(dl, N.grow(P, 3 * s), u32({ math.min(1, c[1] + 0.1), math.min(1, c[2] + 0.1), math.min(1, c[3] + 0.1), a }));
+    N.fill(dl, P, u32({ C.panel[1], C.panel[2], C.panel[3], config.transparent and 0.6 or 1 }));
+    if TRF.BGI then pcall(TRF.BGI.draw, dl, x0, y0, x1 - x0, y1 - y0 - n, 0); end
+    N.outline(dl, N.grow(P, -5 * s), u32({ c[1], c[2], c[3], 0.6 * a }), 1.2 * s);
+    dl:AddLine({ x1 - (x1 - x0) * 0.25, y1 + 3 * s }, { x1 - n - 6 * s, y1 + 3 * s }, u32({ 1, 1, 1, 0.5 * a }), 1.4 * s);
+    TRF.PH.unclip(dl);
+end
+-- The header: the page's title (icon box, Japanese under it), "VenGo" and the version beside it
+function TRF.NE.header(dl, x0, y0, name)
+    local N = TRF.NE;
+    local w = N.title(dl, x0 + 18, y0 + 50, name, 0.92, nil, N.ICON[name], N.jp(name));
+    local x = x0 + w + 26;
+    local pushed = TRF.PH.font(fonts.ne or fonts.title, 26);
+    local ven = imgui.CalcTextSize('Ven');
+    local _, th = imgui.CalcTextSize('VenGo');
+    local y = y0 + 30;
+    N.text(dl, x, y, 'Ven', C.text, 1, 1.4);
+    N.text(dl, x + ven, y, 'Go', C.acc, 1, 1.4);
+    local gw = imgui.CalcTextSize('Go');
+    if pushed then imgui.PopFont(); end
+    local vs = 'v' .. tostring(addon.version or '');
+    local _, vh = imgui.CalcTextSize(vs);
+    dl:AddText({ x + ven + gw + 8, y + th - vh - 3 }, u32(C.muted), vs);
+end
+-- A menu row: leaning 0.42 of its height, a small tab in the accent before it. Picked: filled in the accent (bright
+-- left, deeper right), a honeycomb over its right end, a double chevron, a glow and bright corner brackets.
+function TRF.NE.row(dl, x0, y0, x1, y1, s, on, over, label)
+    local N = TRF.NE;
+    local c = C.acc;
+    local h = y1 - y0;
+    local K = h * 0.42;
+    local cy = (y0 + y1) / 2;
+    local w = 7 * s;
+    TRF.PH.q(dl, x0 + K, y0, x0 + K + w, y0, x0 + w, y1, x0, y1, u32({ c[1] * 0.85, c[2] * 0.85, c[3] * 0.85, 1 }));
+    TRF.PH.q(dl, x0 + K, y0, x0 + K + w, y0, x0 + K * 0.5 + w, cy, x0 + K * 0.5, cy, u32({ 1, 1, 1, 0.18 }));
+    x0 = x0 + w + 4 * s;
+    if on then
+        TRF.PH.clip(dl);
+        local P = { { x0 + K, y0 }, { x1 + K, y0 }, { x1, y1 }, { x0, y1 } };
+        local pl = 0.8 + 0.2 * math.sin(os.clock() * 4);
+        N.fill(dl, N.grow(P, 7 * s), u32({ c[1], c[2], c[3], 0.18 * pl }));
+        N.fill(dl, N.grow(P, 4 * s), u32({ c[1], c[2], c[3], 0.38 * pl }));
+        N.fill(dl, N.grow(P, 2 * s), u32({ math.min(1, c[1] + 0.25), math.min(1, c[2] + 0.25), math.min(1, c[3] + 0.25), 1 }));
+        for j = 0, 9 do
+            local u0, u1 = j / 10, (j + 1) / 10;
+            local f = 0.82 - 0.42 * (u0 + u1) / 2;
+            local xa, xb = x0 + (x1 - x0) * u0, x0 + (x1 - x0) * u1 + 0.6;
+            TRF.PH.q(dl, xa + K, y0, xb + K, y0, xb, y1, xa, y1, u32({ c[1] * f + 0.02, c[2] * f + 0.02, c[3] * f + 0.03, 1 }));
+        end
+        TRF.PH.q(dl, x0 + K, y0, x1 + K, y0, x1 + K * 0.6, y0 + h * 0.4, x0 + K * 0.6, y0 + h * 0.4, u32({ 1, 1, 1, 0.10 }));
+        TRF.PH.q(dl, x0 + K * 0.35, y0 + h * 0.65, x1 + K * 0.35, y0 + h * 0.65, x1, y1, x0, y1, u32({ 0, 0, 0, 0.22 }));
+        pcall(function ()                                         -- (the honeycomb)
+            local hx0 = x0 + (x1 - x0) * 0.55;
+            dl:PushClipRect({ hx0, y0 + 1 }, { x1 + K, y1 - 1 }, true);
+            local r = h * 0.2;
+            local dx, dy = r * 1.732, r * 1.5;
+            local rw, yy = 0, y0 - r;
+            while yy < y1 + r do
+                local xx = hx0 + ((rw % 2 == 1) and dx / 2 or 0);
+                while xx < x1 + K + dx do
+                    local fade = math.max(0, math.min(1, (xx - hx0) / ((x1 - hx0) * 0.6)));
+                    local hc = u32({ 1, 0.85, 0.85, 0.22 * fade });
+                    for k = 0, 2 do
+                        local a0, a1 = math.rad(30 + k * 60), math.rad(90 + k * 60);
+                        dl:AddLine({ xx + math.cos(a0) * r, yy + math.sin(a0) * r }, { xx + math.cos(a1) * r, yy + math.sin(a1) * r }, hc, 1 * s);
+                    end
+                    xx = xx + dx;
+                end
+                yy = yy + dy; rw = rw + 1;
+            end
+            dl:PopClipRect();
+        end);
+        dl:AddLine({ x0 + K + (x1 - x0) * 0.2, y0 - 2 * s }, { x0 + K + (x1 - x0) * 0.55, y0 - 2 * s }, u32({ 1, 1, 1, 0.65 }), 1.4 * s);
+        local bc, B = u32({ 1, 0.9, 0.9, 1 }), 9 * s;
+        dl:AddLine({ x1 + K + 5 * s - B, y0 - 5 * s }, { x1 + K + 5 * s, y0 - 5 * s }, bc, 1.6 * s);
+        dl:AddLine({ x1 + K + 5 * s, y0 - 5 * s }, { x1 + K + 5 * s, y0 - 5 * s + B }, bc, 1.6 * s);
+        dl:AddLine({ x1 + 3 * s - B, y1 + 5 * s }, { x1 + 3 * s, y1 + 5 * s }, bc, 1.6 * s);
+        dl:AddLine({ x0 - 3 * s, y1 + 5 * s }, { x0 - 3 * s + B, y1 + 5 * s }, bc, 1.6 * s);
+        local bob = math.sin(os.clock() * 5) * 1.5 * s;
+        for k = 0, 1 do
+            local vx = x1 - 18 * s + k * 7 * s + bob;
+            dl:AddLine({ vx - 4 * s, cy - 6 * s }, { vx + 2 * s, cy }, u32({ 1, 1, 1, 1 }), 2.6 * s);
+            dl:AddLine({ vx + 2 * s, cy }, { vx - 4 * s, cy + 6 * s }, u32({ 1, 1, 1, 1 }), 2.6 * s);
+        end
+        TRF.PH.unclip(dl);
+    else
+        local st = over and { 0.17, 0.17, 0.19 } or N.STRIP;
+        TRF.PH.q(dl, x0 + K, y0, x1 + K, y0, x1, y1, x0, y1, u32({ st[1], st[2], st[3], 0.96 }));
+        TRF.PH.q(dl, x0 + K, y0, x1 + K, y0, x1 + K * 0.5, cy, x0 + K * 0.5, cy, u32({ 1, 1, 1, 0.045 }));
+        TRF.PH.ql(dl, x0 + K, y0, x1 + K, y0, x1, y1, x0, y1, u32({ 0.62, 0.60, 0.62, 0.55 }), 1 * s);
+        local vx = x1 - 12 * s;
+        dl:AddLine({ vx - 3.5 * s, cy - 5 * s }, { vx + 1.5 * s, cy }, u32({ 0.85, 0.85, 0.9, 0.9 }), 2 * s);
+        dl:AddLine({ vx + 1.5 * s, cy }, { vx - 3.5 * s, cy + 5 * s }, u32({ 0.85, 0.85, 0.9, 0.9 }), 2 * s);
+    end
+    if label then
+        local pushed = TRF.PH.font(fonts.ne or fonts.title, 17 * s);
+        N.text(dl, x0 + K + 8 * s, cy - imgui.GetTextLineHeight() / 2, label, C.text, 1, 1);
+        if pushed then imgui.PopFont(); end
+    end
+end
+function TRF.NE.sideItem(dl, k, x0, y, sw, ih, on, over, label)
+    TRF.NE.row(dl, x0 - 4, y + 1, x0 + sw - 18, y + ih - 1, 1, on, over, label);
+end
+-- A button: the main big one a picked row (filled in the accent, glowing); a small main one dark in the neon line;
+-- the quiet ones a dark strip with a pale line
+function TRF.NE.button(dl, x, y, w, h, name, lw, lh, sp, quiet, small, hov, act)
+    local N = TRF.NE;
+    local c = C.acc;
+    local K = math.min(h * 0.42, 9);
+    local P = { { x + K, y }, { x + w, y }, { x + w - K, y + h }, { x, y + h } };
+    if not quiet and not small then
+        local pl = (hov or act) and (0.85 + 0.15 * math.sin(os.clock() * 5)) or 0.7;
+        N.fill(dl, N.grow(P, 5), u32({ c[1], c[2], c[3], 0.30 * pl }));
+        N.fill(dl, N.grow(P, 2), u32({ math.min(1, c[1] + 0.25), math.min(1, c[2] + 0.25), math.min(1, c[3] + 0.25), 1 }));
+        local f = act and 0.55 or 0.78;
+        N.fill(dl, P, u32({ c[1] * f + 0.02, c[2] * f + 0.02, c[3] * f + 0.03, 1 }));
+        TRF.PH.q(dl, x + K, y, x + w, y, x + w - K * 0.6, y + h * 0.42, x + K * 0.4, y + h * 0.42, u32({ 1, 1, 1, 0.12 }));
+    elseif not quiet then
+        N.fill(dl, N.grow(P, 1.6), u32({ math.min(1, c[1] + 0.15), math.min(1, c[2] + 0.15), math.min(1, c[3] + 0.15), hov and 1 or 0.8 }));
+        N.fill(dl, P, u32(act and { 0.16, 0.15, 0.18, 1 } or (hov and { 0.12, 0.11, 0.14, 1 } or { 0.06, 0.06, 0.075, 1 })));
+        if hov then N.fill(dl, N.grow(P, 4), u32({ c[1], c[2], c[3], 0.18 })); end
+    else
+        local st = act and { 0.22, 0.22, 0.25 } or (hov and { 0.16, 0.16, 0.18 } or N.STRIP);
+        N.fill(dl, P, u32({ st[1], st[2], st[3], 0.96 }));
+        TRF.PH.ql(dl, P[1][1], P[1][2], P[2][1], P[2][2], P[3][1], P[3][2], P[4][1], P[4][2], u32({ 0.62, 0.60, 0.62, hov and 0.9 or 0.55 }), 1);
+    end
+    if small then imgui.SetWindowFontScale(0.82); end
+    TRF.spaced(dl, x + (w - lw) / 2, y + (h - lh) / 2, name, u32(C.text), sp);
+    if small then imgui.SetWindowFontScale(1); end
+end
+-- The VNM alert's panel: the neon slab, its glow pulsing in the alert's colour (gold for a starred VNM)
+function TRF.NE.alertFrame(dl, x, y, w, h, gc, pulse)
+    TRF.NE.panel(dl, x, y, x + w, y + h, 1, gc, 1, 0.8 + 0.6 * pulse);
+end
+-- A section's name: a black box with a thin line in the accent, its name in serif, a fading line after it
+function TRF.NE.section(dl, x0, y0, text)
+    local N = TRF.NE;
+    local t = text:upper();
+    local pushed = TRF.PH.font(fonts.ne or fonts.title, 17);
+    local w = imgui.CalcTextSize(t);
+    local lh = imgui.GetTextLineHeight();
+    local x1, y1 = x0 + w + 30, y0 + lh + 6;
+    dl:AddRectFilled({ x0, y0 }, { x1, y1 }, u32({ 0.02, 0.02, 0.025, 1 }));
+    dl:AddRect({ x0, y0 }, { x1, y1 }, N.col(0.55), 0, 0, 1.1);
+    dl:AddRectFilled({ x0, y0 }, { x0 + 4, y1 }, N.col(0.9));
+    N.text(dl, x0 + 14, y0 + 3, t, C.text, 1, 1);
+    if pushed then imgui.PopFont(); end
+    pcall(function ()
+        dl:AddRectFilledMultiColor({ x1 + 8, y0 + (y1 - y0) / 2 }, { x0 + ROW_W, y0 + (y1 - y0) / 2 + 1.5 },
+            N.col(0.55), N.col(0), N.col(0), N.col(0.55));
+    end);
+    return y1 - y0 + 4;
 end
 
 local function pushTheme()
@@ -2943,7 +3338,7 @@ end
 
 -- The menu: dots, the chosen one lit pink fading to the right with a bright
 -- left edge and a small arrow beside it
-local GROUPS = { [9] = true, [13] = true };   -- (faint lines before the collections and before SETTINGS)
+local GROUPS = { [9] = true, [14] = true };   -- (faint lines before the collections and before SETTINGS)
 
 local function sidebar(dl, x0, y0, sw)
     local y = y0;
@@ -4447,6 +4842,281 @@ function TRF.PT.block(name, title, per)
     else
         P.cards(list, col, per);
     end
+end
+
+------------------------------------------------------------------------
+-- SPARK VENDOR: your Sparks of Eminence, what they'd buy in Acheron Shields and what those sell for, and BUY / SELL.
+-- BUY: stand by a Sparks NPC (Isakoth, Rolandienne, Fhelm Jobeizat or Eternal Flame). VenGo talks to them, keeps
+-- the menu shut, buys one shield at a time (each checked by the sparks the server says are left) and closes the menu.
+-- SELL: with an NPC shop open, each Acheron Shield in your bag is valued and sold, one at a time.
+-- (The menu's numbers are the server's own, from CatsEyeXI's source: Equipment Lv.71-98, entry 41, 2,755 sparks.)
+------------------------------------------------------------------------
+TRF.SV = { ID = 12385, COST = 2755, PRICE = 27550, OPTION = 9 + 41 * 65536,
+    NPCS = { ['isakoth'] = 26, ['rolandienne'] = 995, ['fhelm jobeizat'] = 850, ['eternal flame'] = 5081 },
+    sparks = nil, sparksAt = nil, left = nil, priceSeen = false, job = nil, status = nil, statusCol = nil, askAt = -1e9,
+    inv = { at = -1, have = 0, free = 0, gil = 0, slots = {} } };
+function TRF.SV.say(t, bad) TRF.SV.status, TRF.SV.statusCol = t, bad and { 1, 0.45, 0.45, 1 } or nil; msg(t); end
+-- A packet to the server: the header (its number and size), then the fields
+function TRF.SV.send(id, size, fields)
+    local p = {};
+    for i = 1, size do p[i] = 0; end
+    p[1], p[2] = id % 256, math.floor(size / 4) * 2 + math.floor(id / 256) % 2;
+    for _, f in ipairs(fields) do                                 -- { offset, value, bytes }
+        local v = f[2] % (2 ^ (8 * f[3]));
+        for b = 0, f[3] - 1 do p[f[1] + b + 1] = math.floor(v / (2 ^ (8 * b))) % 256; end
+    end
+    return pcall(function () AshitaCore:GetPacketManager():AddOutgoingPacket(id, p); end);
+end
+-- Your bag: Acheron Shields (and their slots), free space, gil
+function TRF.SV.scan(force)
+    local I = TRF.SV.inv;
+    if not force and os.clock() - I.at < 0.5 then return I; end
+    I.at = os.clock();
+    pcall(function ()
+        local inv = mm():GetInventory();
+        local max = inv:GetContainerCountMax(0) or 0;
+        local used, have, slots = 0, 0, {};
+        for i = 1, max do
+            local it = inv:GetContainerItem(0, i);
+            local id = it and it.Id or 0;
+            if id ~= 0 and id ~= 65535 then
+                used = used + 1;
+                if id == TRF.SV.ID then
+                    have = have + 1;
+                    if (it.Flags or 0) == 0 then slots[#slots + 1] = i; end   -- (not equipped, not in a bazaar)
+                end
+            end
+        end
+        local g = inv:GetContainerItem(0, 0);
+        I.have, I.free, I.slots, I.gil = have, math.max(0, max - used), slots, (g and g.Count) or 0;
+    end);
+    return I;
+end
+-- How many shields you could buy now: sparks, the week's limit (when the server has said it) and bag space
+function TRF.SV.canBuy()
+    local S = TRF.SV;
+    local n = math.floor((S.sparks or 0) / S.COST);
+    if S.left and S.left >= 0 and S.left < 10000000 then n = math.min(n, math.floor(S.left / S.COST)); end
+    return math.max(0, n), math.max(0, math.min(n, S.scan().free));
+end
+-- The Sparks NPC beside you: index, server id, name, distance
+function TRF.SV.npc()
+    local x, y = pos();
+    if x == nil then return nil; end
+    local best = nil;
+    pcall(function ()
+        local ent = mm():GetEntity();
+        for i = 1, 1023 do
+            local nm = ent:GetName(i);
+            if nm and nm ~= '' and TRF.SV.NPCS[nm:lower()] then
+                local ex, ey = entPos(i);
+                if ex then
+                    local d = dist2d(x, y, ex, ey);
+                    if best == nil or d < best.d then best = { idx = i, id = ent:GetServerId(i), name = nm, d = d, ev = TRF.SV.NPCS[nm:lower()] }; end
+                end
+            end
+        end
+    end);
+    return best;
+end
+-- BUY: talk to the NPC (the menu kept shut), then one shield at a time
+function TRF.SV.buy(n)
+    local S = TRF.SV;
+    if S.job then return; end
+    local np = S.npc();
+    if np == nil then S.say('No Sparks NPC here: go to Isakoth (Bastok Markets), Rolandienne (Southern San d\'Oria), Fhelm Jobeizat (Windurst Woods) or Eternal Flame (Western Adoulin).', true); return; end
+    if np.d > 5.5 then S.say(('Walk up to %s (%.0f yalms away), then press BUY.'):fmt(np.name, np.d), true); return; end
+    if n < 1 then S.say('Not enough sparks or bag space for an Acheron Shield.', true); return; end
+    S.job = { kind = 'buy', npc = np, want = n, got = 0, stage = 'talk', t = os.clock() };
+    S.status, S.statusCol = ('Talking to %s...'):fmt(np.name), nil;
+    S.send(0x1A, 0x1C, { { 0x04, np.id, 4 }, { 0x08, np.idx, 2 }, { 0x0A, 0, 2 } });
+end
+-- SELL: every Acheron Shield in the bag, one at a time (the shop values it, then VenGo says yes)
+function TRF.SV.sell()
+    local S = TRF.SV;
+    if S.job then return; end
+    local I = S.scan(true);
+    if #I.slots == 0 then S.say('No Acheron Shields in your bag to sell.', true); return; end
+    S.job = { kind = 'sell', want = #I.slots, got = 0, gil = 0, stage = 'next', t = os.clock(), first = true };
+    S.status, S.statusCol = 'Selling...', nil;
+end
+function TRF.SV.stop(text, bad)
+    local S, J = TRF.SV, TRF.SV.job;
+    if J and J.kind == 'buy' and J.ev then                        -- (close the menu the server thinks is open)
+        S.send(0x5B, 0x14, { { 0x04, J.ev.npc, 4 }, { 0x08, 0x40000000, 4 }, { 0x0C, J.ev.idx, 2 }, { 0x0E, 0, 2 }, { 0x10, J.ev.zone, 2 }, { 0x12, J.ev.event, 2 } });
+    end
+    S.job = nil;
+    S.scan(true);
+    if text then S.say(text, bad); end
+end
+-- Each frame: move the job along (and give up on a step after a few seconds)
+function TRF.SV.tick()
+    local S, J = TRF.SV, TRF.SV.job;
+    if J == nil then return; end
+    local now = os.clock();
+    if J.kind == 'buy' then
+        if J.stage == 'talk' and now - J.t > 4 then
+            S.job = nil;
+            S.say(('%s didn\'t open the Sparks menu. Talk to them once yourself (they may have something to say first), then press BUY.'):fmt(J.npc.name), true);
+        elseif J.stage == 'ready' and now - J.t > 0.25 then
+            J.stage, J.t, J.before = 'wait', now, S.sparks;
+            S.send(0x5B, 0x14, { { 0x04, J.ev.npc, 4 }, { 0x08, S.OPTION, 4 }, { 0x0C, J.ev.idx, 2 }, { 0x0E, 1, 2 }, { 0x10, J.ev.zone, 2 }, { 0x12, J.ev.event, 2 } });
+        elseif J.stage == 'wait' and now - J.t > 4 then
+            S.stop(('The server didn\'t answer. Bought %d.'):fmt(J.got), true);
+        end
+    elseif J.kind == 'sell' then
+        if J.stage == 'next' and now - J.t > 0.3 then
+            local I = S.scan(true);
+            local slot = I.slots[1];
+            if slot == nil or J.got >= J.want then
+                S.stop(('Sold %d Acheron Shield%s for %s gil.'):fmt(J.got, J.got == 1 and '' or 's', TRF.num(J.gil)));
+                return;
+            end
+            J.slot, J.stage, J.t = slot, 'value', now;
+            S.send(0x84, 0x0C, { { 0x04, 1, 4 }, { 0x08, S.ID, 2 }, { 0x0A, slot, 1 } });
+        elseif J.stage == 'value' and now - J.t > 3 then
+            S.stop(J.got == 0 and 'Open an NPC shop first (talk to any shop keeper), then press SELL.'
+                or ('The shop stopped answering. Sold %d for %s gil.'):fmt(J.got, TRF.num(J.gil)), true);
+        elseif J.stage == 'gone' then
+            local I = S.scan(true);
+            local still = false;
+            for _, s in ipairs(I.slots) do if s == J.slot then still = true; end end
+            if not still then J.got, J.gil, J.stage, J.t = J.got + 1, J.gil + (J.price or 0), 'next', now;
+            elseif now - J.t > 3 then S.stop(('A shield didn\'t sell. Sold %d for %s gil.'):fmt(J.got, TRF.num(J.gil)), true); end
+        end
+    end
+end
+-- The server's packets: sparks (0x110 on change, 0x113 when asked), the Sparks menu (0x034, its updates 0x05C),
+-- a shop's price (0x03D). Returns true to keep a packet from the game (the menu VenGo opened, its answers).
+function TRF.SV.packet(id, d)
+    local S, J = TRF.SV, TRF.SV.job;
+    local function u8(o) return d:byte(o + 1) or 0; end
+    local function u16(o) return u8(o) + u8(o + 1) * 256; end
+    local function u32_(o) return u16(o) + u16(o + 2) * 65536; end
+    local function i32(o) local v = u32_(o); if v >= 0x80000000 then v = v - 0x100000000; end return v; end
+    if id == 0x110 then S.sparks, S.sparksAt = u8(4) + u8(5) * 256 + u8(6) * 65536, os.clock();
+    elseif id == 0x113 then S.sparks, S.sparksAt = i32(0x74), os.clock();
+    elseif id == 0x034 then
+        local ev = u16(0x2C);
+        local isShop = false;
+        for _, e in pairs(S.NPCS) do if e == ev then isShop = true; end end
+        if not isShop then
+            if J and J.kind == 'buy' and J.stage == 'talk' and u32_(0x04) == J.npc.id then
+                S.job = nil;
+                S.say(('%s has something to say first: talk to them yourself, then press BUY.'):fmt(J.npc.name), true);
+            end
+            return false;
+        end
+        S.sparks, S.sparksAt = i32(0x0C), os.clock();
+        local left = i32(0x1C);
+        if left > 0 then S.left = left; end
+        if J and J.kind == 'buy' and J.stage == 'talk' and u32_(0x04) == J.npc.id then
+            J.ev = { npc = u32_(0x04), idx = u16(0x28), zone = u16(0x2A), event = ev };
+            J.stage, J.t = 'ready', os.clock();
+            S.status = ('Buying from %s...'):fmt(J.npc.name);
+            return true;                                         -- (the menu stays shut)
+        end
+    elseif id == 0x05C and J and J.kind == 'buy' and J.stage == 'wait' then
+        local sp = i32(0x04);
+        local left = i32(0x18);
+        if left > 0 then S.left = left; end
+        if J.before and sp == J.before - S.COST then
+            S.sparks, S.sparksAt = sp, os.clock();
+            J.got = J.got + 1;
+            if J.got >= J.want then S.stop(('Bought %d Acheron Shield%s for %s sparks.'):fmt(J.got, J.got == 1 and '' or 's', TRF.num(J.got * S.COST)));
+            else J.stage, J.t = 'ready', os.clock(); end
+        else
+            S.sparks = sp;
+            S.stop(J.got == 0 and 'The server didn\'t sell a shield (not enough sparks, the week\'s limit, or a full bag).'
+                or ('Bought %d; the server stopped there (sparks, the week\'s limit or bag space).'):fmt(J.got), J.got == 0);
+        end
+        return true;
+    elseif id == 0x03D and J and J.kind == 'sell' and J.stage == 'value' then
+        if u8(0x08) == J.slot then
+            local price = u32_(0x04);
+            if price > 0 then S.PRICE, S.priceSeen = price, true; end
+            J.price, J.stage, J.t = price, 'gone', os.clock();
+            S.send(0x85, 0x08, { { 0x04, 1, 2 } });
+            return true;
+        end
+    end
+    return false;
+end
+-- Ask the game server for your currencies (it answers with sparks among them) every 30 s while the tab is open
+function TRF.SV.ask(force)
+    local S = TRF.SV;
+    if not force and os.clock() - S.askAt < 30 then return; end
+    S.askAt = os.clock();
+    S.send(0x10F, 0x08, {});
+end
+TRF.svTab = function()
+    local S = TRF.SV;
+    S.ask(false);
+    local I = S.scan();
+    if S.sparks == nil then                                       -- (until the game says: the CatsEyeXI server's currency list)
+        for name, e in pairs(TRF.TV.cur or {}) do if name:lower():find('spark') then S.sparks = e.total; end end
+    end
+    local sparkN, room = S.canBuy();
+    local dl = imgui.GetWindowDrawList();
+    section('Spark vendor');
+    -- the shield: its icon, its name, what it costs and sells for
+    local x0, y0 = imgui.GetCursorScreenPos();
+    local lh = imgui.GetTextLineHeight();
+    local ic = itemIcon(S.ID);
+    TRF.card(dl, x0, y0, ROW_W, 52, nil, false, 8);
+    if ic then pcall(dl.AddImage, dl, ic.ptr, { x0 + 10, y0 + 10 }, { x0 + 42, y0 + 42 }, { 0, 0 }, { 1, 1 }, u32({ 1, 1, 1, 1 })); end
+    dl:AddText({ x0 + 54, y0 + 9 }, u32(C.text), 'Acheron Shield');
+    dl:AddText({ x0 + 54, y0 + 9 + lh + 2 }, u32(C.muted), ('%s sparks each  ·  sells for %s gil%s'):fmt(TRF.num(S.COST), TRF.num(S.PRICE), S.priceSeen and '' or ' (server price)'));
+    imgui.Dummy({ ROW_W, 58 });
+    -- the numbers
+    local cards = {
+        { label = 'Sparks', value = S.sparks or 0 },
+        { label = 'Worth in gil', value = sparkN * S.PRICE },
+        { label = 'Shields you can buy', value = sparkN },
+        { label = 'Shields in your bag', value = I.have },
+    };
+    if S.sparks == nil then cards[1].value = 0; end
+    TRF.PT.cards(cards, { 1.00, 0.80, 0.30 }, 4);
+    imgui.TextColored(C.muted, (S.sparks == nil and 'Sparks: asking the game server...  ' or '') ..
+        ('Bag space: %d free  ·  Gil: %s%s'):fmt(I.free, TRF.num(I.gil),
+            (S.left and S.left < 10000000) and ('  ·  This week\'s limit: %s sparks left'):fmt(TRF.num(S.left)) or ''));
+    if room < sparkN then imgui.TextColored(C.gold, ('Your bag has room for %d: make space to buy all %d.'):fmt(room, sparkN)); end
+    imgui.Spacing();
+    -- BUY and SELL
+    local busy = S.job ~= nil;
+    S.qty = math.max(1, math.min(S.qty or room, math.max(room, 1)));
+    if S.qtyFor ~= room then S.qty, S.qtyFor = math.max(room, 1), room; end
+    imgui.AlignTextToFramePadding();
+    imgui.TextColored(C.text, 'How many');
+    imgui.SameLine(0, 12);
+    if button('-##vengo_sv_m', { 34, 0 }, true, true) and S.qty > 1 then S.qty = S.qty - 1; end
+    imgui.SameLine(0, 8);
+    imgui.AlignTextToFramePadding();
+    imgui.TextColored(C.text, tostring(S.qty));
+    imgui.SameLine(0, 8);
+    if button('+##vengo_sv_p', { 34, 0 }, true, true) and S.qty < math.max(room, 1) then S.qty = S.qty + 1; end
+    imgui.SameLine(0, 8);
+    if button('MAX##vengo_sv_x', { 0, 0 }, true, true) then S.qty = math.max(room, 1); end
+    imgui.Spacing();
+    if busy then
+        if button('STOP##vengo_sv_s', { 160, 0 }, true) then S.stop('Stopped.'); end
+    else
+        if button(('BUY %d##vengo_sv_b'):fmt(S.qty), { 160, 0 }) then S.buy(math.min(S.qty, room)); end
+        tip(('Buys %d Acheron Shield%s (%s sparks). Stand by a Sparks NPC.'):fmt(S.qty, S.qty == 1 and '' or 's', TRF.num(S.qty * S.COST)));
+        imgui.SameLine(0, 14);
+        if button(('SELL %d##vengo_sv_l'):fmt(#I.slots), { 160, 0 }) then S.sell(); end
+        tip(('Sells the %d Acheron Shield%s in your bag for %s gil. Open an NPC shop first.'):fmt(#I.slots, #I.slots == 1 and '' or 's', TRF.num(#I.slots * S.PRICE)));
+    end
+    if S.status then
+        imgui.Spacing();
+        imgui.TextColored(S.statusCol or C.lav, S.status);
+    end
+    imgui.Spacing();
+    local np = S.npc();
+    if np then imgui.TextColored(np.d <= 5.5 and C.green or C.muted, ('%s is %.0f yalms away%s'):fmt(np.name, np.d, np.d <= 5.5 and ': ready to buy' or ': walk up to them'));
+    else hint('Sparks NPCs: Isakoth (Bastok Markets), Rolandienne (Southern San d\'Oria), Fhelm Jobeizat (Windurst Woods), Eternal Flame (Western Adoulin).'); end
+    imgui.Spacing();
+    hint('BUY: stand by a Sparks NPC and press BUY. VenGo talks to them, buys one shield at a time (checking the sparks the server says are left after each) and closes the menu. SELL: talk to any NPC shop so its window is open, then press SELL: each shield is valued by the shop, then sold.');
 end
 
 -- Your bags: which of a set of items you have, and how many (every 2 s while a tab is open)
@@ -6088,7 +6758,7 @@ function TRF.UP.notice()
     imgui.SetCursorScreenPos({ x + ROW_W - 270, y + 5 });
     if button('INSTALL##vengo_up_i', { 120, h - 10 }, false, true) then TRF.UP.installNow(); end
     imgui.SameLine(0, 8);
-    if button('WHAT\'S NEW##vengo_up_n', { 130, h - 10 }, true, true) then ui.tab = 13; end
+    if button('WHAT\'S NEW##vengo_up_n', { 130, h - 10 }, true, true) then ui.tab = 14; end
     imgui.SetCursorScreenPos({ x, y + h + 8 });
     imgui.Dummy({ ROW_W, 1 });
 end
@@ -7464,9 +8134,9 @@ local function tabSettings()
     local sx0 = imgui.GetCursorPosX();
     imgui.AlignTextToFramePadding();
     imgui.TextColored(C.text, 'Style');
-    tip('Classic: VenGo\'s own look. Phantom: red, black and white, slanted, with cut-out titles (like ChadcoreMenu\'s Phantom style).');
+    tip('Classic: VenGo\'s own look. Phantom: red, black and white, slanted, with cut-out titles (like ChadcoreMenu\'s Phantom style). Neon: ChadcoreMenu\'s Neon look: dark slabs in a glowing line, serif titles with an icon and the Japanese under them, a spark running round the title.');
     imgui.SameLine(sx0 + 130);
-    local stl = pillChoice('##vengo_style', { { 'classic', 'CLASSIC' }, { 'phantom', 'PHANTOM' } }, config.style or 'classic');
+    local stl = pillChoice('##vengo_style', { { 'classic', 'CLASSIC' }, { 'phantom', 'PHANTOM' }, { 'neon', 'NEON' } }, config.style or 'classic');
     if stl then config.style = stl; C.apply(); saveSettings(); end
     if TRF.PH.on() then                                           -- (Phantom's own picks: accent, slab, edge)
         local P = TRF.PH;
@@ -7486,6 +8156,7 @@ local function tabSettings()
             dl:AddCircle({ cx, cy }, 9, u32({ 1, 1, 1, 0.35 }), 24, 1);
         end);
         if ps then config.ph_slab = ps; C.apply(); saveSettings(); end
+        if not TRF.NE.on() then                                   -- (Neon has no white edge)
         imgui.AlignTextToFramePadding();
         imgui.TextColored(C.text, 'Edge');
         local pe = swatches('##vengo_phe_', L(P.EDGE), config.ph_edge or 'White', function (dl, cx, cy, e)
@@ -7493,6 +8164,7 @@ local function tabSettings()
             dl:AddCircle({ cx, cy }, 9, u32({ 1, 1, 1, 0.35 }), 24, 1);
         end);
         if pe then config.ph_edge = pe; C.apply(); saveSettings(); end
+        end
     else
     imgui.AlignTextToFramePadding();
     imgui.TextColored(C.text, 'Accent');
@@ -7926,8 +8598,9 @@ local function drawUI()
             elseif ui.tab == 10 then TRF.ulTab();
             elseif ui.tab == 11 then TRF.luTab();
             elseif ui.tab == 12 then TRF.cxTab();
-            elseif ui.tab == 13 then tabSettings();
-            elseif ui.tab == 14 then tabThanks();
+            elseif ui.tab == 13 then TRF.svTab();
+            elseif ui.tab == 14 then tabSettings();
+            elseif ui.tab == 15 then tabThanks();
             end
         end);
         if not ok then imgui.TextColored({ C.hp[1], C.hp[2], C.hp[3], 1 }, 'Window error: ' .. tostring(err)); end
@@ -7957,6 +8630,7 @@ end
 ashita.events.register('d3d_present', 'vengo_present', function ()
     local now = os.clock();
     pcall(TRF.LANG.frame);
+    if TRF.SV.job then pcall(TRF.SV.tick); end
     tickAlert();
     tickArm(now);
     pollBoard(now);
@@ -7990,11 +8664,13 @@ ashita.events.register('command', 'vengo_command', function (e)
             ui.open[1] = not ui.open[1];
         end
     elseif cmd == 'help' then
-        msg('Usage: /vengo (window) | <nm|zone|shorthand> (warp there) | current | next | cancel | ventures | mode ace|cw | update | reload | testalert | where | dailies | points | pad (controller) | upgrade (install a new VenGo)');
+        msg('Usage: /vengo (window) | <nm|zone|shorthand> (warp there) | current | next | cancel | ventures | mode ace|cw | update | reload | testalert | where | dailies | points | sparks | pad (controller) | upgrade (install a new VenGo)');
     elseif cmd == 'dailies' then
         ui.open[1], ui.tab = true, 7;
     elseif cmd == 'points' then
         ui.open[1], ui.tab = true, 8;
+    elseif cmd == 'sparks' then
+        ui.open[1], ui.tab = true, 13;
     elseif cmd == 'cancel' or cmd == 'stop' then
         ARMED = nil;
         msg('Cancelled.');
@@ -8071,6 +8747,11 @@ end);
 
 -- The venture board from the server
 ashita.events.register('packet_in', 'vengo_packet', function (e)
+    if e ~= nil and (e.id == 0x110 or e.id == 0x113 or e.id == 0x034 or e.id == 0x05C or e.id == 0x03D) then   -- (SPARK VENDOR)
+        local ok, keep = pcall(TRF.SV.packet, e.id, e.data_modified or e.data);
+        if ok and keep then e.blocked = true; end
+        return;
+    end
     if e ~= nil and e.id == 0x1A4 then                           -- (the CatsEyeXI server's answers: currency, Lumoria)
         pcall(TRF.TV.packet, e.data_modified or e.data);
         e.blocked = true;                                         -- (the game itself doesn't know this packet)

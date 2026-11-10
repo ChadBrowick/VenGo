@@ -68,7 +68,7 @@ Venture points (EXP, Battle) on VENTURES, Summit points on SUMMIT, Daily points 
 
 ## Colours and your own background
 
-**Style** (Settings > Colours): **Classic** is VenGo's own look; **Phantom** is red, black and white and slanted, like
+**Style** (Settings > Colours): **Classic** is VenGo's own look; **Neon** is ChadcoreMenu 3.57's Neon look: dark slabs in a glowing line of the accent, italic serif titles with an icon box and the Japanese under them, a spark running round the title, menu rows that lean with a honeycomb on the one you're on (font: TeX Gyre Termes Bold Italic, GUST Font License); **Phantom** is red, black and white and slanted, like
 ChadcoreMenu's Phantom style: the panel a black slab edged white on a red one, the page's name in cut-out letters, the
 menu as dark strips with the page you're on a white slab and a red slash, and a bold narrow font. Phantom has its own
 colour picks: accent, slab and edge. Its fonts are in `fonts` (Inter Black, SIL Open Font License; TeX Gyre Heros Cn
@@ -105,6 +105,19 @@ That adds the HVNM's level, HP, next HVNM and loot, the mobs in each venture are
 HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Settings.
 
 `ventures.lua` is only a fallback until the game or the website sends the board.
+
+## Spark vendor
+
+The **SPARK VENDOR** tab (above Settings, `/vengo sparks`) turns Sparks of Eminence into gil with Acheron Shields:
+your sparks, what they're worth in gil, how many shields you can buy (sparks, the week's limit and bag space), and how
+many you already have. Acheron Shield: 2,755 sparks, sells to NPC shops for 27,550 gil (the price the shop gives is
+shown once you've sold one).
+
+- **BUY**: stand by a Sparks NPC (Isakoth in Bastok Markets, Rolandienne in Southern San d'Oria, Fhelm Jobeizat in
+  Windurst Woods, Eternal Flame in Western Adoulin), pick how many and press BUY. VenGo talks to the NPC with the menu
+  kept shut, buys one shield at a time, checks the sparks the server says are left after each, and closes the menu.
+- **SELL**: talk to any NPC shop so its window is open, then press SELL: each shield in your bag is valued by the shop
+  and sold, one at a time. Equipped shields are left alone.
 
 ## Japanese / 日本語
 
