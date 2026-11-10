@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.67';
+addon.version = '4.68';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -5045,16 +5045,17 @@ end
 -- Ask the game server for your currencies (it answers with sparks among them) every 30 s while the tab is open
 function TRF.SV.ask(force)
     local S = TRF.SV;
-    if not force and os.clock() - S.askAt < 30 then return; end
+    if not force and os.clock() - S.askAt < (S.sparks == nil and 6 or 30) then return; end   -- (sooner until it has answered)
     S.askAt = os.clock();
-    S.send(0x10F, 0x08, {});
+    S.send(0x10F, 0x04, {});                                      -- (the Currencies window's request: just its header)
+    if S.sparks == nil then pcall(TRF.TV.askCurrency, true); end  -- (and the CatsEyeXI server's own list, in case)
 end
 TRF.svTab = function()
     local S = TRF.SV;
     S.ask(false);
     local I = S.scan();
     if S.sparks == nil then                                       -- (until the game says: the CatsEyeXI server's currency list)
-        for name, e in pairs(TRF.TV.cur or {}) do if name:lower():find('spark') then S.sparks = e.total; end end
+        for name, e in pairs(TRF.TV.cur or {}) do if name:lower():find('spark') then S.sparks, S.sparksAt = e.total, os.clock(); end end
     end
     local sparkN, room = S.canBuy();
     local dl = imgui.GetWindowDrawList();
