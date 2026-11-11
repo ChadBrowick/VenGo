@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.68';
+addon.version = '4.69';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -519,8 +519,12 @@ end
 tickAlert = function()
     if ALERT == nil then return; end
     local av = ALERT.v;
-    if (av.progress or 0) < 100 and (av.prog_at or 0) > ALERT.at then
+    if (av.progress or 0) >= 100 then ALERT.saw = true; end
+    -- (an alert from Populox's own callout only closes on a drop once the board has shown 100% during it)
+    if (av.progress or 0) < 100 and (av.prog_at or 0) > ALERT.at and (ALERT.source ~= 'chat' or ALERT.saw) then
         TRF.note(('%s is no longer at 100%% (killed or reset). Alert closed.'):fmt(av.nm or 'The VNM'));
+        TRF.flap = TRF.flap or {};
+        TRF.flap[av.key or '?'] = os.time();                      -- (no new board alert for it for 10 minutes)
         ALERT = nil;
         return;
     end
@@ -847,7 +851,8 @@ crossed = function(v, before)
     if before == nil then before = heads[v.key] and 100 or 0; end
     if now >= 100 and before < 100 then
         heads[v.key] = 100;
-        if not (ALERT and ALERT.v == v and os.time() - ALERT.at < 900) then raiseAlert(v, '(venture board)', 'board'); end
+        if not (ALERT and ALERT.v == v and os.time() - ALERT.at < 900)
+            and not (TRF.flap and TRF.flap[v.key] and os.time() - TRF.flap[v.key] < 600) then raiseAlert(v, '(venture board)', 'board'); end
     elseif now >= 90 and before < 90 and now < 100 and config.alert90 then
         TRF.note(('%s (%s) is at %d%%.'):fmt(v.nm, v.zone_name, now));
     end
@@ -876,7 +881,7 @@ applyLive = function(alerts)
             v.nm, v.grid, v.map = keepNm or v.nm, keepGrid or v.grid, keepMap or v.map;
         end
         v.progress = r.progress;
-        v.prog_at, v.prog_zone = LIVE.at or os.time(), zid;
+        v.prog_at, v.prog_zone, v.prog_game = LIVE.at or os.time(), zid, LIVE.at or os.time();
         if alerts then recordTrend(key, zid, r.progress); end
         if (r.progress or 0) < 100 and POPS[key] then POPS[key] = nil; savePops(); end
         v.live = true;
@@ -906,7 +911,7 @@ applyLive = function(alerts)
             h.loot = splitList(h.drops ~= '' and h.drops or (same and table.concat(f.loot or {}, ',') or ''));
         end
         h.progress = LIVE.hvnm.progress;
-        h.prog_at, h.prog_zone = LIVE.at or os.time(), h.zone;
+        h.prog_at, h.prog_zone, h.prog_game = LIVE.at or os.time(), h.zone, LIVE.at or os.time();
         if alerts then recordTrend('hvnm', h.zone, h.progress); end
         if (h.progress or 0) < 100 and POPS.hvnm then POPS.hvnm = nil; savePops(); end
         h.live = true;
@@ -1133,7 +1138,7 @@ applySite = function(alerts)
                 v.map = mapNo or v.map;
                 v.mobs = mobList(d);
                 v.site_zone, v.site_nm, v.site_grid, v.site_map = zid, v.nm, v.grid, v.map;
-                if (v.prog_at or 0) <= (SITE.at or 0) or v.zone ~= v.prog_zone then
+                if ((v.prog_at or 0) <= (SITE.at or 0) and (SITE.at or 0) - (v.prog_game or 0) > 900) or v.zone ~= v.prog_zone then   -- (the game's board is the live one: the website's % only when the game hasn't said for 15 minutes)
                     v.progress = tonumber(e.bossProgress) or v.progress or 0;
                     v.prog_at, v.prog_zone = SITE.at or os.time(), zid;
                 end
@@ -1165,7 +1170,7 @@ applySite = function(alerts)
             if it.name then h.lootItems[it.name] = it; end
         end
         h.drops = table.concat(h.loot or {}, ', ');
-        if (h.prog_at or 0) <= (SITE.at or 0) or h.zone ~= h.prog_zone then
+        if ((h.prog_at or 0) <= (SITE.at or 0) and (SITE.at or 0) - (h.prog_game or 0) > 900) or h.zone ~= h.prog_zone then
             h.progress = tonumber(H.progress) or h.progress or 0;
             h.prog_at, h.prog_zone = SITE.at or os.time(), zid;
         end
@@ -1207,8 +1212,16 @@ applySite = function(alerts)
     if #dyna > 0 then vdata.dynamis_rows = dyna; end
 
     -- the next reset, as a time on this PC's clock
+    -- (the website's own clock can be wrong, as after the server restart of 11 Nov 2026, 14 hours ahead: then its
+    --  reset time is read against this PC's clock; a reset that comes out already past becomes the next 15:00 UTC,
+    --  so VenGo doesn't keep asking the website, whose numbers then run over the game's)
     local nr, now = isoSeconds(V.nextReset), isoSeconds(r.currentTime);
-    if nr and now then SITE.resetAt = (SITE.at or os.time()) + (nr - now); end
+    local at = SITE.at or os.time();
+    local pc = os.time(os.date('!*t', at));
+    if nr and now and math.abs(now - pc) > 900 then now = pc; end
+    if nr and now then SITE.resetAt = at + (nr - now); end
+    if SITE.resetAt and SITE.resetAt <= at then SITE.resetAt = at + (15 * 3600 - at % 86400) % 86400; end
+    if SITE.resetAt and SITE.resetAt <= at then SITE.resetAt = at + 86400; end
 
     ventures = {};
     for _, v in ipairs(vdata.exp or {}) do ventures[#ventures + 1] = v; end
