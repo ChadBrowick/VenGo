@@ -110,14 +110,13 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 
 The **SPARK VENDOR** tab (above Settings, `/vengo sparks`) turns Sparks of Eminence into gil with Acheron Shields:
 your sparks, what they're worth in gil, how many shields you can buy (sparks, the week's limit and bag space), and how
-many you already have. Acheron Shield: 2,755 sparks, sells to NPC shops for 27,550 gil (the price the shop gives is
-shown once you've sold one).
+many you already have. Acheron Shield: 2,755 sparks, sells to NPC shops for 27,550 gil.
 
 - **BUY**: stand by a Sparks NPC (Isakoth in Bastok Markets, Rolandienne in Southern San d'Oria, Fhelm Jobeizat in
   Windurst Woods, Eternal Flame in Western Adoulin), pick how many and press BUY. VenGo talks to the NPC with the menu
   kept shut, buys one shield at a time, checks the sparks the server says are left after each, and closes the menu.
-- **SELL**: talk to any NPC shop so its window is open, then press SELL: each shield in your bag is valued by the shop
-  and sold, one at a time. Equipped shields are left alone.
+- **SELL**: sends `/sellit Acheron Shield`, so the SellIt addon sells every Acheron Shield in your bag at the next
+  NPC shop you talk to. SellIt must be loaded.
 
 ## Japanese / 日本語
 

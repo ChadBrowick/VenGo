@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.69';
+addon.version = '4.70';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -4861,7 +4861,7 @@ end
 -- SPARK VENDOR: your Sparks of Eminence, what they'd buy in Acheron Shields and what those sell for, and BUY / SELL.
 -- BUY: stand by a Sparks NPC (Isakoth, Rolandienne, Fhelm Jobeizat or Eternal Flame). VenGo talks to them, keeps
 -- the menu shut, buys one shield at a time (each checked by the sparks the server says are left) and closes the menu.
--- SELL: with an NPC shop open, each Acheron Shield in your bag is valued and sold, one at a time.
+-- SELL: sends "/sellit Acheron Shield" (the SellIt addon sells them at the next NPC shop you open).
 -- (The menu's numbers are the server's own, from CatsEyeXI's source: Equipment Lv.71-98, entry 41, 2,755 sparks.)
 ------------------------------------------------------------------------
 TRF.SV = { ID = 12385, COST = 2755, PRICE = 27550, OPTION = 9 + 41 * 65536,
@@ -4944,14 +4944,15 @@ function TRF.SV.buy(n)
     S.status, S.statusCol = ('Talking to %s...'):fmt(np.name), nil;
     S.send(0x1A, 0x1C, { { 0x04, np.id, 4 }, { 0x08, np.idx, 2 }, { 0x0A, 0, 2 } });
 end
--- SELL: every Acheron Shield in the bag, one at a time (the shop values it, then VenGo says yes)
+-- SELL: hands it to the SellIt addon ("/sellit Acheron Shield"), which sells them at the next NPC shop you open
 function TRF.SV.sell()
     local S = TRF.SV;
     if S.job then return; end
     local I = S.scan(true);
     if #I.slots == 0 then S.say('No Acheron Shields in your bag to sell.', true); return; end
-    S.job = { kind = 'sell', want = #I.slots, got = 0, gil = 0, stage = 'next', t = os.clock(), first = true };
-    S.status, S.statusCol = 'Selling...', nil;
+    local ok = pcall(function () AshitaCore:GetChatManager():QueueCommand(1, '/sellit Acheron Shield'); end);
+    if ok then S.say('Sent /sellit Acheron Shield: talk to an NPC shop and SellIt sells them.');
+    else S.say('Could not send /sellit Acheron Shield: type it yourself.', true); end
 end
 function TRF.SV.stop(text, bad)
     local S, J = TRF.SV, TRF.SV.job;
@@ -4976,26 +4977,6 @@ function TRF.SV.tick()
             S.send(0x5B, 0x14, { { 0x04, J.ev.npc, 4 }, { 0x08, S.OPTION, 4 }, { 0x0C, J.ev.idx, 2 }, { 0x0E, 1, 2 }, { 0x10, J.ev.zone, 2 }, { 0x12, J.ev.event, 2 } });
         elseif J.stage == 'wait' and now - J.t > 4 then
             S.stop(('The server didn\'t answer. Bought %d.'):fmt(J.got), true);
-        end
-    elseif J.kind == 'sell' then
-        if J.stage == 'next' and now - J.t > 0.3 then
-            local I = S.scan(true);
-            local slot = I.slots[1];
-            if slot == nil or J.got >= J.want then
-                S.stop(('Sold %d Acheron Shield%s for %s gil.'):fmt(J.got, J.got == 1 and '' or 's', TRF.num(J.gil)));
-                return;
-            end
-            J.slot, J.stage, J.t = slot, 'value', now;
-            S.send(0x84, 0x0C, { { 0x04, 1, 4 }, { 0x08, S.ID, 2 }, { 0x0A, slot, 1 } });
-        elseif J.stage == 'value' and now - J.t > 3 then
-            S.stop(J.got == 0 and 'Open an NPC shop first (talk to any shop keeper), then press SELL.'
-                or ('The shop stopped answering. Sold %d for %s gil.'):fmt(J.got, TRF.num(J.gil)), true);
-        elseif J.stage == 'gone' then
-            local I = S.scan(true);
-            local still = false;
-            for _, s in ipairs(I.slots) do if s == J.slot then still = true; end end
-            if not still then J.got, J.gil, J.stage, J.t = J.got + 1, J.gil + (J.price or 0), 'next', now;
-            elseif now - J.t > 3 then S.stop(('A shield didn\'t sell. Sold %d for %s gil.'):fmt(J.got, TRF.num(J.gil)), true); end
         end
     end
 end
@@ -5044,14 +5025,6 @@ function TRF.SV.packet(id, d)
                 or ('Bought %d; the server stopped there (sparks, the week\'s limit or bag space).'):fmt(J.got), J.got == 0);
         end
         return true;
-    elseif id == 0x03D and J and J.kind == 'sell' and J.stage == 'value' then
-        if u8(0x08) == J.slot then
-            local price = u32_(0x04);
-            if price > 0 then S.PRICE, S.priceSeen = price, true; end
-            J.price, J.stage, J.t = price, 'gone', os.clock();
-            S.send(0x85, 0x08, { { 0x04, 1, 2 } });
-            return true;
-        end
     end
     return false;
 end
@@ -5080,7 +5053,7 @@ TRF.svTab = function()
     TRF.card(dl, x0, y0, ROW_W, 52, nil, false, 8);
     if ic then pcall(dl.AddImage, dl, ic.ptr, { x0 + 10, y0 + 10 }, { x0 + 42, y0 + 42 }, { 0, 0 }, { 1, 1 }, u32({ 1, 1, 1, 1 })); end
     dl:AddText({ x0 + 54, y0 + 9 }, u32(C.text), 'Acheron Shield');
-    dl:AddText({ x0 + 54, y0 + 9 + lh + 2 }, u32(C.muted), ('%s sparks each  ·  sells for %s gil%s'):fmt(TRF.num(S.COST), TRF.num(S.PRICE), S.priceSeen and '' or ' (server price)'));
+    dl:AddText({ x0 + 54, y0 + 9 + lh + 2 }, u32(C.muted), ('%s sparks each  ·  sells for %s gil%s'):fmt(TRF.num(S.COST), TRF.num(S.PRICE), ''));
     imgui.Dummy({ ROW_W, 58 });
     -- the numbers
     local cards = {
@@ -5119,7 +5092,7 @@ TRF.svTab = function()
         tip(('Buys %d Acheron Shield%s (%s sparks). Stand by a Sparks NPC.'):fmt(S.qty, S.qty == 1 and '' or 's', TRF.num(S.qty * S.COST)));
         imgui.SameLine(0, 14);
         if button(('SELL %d##vengo_sv_l'):fmt(#I.slots), { 160, 0 }) then S.sell(); end
-        tip(('Sells the %d Acheron Shield%s in your bag for %s gil. Open an NPC shop first.'):fmt(#I.slots, #I.slots == 1 and '' or 's', TRF.num(#I.slots * S.PRICE)));
+        tip(('Sends /sellit Acheron Shield (the SellIt addon): talk to an NPC shop and it sells the %d in your bag, about %s gil.'):fmt(#I.slots, TRF.num(#I.slots * S.PRICE)));
     end
     if S.status then
         imgui.Spacing();
@@ -5130,7 +5103,7 @@ TRF.svTab = function()
     if np then imgui.TextColored(np.d <= 5.5 and C.green or C.muted, ('%s is %.0f yalms away%s'):fmt(np.name, np.d, np.d <= 5.5 and ': ready to buy' or ': walk up to them'));
     else hint('Sparks NPCs: Isakoth (Bastok Markets), Rolandienne (Southern San d\'Oria), Fhelm Jobeizat (Windurst Woods), Eternal Flame (Western Adoulin).'); end
     imgui.Spacing();
-    hint('BUY: stand by a Sparks NPC and press BUY. VenGo talks to them, buys one shield at a time (checking the sparks the server says are left after each) and closes the menu. SELL: talk to any NPC shop so its window is open, then press SELL: each shield is valued by the shop, then sold.');
+    hint('BUY: stand by a Sparks NPC and press BUY. VenGo talks to them, buys one shield at a time (checking the sparks the server says are left after each) and closes the menu. SELL: sends /sellit Acheron Shield, so the SellIt addon sells them at the next NPC shop you talk to (SellIt must be loaded).');
 end
 
 -- Your bags: which of a set of items you have, and how many (every 2 s while a tab is open)
@@ -8761,7 +8734,7 @@ end);
 
 -- The venture board from the server
 ashita.events.register('packet_in', 'vengo_packet', function (e)
-    if e ~= nil and (e.id == 0x110 or e.id == 0x113 or e.id == 0x034 or e.id == 0x05C or e.id == 0x03D) then   -- (SPARK VENDOR)
+    if e ~= nil and (e.id == 0x110 or e.id == 0x113 or e.id == 0x034 or e.id == 0x05C) then   -- (SPARK VENDOR)
         local ok, keep = pcall(TRF.SV.packet, e.id, e.data_modified or e.data);
         if ok and keep then e.blocked = true; end
         return;
