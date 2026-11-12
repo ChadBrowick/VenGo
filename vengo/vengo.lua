@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.70';
+addon.version = '4.71';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -726,6 +726,21 @@ end
 ------------------------------------------------------------------------
 -- Building the list from the live board
 ------------------------------------------------------------------------
+-- Which crest a venture zone's VNM drops (CatsEyeXI's list, pools A and B), and each crest's colour (its armour set's)
+TRF.CRESTC = { Ocean = { 0.40, 0.65, 1.00, 1 }, Forest = { 0.35, 0.85, 0.35, 1 }, Mountain = { 0.95, 0.62, 0.28, 1 }, Tundra = { 0.75, 0.58, 0.92, 1 }, Desert = { 0.92, 0.82, 0.38, 1 } };
+TRF.CRESTZ = {};
+for crest, zones in pairs({
+    Ocean = "valkurm dunes|pashhow marshlands|rolanberry fields|alzadaal undersea ruins|sea serpent grotto|vunkerl inlet [s]|toraimarai canal|rolanberry fields [s]|bibiki bay",
+    Forest = "east ronfaure [s]|west sarutabaruta [s]|jugner forest|yuhtunga jungle|yhoator jungle|the sanctuary of zi'tah|fort karugo-narugo [s]|garlaige citadel [s]|ro'maeve",
+    Mountain = "buburimu peninsula|north gustaberg [s]|meriphataud mountains|korroloka tunnel|grauberg [s]|garlaige citadel|kuftal tunnel|aydeewa subterrane|the boyahda tree",
+    Tundra = "maze of shakhrami|wajaom woodlands|qufim island|labyrinth of onzozo|misareaux coast|bostaunieux oubliette|uleguerand range|caedarva mire",
+    Desert = "batallia downs|bhaflau thickets|sauromugue champaign|eastern altepa desert|crawler's nest|western altepa desert|gustav tunnel|cape teriggan|mount zhayolm",
+}) do for zn in zones:gmatch('[^|]+') do TRF.CRESTZ[zn] = crest; end end
+-- (a zone's crest: the list's, whatever map of the zone or apostrophe the name carries)
+function TRF.crestOf(zoneName)
+    local z = tostring(zoneName or ''):lower():gsub('%s+map%s*%d+$', ''):gsub('^%s+', ''):gsub('%s+$', '');
+    return TRF.CRESTZ[z] or TRF.CRESTZ[(z:gsub('crawlers', 'crawler\'s'))];
+end
 fillFromDb = function(v, levels)
     local info = vnmInfo(v.zone_name, levels);
     v.nm = (info and info.name and info.name ~= '') and info.name or (v.nm_file or '?');
@@ -733,7 +748,7 @@ fillFromDb = function(v, levels)
     v.notes = info and info.notes or '';
     v.drops = info and info.equipment or '';
     v.element = info and info.element or '';
-    v.crest = info and info.crest or '';
+    v.crest = TRF.crestOf(v.zone_name) or (info and info.crest) or '';
     local mapNo = tostring(v.notes or ''):match('[Mm]ap%s*(%d+)');
     v.map = mapNo and tonumber(mapNo) or v.map_file;
 end
@@ -1767,7 +1782,7 @@ function C.apply()
 end
 
 local SW, ROW_W, MARGIN = 200, 760, 8;
-local FULL_ROW = 760;                                   -- width the venture rows need
+local FULL_ROW = 830;                                   -- width the venture rows need
 local WIN_W = SW + 30 + MARGIN + FULL_ROW + 50;         -- starting size; the window can be resized
 local WIN_H = 700;
 local MIN_W, MIN_H = 640, 460;
@@ -3583,6 +3598,12 @@ local function ventureRow(v, z, at, showPool)
         imgui.SameLine(x0 + at.drops);
         imgui.TextColored(C.seal, v.drops);
         vnmTip(v);
+    end
+    local crest = (v.crest and v.crest ~= '') and v.crest or TRF.crestOf(v.zone_name);
+    if crest and TRF.CRESTC[crest] then                           -- (the crest it drops, in its armour set's colour)
+        if v.drops and v.drops ~= '' then imgui.SameLine(0, 8); else imgui.SameLine(x0 + at.drops); end
+        imgui.TextColored(TRF.CRESTC[crest], crest);
+        tip(crest .. ' Crest');
     end
 end
 

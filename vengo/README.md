@@ -106,6 +106,11 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 
 `ventures.lua` is only a fallback until the game or the website sends the board.
 
+## Crests
+
+On the venture list, the crest a zone's VNM drops (Ocean, Forest, Mountain, Tundra, Desert) is shown after the armour
+piece, in its armour set's colour. The zone list is CatsEyeXI's, for pools A and B.
+
 ## Spark vendor
 
 The **SPARK VENDOR** tab (above Settings, `/vengo sparks`) turns Sparks of Eminence into gil with Acheron Shields:
