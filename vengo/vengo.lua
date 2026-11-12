@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.71';
+addon.version = '4.72';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -471,6 +471,8 @@ raiseAlert = function(v, line, source)
     ALERT = { v = v, at = now, pop_at = popAt, line = line, warned = false, source = source or 'chat' };
     if left == nil or left <= -600 then setPop(v, popAt, source or 'chat'); end
     local d = dropsOf(v);
+    local crest = (v.crest and v.crest ~= '') and v.crest or TRF.crestOf(v.zone_name);
+    if crest then d = (d ~= '' and (d .. ', ') or '') .. crest .. ' Crest'; end   -- (the crest too)
     TRF.note(('VNM ALERT: %s in %s (%s) pops in about %s.%s Press GO in VenGo.'):fmt(v.nm, v.zone_name, v.grid or '?',
         fmtLeft(popAt - now), (d ~= '') and (' Drops: ' .. d .. '.') or ''));
     local ok_, spoke = pcall(TRF.VO.say, 'incoming', v);          -- (the voice, else the chime)
@@ -3689,6 +3691,11 @@ local function tabVentures(z)
         if dropsOf(ALERT.v) ~= '' then
             imgui.SameLine(0, 14);
             imgui.TextColored(C.seal, 'Drops: ' .. dropsOf(ALERT.v));
+        end
+        local crest = (ALERT.v.crest and ALERT.v.crest ~= '') and ALERT.v.crest or TRF.crestOf(ALERT.v.zone_name);
+        if crest and TRF.CRESTC[crest] then
+            imgui.SameLine(0, 10);
+            imgui.TextColored(TRF.CRESTC[crest], crest .. ' Crest');
         end
     end
     if LASTWARP and os.time() - LASTWARP.at < 90 and LASTWARP.list[LASTWARP.i + 1] then
@@ -8387,6 +8394,11 @@ drawAlert = function()
             imgui.PushTextWrapPos(imgui.GetCursorPosX() + 360);
             imgui.TextColored(C.seal, d);
             imgui.PopTextWrapPos();
+        end
+        local crest = (v.crest and v.crest ~= '') and v.crest or TRF.crestOf(v.zone_name);
+        if crest and TRF.CRESTC[crest] then                       -- (the crest it drops, in its armour set's colour)
+            if d ~= '' then imgui.SameLine(0, 10); else imgui.TextColored(C.muted, 'Drops'); imgui.SameLine(); end
+            imgui.TextColored(TRF.CRESTC[crest], crest .. ' Crest');
         end
         local left = ALERT.pop_at - os.time();
         imgui.TextColored(left <= 60 and { C.hp[1], C.hp[2], C.hp[3], 1 } or C.active, popWords(left));
