@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.80';
+addon.version = '4.81';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -7835,6 +7835,21 @@ function TRF.GPS.orb(dl, x, y, r, c, a)
     dl:AddCircleFilled({ x, y }, r, u32({ 0.45 + c[1] * 0.55, 0.45 + c[2] * 0.55, 0.45 + c[3] * 0.55, 0.75 * a }), 16);
     dl:AddCircleFilled({ x, y }, r * 0.5, u32({ 1, 1, 1, 0.95 * a }), 12);
 end
+-- Where the running light is this frame, as yalms ahead of you. It is kept as the distance it still has to go to
+-- the VNM and moved on by the time since the last frame, so it crosses the ground at one speed however fast you
+-- walk toward it and however long the path is; past the end (by margin) it starts again from your feet.
+function TRF.GPS.run(E, key, spd, endd, margin)
+    local G = TRF.GPS;
+    G.st = G.st or {};
+    local st = G.st[key];
+    local dt = st and (E.now - st.t) or 1;
+    if st == nil or st.v ~= E.vkey or dt < 0 or dt > 0.5 then st = { rem = E.dist - 1.5, v = E.vkey }; G.st[key] = st; dt = 0; end
+    st.t = E.now;
+    st.rem = st.rem - spd * dt;
+    local d = E.dist - st.rem;
+    if d > endd + margin or d < 0 then st.rem = E.dist - 1.5; d = 1.5; end
+    return d;
+end
 -- a colour pushed toward white by b (0..1), with an alpha
 function TRF.GPS.hot(c, b, a) return { c[1] + (1 - c[1]) * b, c[2] + (1 - c[2]) * b, c[3] + (1 - c[3]) * b, a }; end
 
@@ -7845,7 +7860,7 @@ function TRF.GPS.runes(dl, E)
     local every = 7 * E.SP * math.max(0.75, E.SZ);
     local r = 1.6 * E.SZ;
     local endd = math.min(E.len, E.dist - 3.4);
-    local run = (E.now * math.max(3, E.speed) * 1.8) % (endd + 14);
+    local run = G.run(E, 'runes', math.max(3, E.speed) * 1.8, endd, 14);
     local base = math.atan2(E.uy, E.ux);
     local k = math.max(1, math.ceil((E.dist - endd) / every));
     while true do                                                -- (far to near, so the near ones are on top)
@@ -7934,7 +7949,7 @@ end
 function TRF.GPS.light(dl, E)
     local G, c = TRF.GPS, E.col;
     local endd = math.min(E.len, E.dist - 3.4);
-    local run = (E.now * math.max(3, E.speed) * 2.2) % (endd + 18);
+    local run = G.run(E, 'light', math.max(3, E.speed) * 2.2, endd, 18);
     local lightg = (tonumber(config.glow_q) or 2) < 2;
     local lx, ly, lw, ld;
     local d = 1.6;
@@ -8020,21 +8035,23 @@ function TRF.GPS.aether(dl, E)
     end
     -- the motes: one every few yalms, drifting toward the VNM, bobbing and twinkling
     local every = 6 * E.SP;
-    local drift = (E.now * math.max(1.5, E.speed) * 0.55) % every;
+    local drift = (E.now * math.max(1.5, E.speed) * 0.55) % every;   -- (counted back from the VNM, so walking doesn't speed them up)
     local first = math.floor((E.now * math.max(1.5, E.speed) * 0.55) / every);
-    local d, i = drift + 2, 0;
+    local i = math.floor((E.dist - 2 + drift) / every);          -- (the nearest one to you)
+    local d = E.dist - (i * every - drift);
+    while d < 2 do i = i - 1; d = d + every; end
     while d < endd do
-        local seed = (i - first) * 1.7;
+        local seed = (i + first) * 1.7;
         local x, y, w = G.pt(E, d, side(1, d) * 0.8, 0.35 + 0.22 * math.sin(E.now * 1.6 + seed));
         if x then
             local tw = 0.65 + 0.35 * math.sin(E.now * 3.1 + seed * 2.3);
             G.orb(dl, x, y, math.max(1.6, math.min(6, 80 / w)) * E.SZ, c, tw * (1 - (d / E.RANGE) * 0.5));
         end
         d = d + every;
-        i = i + 1;
+        i = i - 1;
     end
     -- the spirit light, and the rings swirling on the ground under it
-    local run = (E.now * math.max(3, E.speed) * 1.3) % (endd + 10);
+    local run = G.run(E, 'aether', math.max(3, E.speed) * 1.3, endd, 10);
     if run > 1 and run < endd then
         local wx, wy = E.px + E.ux * run, E.py + E.uy * run;
         local fade = 1 - (run / E.RANGE) * 0.5;
@@ -8174,7 +8191,7 @@ drawTrail = function()
         local gps = TRF.GPS.STYLES[style] and {                -- (RUNES, LIGHT, AETHER: the path this frame)
             px = px, py = py, ph = ph, ux = ux, uy = uy, nx = nx, ny = ny, dist = dist, len = len, RANGE = RANGE,
             col = col, glow = glow, SZ = SZ, SP = SP, now = now, speed = tonumber(config.trail_speed) or 5,
-            tx = tx, ty = ty, gh = gh } or nil;
+            tx = tx, ty = ty, gh = gh, vkey = v.key } or nil;
 
         if gps then
             pcall(TRF.GPS[style], dl, gps);
