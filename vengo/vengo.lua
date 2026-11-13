@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.76';
+addon.version = '4.77';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -8127,7 +8127,7 @@ local function tabSettings()
         if pick then config.logo_style = pick; saveSettings(); end
     end
     if rowSwitch('##vengo_logoclear', 'See-through logo', config.logo_clear ~= false,
-            'Nothing behind the lightning logo. Off: a dark cloud behind it, easier to read over bright ground') then
+            'Lightning: nothing behind it (off: a dark cloud behind it). Orb: its glass lets the game show through (off: solid).') then
         config.logo_clear = (config.logo_clear == false);
         saveSettings();
     end
@@ -8494,11 +8494,11 @@ drawMini = function()
     local flags = bit.bor(ImGuiWindowFlags_NoTitleBar, ImGuiWindowFlags_NoResize, ImGuiWindowFlags_NoCollapse,
         ImGuiWindowFlags_NoBackground, ImGuiWindowFlags_NoScrollbar, ImGuiWindowFlags_NoScrollWithMouse,
         ImGuiWindowFlags_NoMove);
-    local R = 34;                                     -- the orb's radius
-    local S = (R + 16) * 2;                           -- the window (room for the rings, glow and badge)
+    local sc = math.max(0.4, math.min(3, tonumber(config.logo_size) or 1));   -- (its size: Settings, or drag its corner)
+    local R = 34 * sc;                                -- the orb's radius
+    local S = math.floor((R + 16 * sc) * 2);          -- the window (room for the rings, glow and badge)
     local lg = (config.logo_style ~= 'orb') and TRF.imageTex('logo_bolt.png') or nil;         -- (the lightning logo: 9 frames, 4 a row, 512 x 340 each)
     local LW, LH = S, S;
-    local sc = math.max(0.4, math.min(3, tonumber(config.logo_size) or 1));   -- (its size: drag its corner)
     if lg then LW, LH = math.floor(200 * sc), math.floor(132 * sc); end
     if MINI.x then imgui.SetNextWindowPos({ MINI.x, MINI.y }, ImGuiCond_Always);
     else imgui.SetNextWindowPos({ 240, 160 }, ImGuiCond_FirstUseEver); end
@@ -8550,7 +8550,7 @@ drawMini = function()
         local gcol = hot and NEON2 or LILAC;
         local gpulse = hot and (0.6 + 0.4 * math.sin(t * 5)) or 1;
         for k = 1, 5 do
-            dl:AddCircle({ cx, cy }, R + 3 + k * 2, u32({ gcol[1], gcol[2], gcol[3], 0.06 * (6 - k) * gpulse }), 48, 2.5);
+            dl:AddCircle({ cx, cy }, R + (3 + k * 2) * sc, u32({ gcol[1], gcol[2], gcol[3], 0.06 * (6 - k) * gpulse }), 48, 2.5 * sc);
         end
 
         -- the two light rings, turning opposite ways, their colour drifting blue <-> violet
@@ -8559,25 +8559,25 @@ drawMini = function()
         local c2 = hot and mix(LILAC, NEON2, u) or mix(LILAC, ICE, u);
         local spin = running and 2.4 or 1.3;
         local a1 = t * spin;
-        arc(dl, cx, cy, R + 7, a1, a1 + 3.6, u32({ c1[1], c1[2], c1[3], 0.95 }), 2.2);
-        arc(dl, cx, cy, R + 7, a1 + 3.6, a1 + 3.9, u32({ c1[1], c1[2], c1[3], 0.35 }), 1.6);   -- (its fading tail)
+        arc(dl, cx, cy, R + 7 * sc, a1, a1 + 3.6, u32({ c1[1], c1[2], c1[3], 0.95 }), 2.2 * sc);
+        arc(dl, cx, cy, R + 7 * sc, a1 + 3.6, a1 + 3.9, u32({ c1[1], c1[2], c1[3], 0.35 }), 1.6 * sc);   -- (its fading tail)
         local a2 = -t * spin * 0.7 + 1.5;
-        arc(dl, cx, cy, R + 11, a2, a2 + 2.2, u32({ c2[1], c2[2], c2[3], 0.80 }), 1.6);
+        arc(dl, cx, cy, R + 11 * sc, a2, a2 + 2.2, u32({ c2[1], c2[2], c2[3], 0.80 }), 1.6 * sc);
 
         -- the orb: dark glass with a silver rim
-        dl:AddCircleFilled({ cx, cy }, R, u32({ 0.045, 0.042, 0.065, clear and 0.55 or 0.97 }), 48);
-        dl:AddCircle({ cx, cy }, R, u32({ 0.62, 0.62, 0.70, 0.95 }), 48, 3.2);
-        dl:AddCircle({ cx, cy }, R - 2.5, u32({ 0.25, 0.24, 0.32, 0.9 }), 48, 1.2);
-        arc(dl, cx, cy, R, math.pi * 1.05, math.pi * 1.55, u32({ 1, 1, 1, 0.85 }), 2.0);       -- (a highlight on the rim)
+        dl:AddCircleFilled({ cx, cy }, R, u32({ 0.045, 0.042, 0.065, (config.logo_clear ~= false) and 0.40 or 0.97 }), 48);   -- (See-through logo: the glass lets the game through)
+        dl:AddCircle({ cx, cy }, R, u32({ 0.62, 0.62, 0.70, 0.95 }), 48, 3.2 * sc);
+        dl:AddCircle({ cx, cy }, R - 2.5 * sc, u32({ 0.25, 0.24, 0.32, 0.9 }), 48, 1.2 * sc);
+        arc(dl, cx, cy, R, math.pi * 1.05, math.pi * 1.55, u32({ 1, 1, 1, 0.85 }), 2.0 * sc);       -- (a highlight on the rim)
         -- gloss: a faint light in the upper left
         dl:AddCircleFilled({ cx - R * 0.32, cy - R * 0.38 }, R * 0.42, u32({ 1, 1, 1, 0.05 }), 32);
         dl:AddCircleFilled({ cx - R * 0.38, cy - R * 0.45 }, R * 0.22, u32({ 1, 1, 1, 0.06 }), 24);
         -- a soft pink glow under the word, breathing
         local br = 0.10 + 0.08 * (0.5 + 0.5 * math.sin(t * 2));
-        dl:AddCircleFilled({ cx, cy + 2 }, R * 0.62, u32({ NEON[1], NEON[2], NEON[3], br }), 32);
+        dl:AddCircleFilled({ cx, cy + 2 * sc }, R * 0.62, u32({ NEON[1], NEON[2], NEON[3], br }), 32);
 
         -- "VenGo", sized to fit, Go shimmering
-        local pushed = pushFont(fonts.title, 24);
+        local pushed = pushFont(fonts.title, 24 * sc);
         local word = 'VenGo';
         local tw, th = imgui.CalcTextSize(word);
         local fit = math.min(1.0, (R * 1.6) / math.max(tw, 1));
@@ -8603,7 +8603,7 @@ drawMini = function()
         for _, v in ipairs(ventures) do if (v.progress or 0) >= 100 then ready = ready + 1; end end
 
         -- click / drag
-        if lg then                                                -- (its corner: drag to resize)
+        do                                                        -- (its corner: drag to resize, either icon)
             local mx, my = imgui.GetMousePos();
             local over = mx >= wx and mx <= wx + LW and my >= wy and my <= wy + LH;
             imgui.SetCursorScreenPos({ wx + LW - 20, wy + LH - 20 });
@@ -8619,16 +8619,16 @@ drawMini = function()
                 local gc = u32({ 0.75, 0.80, 1, (gact or imgui.IsItemHovered()) and 0.95 or 0.45 });
                 for k = 0, 2 do dl:AddLine({ wx + LW - 5 - k * 5, wy + LH - 3 }, { wx + LW - 3, wy + LH - 5 - k * 5 }, gc, 1.5); end
             end
-            if imgui.IsItemHovered() then imgui.SetTooltip('Drag to resize the logo'); end
+            if imgui.IsItemHovered() then imgui.SetTooltip('Drag to resize'); end
         end
-        local bw = lg and (LW / 2 - 22) or (R + 6);
+        local bw = lg and (LW / 2 - 22) or (R + 6 * sc);
         imgui.SetCursorScreenPos({ cx - bw, cy - R - 6 });
         imgui.InvisibleButton('##vengo_mini_btn', { bw * 2, (R + 6) * 2 });
         local hovered, active, released = imgui.IsItemHovered(), imgui.IsItemActive(), imgui.IsItemDeactivated();
         if hovered and lg and not MINI.wasHover then MINI.born = os.clock(); end   -- (pointing at it: it strikes again)
         MINI.wasHover = hovered;
         if hovered then
-            if not lg then dl:AddCircle({ cx, cy }, R + 1, u32({ 1, 1, 1, 0.35 }), 48, 1.5); end
+            if not lg then dl:AddCircle({ cx, cy }, R + 1, u32({ 1, 1, 1, 0.35 }), 48, 1.5 * sc); end
             local tipText = running and ('VenGo: waiting for a warp NPC for ' .. (ARMED.v.zone_name or '?')) or 'VenGo';
             if ready > 0 then tipText = tipText .. ('\n%d VNM%s at 100%%'):fmt(ready, ready == 1 and '' or 's'); end
             if ALERT then tipText = tipText .. ('\nVNM: %s, %s'):fmt(ALERT.v.nm, popWords(ALERT.pop_at - os.time()):lower()); end

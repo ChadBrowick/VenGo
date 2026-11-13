@@ -558,6 +558,8 @@ local X = {
     ['the requested items'] = '依頼されたアイテム', ['the hunt'] = 'ハント', ['the Summit'] = 'サミット',
     ['ACE'] = 'ACE', ['CW'] = 'CW', ['Vnm armor'] = 'VNM防具', ['Odious codex'] = '禁断の書', ['Special thanks'] = 'スペシャルサンクス',
     ['Language'] = '言語',
+    ['Drag to resize'] = 'ドラッグでサイズを変更',
+    ['Lightning: nothing behind it (off: a dark cloud behind it). Orb: its glass lets the game show through (off: solid).'] = 'ライトニング: 後ろに何も描きません(オフ: 後ろに暗い影)。オーブ: ガラス越しにゲームが見えます(オフ: 不透明)。',
     ['Icon'] = 'アイコン', ['LIGHTNING'] = 'ライトニング', ['ORB'] = 'オーブ',
     ['What VenGo shrinks to. Lightning: the new lightning logo. Orb: the round orb from before.'] = 'VenGoを縮小したときの表示。ライトニング: 新しい稲妻ロゴ。オーブ: 以前の丸いオーブ。',
     ['See-through logo'] = 'ロゴを透過', ['Logo size'] = 'ロゴのサイズ', ['PREVIEW'] = 'プレビュー', ['HIDE PREVIEW'] = 'プレビューを隠す',
