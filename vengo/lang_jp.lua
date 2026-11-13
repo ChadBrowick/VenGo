@@ -558,6 +558,7 @@ local X = {
     ['the requested items'] = '依頼されたアイテム', ['the hunt'] = 'ハント', ['the Summit'] = 'サミット',
     ['ACE'] = 'ACE', ['CW'] = 'CW', ['Vnm armor'] = 'VNM防具', ['Odious codex'] = '禁断の書', ['Special thanks'] = 'スペシャルサンクス',
     ['Language'] = '言語',
+    ['Drag to resize the logo'] = 'ドラッグでロゴのサイズを変更',
     ['Ocean Crest'] = 'オーシャンクレスト', ['Forest Crest'] = 'フォレストクレスト', ['Mountain Crest'] = 'マウンテンクレスト', ['Tundra Crest'] = 'ツンドラクレスト', ['Desert Crest'] = 'デザートクレスト',
     ['Sent /sellit Acheron Shield: talk to an NPC shop and SellIt sells them.'] = '/sellit Acheron Shield を送信しました。NPCショップに話しかけるとSellItが売却します。',
     ['Could not send /sellit Acheron Shield: type it yourself.'] = '/sellit Acheron Shield を送信できませんでした。自分で入力してください。',
