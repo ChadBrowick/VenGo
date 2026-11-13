@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.74';
+addon.version = '4.75';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -74,6 +74,7 @@ local config = {
     website = true,            -- update from catseyexi.com/events after each reset
     login_refresh = true,      -- type !ventures once when you log in
     logo_anim = true,          -- shine and petals on the logo
+    logo_clear = true,         -- nothing behind the shrunk logo (off: a dark cloud)
     logo_size = 1,             -- the shrunk lightning logo's size (drag its corner): 0.4 to 3
     trail = true,              -- the glowing path on the ground to the VNM
     trail_glow = true,         -- its glow
@@ -186,7 +187,7 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'logo_size', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
+    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'logo_size', 'logo_clear', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
                            'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
@@ -7694,7 +7695,7 @@ TRF.sliders = function()
 end
 
 -- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
-TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'logo_size',
+TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'logo_size', 'logo_clear',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
     'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' };
@@ -8116,6 +8117,29 @@ local function tabSettings()
         config.logo_anim = not config.logo_anim;
         saveSettings();
     end
+    if rowSwitch('##vengo_logoclear', 'See-through logo', config.logo_clear ~= false,
+            'Nothing behind the lightning logo. Off: a dark cloud behind it, easier to read over bright ground') then
+        config.logo_clear = (config.logo_clear == false);
+        saveSettings();
+    end
+    do                                                            -- (the logo's size, and a look at it without shrinking VenGo)
+        local sz = math.max(0.4, math.min(3, tonumber(config.logo_size) or 1));
+        local nsz = sz;
+        imgui.AlignTextToFramePadding();
+        imgui.TextColored(C.text, 'Logo size');
+        imgui.SameLine(0, 12);
+        if button('-##vengo_logo_m', { 34, 0 }, true, true) then nsz = sz - 0.1; end
+        imgui.SameLine(0, 8);
+        imgui.AlignTextToFramePadding();
+        imgui.TextColored(C.text, ('%d%%'):fmt(math.floor(sz * 100 + 0.5)));
+        imgui.SameLine(0, 8);
+        if button('+##vengo_logo_p', { 34, 0 }, true, true) then nsz = sz + 0.1; end
+        imgui.SameLine(0, 14);
+        if button((TRF.logoPreview and 'HIDE PREVIEW' or 'PREVIEW') .. '##vengo_logo_v', { 0, 0 }, true, true) then TRF.logoPreview = not TRF.logoPreview; end
+        tip('Shows the logo next to this window so you can see its size and background. Click the logo or this button to hide it.');
+        nsz = math.max(0.4, math.min(3, math.floor(nsz * 10 + 0.5) / 10));
+        if nsz ~= sz then config.logo_size = nsz; saveSettings(); end
+    end
     hint('Drag the bottom-right corner to resize. The  -  button at the top right shrinks VenGo to a small tag.');
 
     section('Colours');
@@ -8488,6 +8512,14 @@ drawMini = function()
             local period = (hot or running) and 3 or 9;
             local e = (t - MINI.born) % period;
             local fr = config.logo_anim and math.min(8, math.floor(e / 0.15)) or 8;
+            if config.logo_clear == false then                    -- (see-through off: a dark cloud behind it)
+                for k = 1, 4 do
+                    local q = 1 - (k - 1) * 0.2;
+                    pcall(function ()
+                        dl:AddEllipseFilled({ cx, cy }, { LW * 0.46 * q, LH * 0.36 * q }, u32({ 0.02, 0.02, 0.05, 0.20 }), 0, 40);
+                    end);
+                end
+            end
             if hot then                                           -- (an alert: a pulse of its colour round it)
                 local gp = 0.5 + 0.5 * math.sin(t * 5);
                 for k = 1, 3 do
@@ -8601,8 +8633,8 @@ drawMini = function()
         end
         if released then
             if not MINI.dragged then
-                config.minimized = false;
-                saveSettings();
+                if config.minimized then config.minimized = false; saveSettings();
+                else TRF.logoPreview = false; end                 -- (the preview: a click hides it)
             end
             MINI.dragged = false;
         end
@@ -8617,7 +8649,8 @@ end
 local function drawUI()
     if not ui.open[1] then return; end
     if config.strip then TRF.drawStrip(); return; end
-    if config.minimized then drawMini(); return; end
+    if config.minimized then TRF.logoPreview = false; drawMini(); return; end
+    if TRF.logoPreview then pcall(drawMini); end                  -- (Settings > Window > PREVIEW)
     local nc, nv = pushTheme();
     -- the resize grip in the bottom-right corner, in the panel's violet
     imgui.PushStyleColor(ImGuiCol_ResizeGrip, { NEON2[1], NEON2[2], NEON2[3], 0.25 });
