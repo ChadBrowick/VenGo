@@ -561,7 +561,7 @@ local X = {
     ['GPS'] = 'GPS', ['GPS style'] = 'GPSのスタイル', ['GPS size'] = 'GPSのサイズ', ['GPS colour'] = 'GPSの色',
     ['RUNES'] = 'ルーン', ['LIGHT'] = 'ライト', ['AETHER'] = 'エーテル',
     ['How big the GPS shapes are (Small 0.70, Medium 1.00, Large 1.40)'] = 'GPSの図形の大きさ(小 0.70、中 1.00、大 1.40)',
-    ['Space between the GPS shapes (arrows, sets of three, runes or motes)'] = 'GPSの図形の間隔(矢印、3本組、ルーン、光の粒)',
+    ['Space between the GPS shapes (arrows, runes or motes)'] = 'GPSの図形の間隔(矢印、ルーン、光の粒)',
     ['How fast the GPS moves toward the VNM (0: still, or slow for Runes, Light and Aether)'] = 'GPSがVNMへ進む速さ(0: 静止。ルーン、ライト、エーテルはゆっくり)',
     ['How far ahead of you the GPS is drawn'] = '前方のどこまでGPSを描くか',
     ['Every frame is smoothest; every 2-5 frames costs less (the GPS may lag a fast camera spin a moment)'] = '毎フレームが最も滑らか。2〜5フレームごとは負荷が軽くなります(速いカメラ回転にGPSが一瞬遅れることがあります)',

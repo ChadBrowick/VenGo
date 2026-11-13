@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.79';
+addon.version = '4.80';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -81,7 +81,7 @@ local config = {
     trail_glow = true,         -- its glow
     trail_full = true,         -- show it on its own only when the zone's VNM is at 100% (GO in the zone still shows it)
     trail_color = 'pink',      -- the chevrons' colour
-    trail_style = 'solid',     -- lines | bands | solid
+    trail_style = 'lines',     -- the GPS style: lines (arrows) | runes | light | aether
     theme = 'pink',            -- the window's accent colours (Settings > Colours)
     lite = false,              -- Lightweight mode: a quick preset for the sliders below
     star_zones = '',           -- starred venture zones
@@ -7684,7 +7684,7 @@ end
 TRF.sliders = function()
     section('GPS');
     TRF.slider('##vengo_s_scale', 'Size', 'trail_scale', 0.4, 2.5, '%.2fx', 'How big the GPS shapes are (Small 0.70, Medium 1.00, Large 1.40)');
-    TRF.slider('##vengo_s_space', 'Spacing', 'trail_spacing', 0.5, 3.0, '%.2fx', 'Space between the GPS shapes (arrows, sets of three, runes or motes)');
+    TRF.slider('##vengo_s_space', 'Spacing', 'trail_spacing', 0.5, 3.0, '%.2fx', 'Space between the GPS shapes (arrows, runes or motes)');
     TRF.slider('##vengo_s_speed', 'Speed', 'trail_speed', 0, 15, '%.1f yalms/s', 'How fast the GPS moves toward the VNM (0: still, or slow for Runes, Light and Aether)');
     TRF.slider('##vengo_s_range', 'Reach', 'trail_range', 20, 150, '%.0f yalms', 'How far ahead of you the GPS is drawn');
     section('Performance');
@@ -8163,12 +8163,12 @@ drawTrail = function()
         local len = math.min(dist, RANGE);
 
         -- the chevrons, crawling toward the VNM, in the style and size picked in Settings
-        local style = config.trail_style or 'solid';
+        local style = config.trail_style or 'lines';
+        if not TRF.GPS.STYLES[style] then style = 'lines'; end    -- (the neon bands and solid neon styles are gone: arrows)
         local SZ = tonumber(config.trail_scale) or 1.0;
         local SP = tonumber(config.trail_spacing) or 1.0;
         local mix = (config.trail_color == 'neon');
         local NEON_MIX = { { 0.25, 0.65, 1.00 }, { 1.00, 0.55, 0.20 }, { 0.68, 0.42, 1.00 }, { 0.20, 0.92, 0.85 } };
-        local SOLID_MIX = { { 1.00, 0.42, 0.18 }, { 0.15, 0.90, 0.85 }, { 0.30, 0.55, 1.00 } };   -- (orange, teal, blue)
         local nx, ny = -uy, ux;                                -- across the path
         local phase = now * (tonumber(config.trail_speed) or 5);
         local gps = TRF.GPS.STYLES[style] and {                -- (RUNES, LIGHT, AETHER: the path this frame)
@@ -8207,94 +8207,6 @@ drawTrail = function()
                 end
                 d = d + every;
                 k = k + 1;
-            end
-        else
-            -- 'bands': hollow neon bands; 'solid': filled glowing chevrons in sets of three, nested close together.
-            -- Both lean back 35 degrees from the ground, facing you.
-            local solid = (style == 'solid');
-            local A, Wd, T = 1.1 * SZ, 1.4 * SZ, (solid and 0.8 or 0.6) * SZ;
-            local TC, TS = math.cos(math.rad(35)), math.sin(math.rad(35));
-            local every = (solid and 9 * SZ or 5 * SZ) * SP;       -- (a set of three, or one)
-            local per = solid and 3 or 1;
-            local gap = 1.55 * A;                                   -- (within a set)
-            local off = phase % every;
-            local first = math.floor(phase / every);
-            local k = 0;
-            local d0 = off + 2.5;
-            local spots = {};                                       -- (drawn far to near, so the near ones are on top)
-            while d0 < len - 1 do
-                for j = 0, per - 1 do
-                    if d0 + j * gap < len - 1 then spots[#spots + 1] = { d0 + j * gap, j, k }; end
-                end
-                d0 = d0 + every;
-                k = k + 1;
-            end
-            for si = #spots, 1, -1 do
-                local d, j, k = spots[si][1], spots[si][2], spots[si][3];
-                do
-                    do
-                        local function gp(f, s_)
-                            local fo = f * TC;
-                            return project(above(px + ux * (d + fo) + nx * s_, py + uy * (d + fo) + ny * s_, ph, (f + A) * TS));
-                        end
-                        local function shape(a_, w_, t_)               -- tip, right end, (inner) right end, inner tip, (inner) left end, left end
-                            local P = {};
-                            for i, q in ipairs({ { a_, 0 }, { -a_, w_ }, { -a_ + t_, w_ }, { a_ - t_ * 1.5, 0 }, { -a_ + t_, -w_ }, { -a_, -w_ } }) do
-                                local x_, y_, w2 = gp(q[1], q[2]);
-                                if not x_ then return nil; end
-                                P[i] = { x_, y_ };
-                                if i == 1 then P.w = w2; end
-                            end
-                            return P;
-                        end
-                        local P = shape(A, Wd, T);
-                        if P then
-                            local c;
-                            if solid then c = mix and SOLID_MIX[j + 1] or col;
-                            else c = mix and NEON_MIX[((k - first) % #NEON_MIX) + 1] or col; end
-                            local fade = 1 - (d / RANGE) * 0.6;
-                            local wpx = math.max(1.2, math.min(3.5, 45 / P.w));
-                            local function quads(Q, colr)
-                                dl:AddQuadFilled(Q[1], Q[2], Q[3], Q[4], colr);
-                                dl:AddQuadFilled(Q[1], Q[4], Q[5], Q[6], colr);
-                            end
-                            if solid then
-                                -- a bright body, a lighter core, a white-hot inner edge, and the neon rim
-                                quads(P, u32({ c[1], c[2], c[3], 0.80 * fade }));
-                                local Q = shape(A - T * 0.28, Wd - T * 0.22, T * 0.45);
-                                if Q then
-                                    quads(Q, u32({ 0.55 + c[1] * 0.45, 0.55 + c[2] * 0.45, 0.55 + c[3] * 0.45, 0.55 * fade }));
-                                    local hw = u32({ 1, 1, 1, 0.55 * fade });
-                                    for i = 1, 6 do dl:AddLine(Q[i], Q[i % 6 + 1], hw, math.max(1, wpx * 0.4)); end
-                                end
-                                local cc = { 0.6 + c[1] * 0.4, 0.6 + c[2] * 0.4, 0.6 + c[3] * 0.4, 0.95 * fade };
-                                for i = 1, 6 do glowLine(dl, P[i], P[i % 6 + 1], cc, wpx * 0.8, false); end
-                                if glow then
-                                    local lightg = (tonumber(config.glow_q) or 2) < 2;
-                                    local g1 = u32({ c[1], c[2], c[3], (lightg and 0.16 or 0.10) * fade });
-                                    local g2 = u32({ c[1], c[2], c[3], 0.20 * fade });
-                                    for i = 1, 6 do
-                                        dl:AddLine(P[i], P[i % 6 + 1], g1, wpx * (lightg and 3.6 or 5));
-                                        if not lightg then dl:AddLine(P[i], P[i % 6 + 1], g2, wpx * 2.6); end
-                                    end
-                                end
-                            else
-                                quads(P, u32({ c[1] * 0.6, c[2] * 0.6, c[3] * 0.6, 0.55 * fade }));
-                                if glow then quads(P, u32({ c[1], c[2], c[3], 0.10 * fade })); end
-                                local cc = { c[1], c[2], c[3], 0.95 * fade };
-                                for i = 1, 6 do glowLine(dl, P[i], P[i % 6 + 1], cc, wpx, glow); end
-                                local m1 = { gp(A - T * 0.8, 0) };
-                                local m2 = { gp(-A + T * 0.5, Wd - T * 0.5) };
-                                local m3 = { gp(-A + T * 0.5, -Wd + T * 0.5) };
-                                if m1[1] and m2[1] and m3[1] then
-                                    local wc = u32({ 0.5 + c[1] * 0.5, 0.5 + c[2] * 0.5, 0.5 + c[3] * 0.5, 0.55 * fade });
-                                    dl:AddLine({ m2[1], m2[2] }, { m1[1], m1[2] }, wc, math.max(1, wpx * 0.45));
-                                    dl:AddLine({ m3[1], m3[2] }, { m1[1], m1[2] }, wc, math.max(1, wpx * 0.45));
-                                end
-                            end
-                        end
-                    end
-                end
             end
         end
 
@@ -8356,12 +8268,9 @@ trailSettings = function()
     imgui.AlignTextToFramePadding();
     imgui.TextColored(C.text, 'GPS style');
     imgui.SameLine(ROW_W - 400);
-    local stl = pillChoice('##vengo_tstyle', { { 'lines', 'LINES' }, { 'bands', 'NEON BANDS' }, { 'solid', 'SOLID NEON' } }, config.trail_style or 'solid');
+    local stl = pillChoice('##vengo_tstyle', { { 'lines', 'LINES' }, { 'runes', 'RUNES' }, { 'light', 'LIGHT' }, { 'aether', 'AETHER' } },
+        TRF.GPS.STYLES[config.trail_style or ''] and config.trail_style or 'lines');
     if stl then config.trail_style = stl; saveSettings(); end
-    imgui.Dummy({ 1, 1 });                                    -- (a second row: the three drawn on the ground)
-    imgui.SameLine(ROW_W - 400);
-    local stl2 = pillChoice('##vengo_tstyle2', { { 'runes', 'RUNES' }, { 'light', 'LIGHT' }, { 'aether', 'AETHER' } }, config.trail_style or 'solid');
-    if stl2 then config.trail_style = stl2; saveSettings(); end
     imgui.AlignTextToFramePadding();
     imgui.TextColored(C.text, 'GPS size');
     imgui.SameLine(ROW_W - 400);
