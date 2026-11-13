@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.77';
+addon.version = '4.78';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -8549,6 +8549,7 @@ drawMini = function()
         -- soft glow around it (stronger and pinker during an alert)
         local gcol = hot and NEON2 or LILAC;
         local gpulse = hot and (0.6 + 0.4 * math.sin(t * 5)) or 1;
+        if not config.logo_anim then t = 0.6; end                 -- ("Animate the logo" off: the rings, colours and shimmer hold still; an alert still pulses)
         for k = 1, 5 do
             dl:AddCircle({ cx, cy }, R + (3 + k * 2) * sc, u32({ gcol[1], gcol[2], gcol[3], 0.06 * (6 - k) * gpulse }), 48, 2.5 * sc);
         end
