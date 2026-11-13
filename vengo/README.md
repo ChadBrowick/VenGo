@@ -111,7 +111,7 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 Shrunk (the round button at the top right), VenGo is its lightning logo: bolts gather into "VenGo", which then holds
 and strikes again every 9 seconds (every 3 while warping or during an alert, with a glow), or when you point at it.
 Click it to open VenGo, drag it to move it, drag its bottom-right corner to resize it (nothing is drawn behind it). "Animate the logo" in Settings off: it stays still.
-Settings > Window also has **See-through logo** (off: a dark cloud behind it), **Logo size** with - and +, and
+Settings > Window also has **Icon** (LIGHTNING, or ORB for the round orb from before), **See-through logo** (off: a dark cloud behind it), **Logo size** with - and +, and
 **PREVIEW**, which shows the logo beside the open window.
 
 ## Crests

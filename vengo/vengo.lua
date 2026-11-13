@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.75';
+addon.version = '4.76';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -75,6 +75,7 @@ local config = {
     login_refresh = true,      -- type !ventures once when you log in
     logo_anim = true,          -- shine and petals on the logo
     logo_clear = true,         -- nothing behind the shrunk logo (off: a dark cloud)
+    logo_style = 'bolt',       -- what VenGo shrinks to: bolt (the lightning logo) | orb (the round orb)
     logo_size = 1,             -- the shrunk lightning logo's size (drag its corner): 0.4 to 3
     trail = true,              -- the glowing path on the ground to the VNM
     trail_glow = true,         -- its glow
@@ -187,7 +188,7 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'logo_size', 'logo_clear', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
+    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'logo_style', 'logo_size', 'logo_clear', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
                            'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
@@ -7695,7 +7696,7 @@ TRF.sliders = function()
 end
 
 -- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
-TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'logo_size', 'logo_clear',
+TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'logo_style', 'logo_size', 'logo_clear',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
     'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' };
@@ -8117,6 +8118,14 @@ local function tabSettings()
         config.logo_anim = not config.logo_anim;
         saveSettings();
     end
+    do                                                            -- (which icon VenGo shrinks to)
+        imgui.AlignTextToFramePadding();
+        imgui.TextColored(C.text, 'Icon');
+        tip('What VenGo shrinks to. Lightning: the new lightning logo. Orb: the round orb from before.');
+        imgui.SameLine(0, 12);
+        local pick = pillChoice('##vengo_logo_style', { { 'bolt', 'LIGHTNING' }, { 'orb', 'ORB' } }, config.logo_style == 'orb' and 'orb' or 'bolt');
+        if pick then config.logo_style = pick; saveSettings(); end
+    end
     if rowSwitch('##vengo_logoclear', 'See-through logo', config.logo_clear ~= false,
             'Nothing behind the lightning logo. Off: a dark cloud behind it, easier to read over bright ground') then
         config.logo_clear = (config.logo_clear == false);
@@ -8487,7 +8496,7 @@ drawMini = function()
         ImGuiWindowFlags_NoMove);
     local R = 34;                                     -- the orb's radius
     local S = (R + 16) * 2;                           -- the window (room for the rings, glow and badge)
-    local lg = TRF.imageTex('logo_bolt.png');         -- (the lightning logo: 9 frames, 4 a row, 512 x 340 each)
+    local lg = (config.logo_style ~= 'orb') and TRF.imageTex('logo_bolt.png') or nil;         -- (the lightning logo: 9 frames, 4 a row, 512 x 340 each)
     local LW, LH = S, S;
     local sc = math.max(0.4, math.min(3, tonumber(config.logo_size) or 1));   -- (its size: drag its corner)
     if lg then LW, LH = math.floor(200 * sc), math.floor(132 * sc); end
