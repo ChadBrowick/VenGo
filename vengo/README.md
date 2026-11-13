@@ -116,7 +116,8 @@ LINES (arrows), and three drawn on the ground itself:
 - **AETHER**: faint wisps weaving along the ground, motes of light drifting on, and a spirit light running the path.
 
 These three end in their own marker: rings on the ground, beams of light and two chevrons pointing down at the spot.
-GPS colour, size, spacing, speed, reach and glow apply to all four.
+GPS colour, size, spacing, speed, reach and glow apply to all four. **Pulse speed** (Settings > GPS) sets how fast the
+running light of Runes, Light and Aether crosses the ground, from 1 to 40 yalms a second.
 
 ## The logo
 

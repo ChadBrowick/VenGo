@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.81';
+addon.version = '4.82';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -97,6 +97,7 @@ local config = {
     trail_scale = 1.0,         -- arrow size
     trail_spacing = 1.0,       -- space between arrows
     trail_speed = 5,           -- how fast they crawl (yalms a second)
+    pulse_speed = 9,           -- how fast the running light of Runes, Light and Aether crosses the ground (yalms a second)
     glow_q = 2,                -- glow passes (1 lighter, 2 fuller)
     bg = 'violet',             -- the window's background
     style = 'classic',         -- classic | phantom (red, black and white, slanted) | neon (ChadcoreMenu's Neon)
@@ -189,7 +190,7 @@ local function saveSettings()
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
     for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'logo_style', 'logo_size', 'logo_clear', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
-                           'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
+                           'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
                            'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
         f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v)));
@@ -7685,7 +7686,8 @@ TRF.sliders = function()
     section('GPS');
     TRF.slider('##vengo_s_scale', 'Size', 'trail_scale', 0.4, 2.5, '%.2fx', 'How big the GPS shapes are (Small 0.70, Medium 1.00, Large 1.40)');
     TRF.slider('##vengo_s_space', 'Spacing', 'trail_spacing', 0.5, 3.0, '%.2fx', 'Space between the GPS shapes (arrows, runes or motes)');
-    TRF.slider('##vengo_s_speed', 'Speed', 'trail_speed', 0, 15, '%.1f yalms/s', 'How fast the GPS moves toward the VNM (0: still, or slow for Runes, Light and Aether)');
+    TRF.slider('##vengo_s_speed', 'Speed', 'trail_speed', 0, 15, '%.1f yalms/s', 'How fast the arrows (LINES) and Aether\'s small lights move toward the VNM (0: still)');
+    TRF.slider('##vengo_s_pulse', 'Pulse speed', 'pulse_speed', 1, 40, '%.0f yalms/s', 'How fast the running light of Runes, Light and Aether crosses the ground');
     TRF.slider('##vengo_s_range', 'Reach', 'trail_range', 20, 150, '%.0f yalms', 'How far ahead of you the GPS is drawn');
     section('Performance');
     TRF.slider('##vengo_s_seal', 'Venture Seal: check its spot', 'seal_check', 0.05, 2.0, 'every %.2f s', 'How often the Seal\'s own slot is looked at, once it\'s been found');
@@ -7698,7 +7700,7 @@ end
 -- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
 TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'logo_style', 'logo_size', 'logo_clear',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
-    'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'glow_q',
+    'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
     'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' };
 function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
 function TRF.loadPresets()
@@ -7860,7 +7862,7 @@ function TRF.GPS.runes(dl, E)
     local every = 7 * E.SP * math.max(0.75, E.SZ);
     local r = 1.6 * E.SZ;
     local endd = math.min(E.len, E.dist - 3.4);
-    local run = G.run(E, 'runes', math.max(3, E.speed) * 1.8, endd, 14);
+    local run = G.run(E, 'runes', E.pulse, endd, 14);
     local base = math.atan2(E.uy, E.ux);
     local k = math.max(1, math.ceil((E.dist - endd) / every));
     while true do                                                -- (far to near, so the near ones are on top)
@@ -7949,7 +7951,7 @@ end
 function TRF.GPS.light(dl, E)
     local G, c = TRF.GPS, E.col;
     local endd = math.min(E.len, E.dist - 3.4);
-    local run = G.run(E, 'light', math.max(3, E.speed) * 2.2, endd, 18);
+    local run = G.run(E, 'light', E.pulse, endd, 18);
     local lightg = (tonumber(config.glow_q) or 2) < 2;
     local lx, ly, lw, ld;
     local d = 1.6;
@@ -8051,7 +8053,7 @@ function TRF.GPS.aether(dl, E)
         i = i - 1;
     end
     -- the spirit light, and the rings swirling on the ground under it
-    local run = G.run(E, 'aether', math.max(3, E.speed) * 1.3, endd, 10);
+    local run = G.run(E, 'aether', E.pulse, endd, 10);
     if run > 1 and run < endd then
         local wx, wy = E.px + E.ux * run, E.py + E.uy * run;
         local fade = 1 - (run / E.RANGE) * 0.5;
@@ -8190,7 +8192,7 @@ drawTrail = function()
         local phase = now * (tonumber(config.trail_speed) or 5);
         local gps = TRF.GPS.STYLES[style] and {                -- (RUNES, LIGHT, AETHER: the path this frame)
             px = px, py = py, ph = ph, ux = ux, uy = uy, nx = nx, ny = ny, dist = dist, len = len, RANGE = RANGE,
-            col = col, glow = glow, SZ = SZ, SP = SP, now = now, speed = tonumber(config.trail_speed) or 5,
+            col = col, glow = glow, SZ = SZ, SP = SP, now = now, speed = tonumber(config.trail_speed) or 5, pulse = math.max(0.5, tonumber(config.pulse_speed) or 9),
             tx = tx, ty = ty, gh = gh, vkey = v.key } or nil;
 
         if gps then
