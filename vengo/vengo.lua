@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.72';
+addon.version = '4.73';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -8462,18 +8462,54 @@ drawMini = function()
         ImGuiWindowFlags_NoMove);
     local R = 34;                                     -- the orb's radius
     local S = (R + 16) * 2;                           -- the window (room for the rings, glow and badge)
+    local lg = TRF.imageTex('logo_bolt.png');         -- (the lightning logo: 9 frames, 4 a row, 256 x 170 each)
+    local LW, LH = S, S;
+    if lg then LW, LH = 200, 132; end
     if MINI.x then imgui.SetNextWindowPos({ MINI.x, MINI.y }, ImGuiCond_Always);
     else imgui.SetNextWindowPos({ 240, 160 }, ImGuiCond_FirstUseEver); end
-    imgui.SetNextWindowSize({ S, S }, ImGuiCond_Always);
+    imgui.SetNextWindowSize({ LW, LH }, ImGuiCond_Always);
     if imgui.Begin('VenGo##vengo_mini', { true }, flags) then
         local dl = imgui.GetWindowDrawList();
         local wx, wy = imgui.GetWindowPos();
         MINI.x, MINI.y = wx, wy;
-        local cx, cy = wx + S / 2, wy + S / 2;
+        local cx, cy = wx + LW / 2, wy + LH / 2;
         local t = os.clock();
         local clear = config.transparent;
         local running = ARMED ~= nil;
         local hot = ALERT ~= nil;
+
+        if lg then
+            -- THE LIGHTNING LOGO: bolts gather into "VenGo" (9 frames, 0.15 s each), which then holds, breathing,
+            -- and strikes again every 9 s (every 3 s while warping or during an alert, with a glow in its colour)
+            if MINI.born == nil or t - (MINI.seen or 0) > 0.5 then MINI.born = t; end   -- (just shrunk to it: it strikes)
+            MINI.seen = t;
+            local period = (hot or running) and 3 or 9;
+            local e = (t - MINI.born) % period;
+            local fr = config.logo_anim and math.min(8, math.floor(e / 0.15)) or 8;
+            if not clear then                                     -- (a dark cloud behind it, so it reads over the game)
+                for k = 1, 4 do
+                    local q = 1 - (k - 1) * 0.2;
+                    pcall(function ()
+                        dl:AddEllipseFilled({ cx, cy }, { LW * 0.46 * q, LH * 0.36 * q }, u32({ 0.02, 0.02, 0.05, 0.16 }), 0, 40);
+                    end);
+                end
+            end
+            if hot then                                           -- (an alert: a pulse of its colour round it)
+                local gp = 0.5 + 0.5 * math.sin(t * 5);
+                for k = 1, 3 do
+                    pcall(function ()
+                        dl:AddEllipse({ cx, cy }, { LW * 0.44 + k * 2, LH * 0.34 + k * 2 }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.14 * (4 - k) * gp }), 0, 40, 2.5);
+                    end);
+                end
+            end
+            local col, row = fr % 4, math.floor(fr / 4);
+            local u0, v0 = (col * 256 + 1) / 1024, (row * 170 + 1) / 512;
+            local u1, v1 = (col * 256 + 255) / 1024, (row * 170 + 169) / 512;
+            local w, h = LW - 8, (LW - 8) * 168 / 254;
+            local breathe = (fr == 8 and config.logo_anim) and (0.90 + 0.10 * math.sin(t * 2.2)) or 1;
+            pcall(dl.AddImage, dl, lg.ptr, { cx - w / 2, cy - h / 2 }, { cx + w / 2, cy + h / 2 }, { u0, v0 }, { u1, v1 }, u32({ 1, 1, 1, breathe }));
+            R = LH / 2 - 12;                                      -- (the place to click)
+        else
 
         -- soft glow around it (stronger and pinker during an alert)
         local gcol = hot and NEON2 or LILAC;
@@ -8526,16 +8562,20 @@ drawMini = function()
         end
         imgui.SetWindowFontScale(1);
         if pushed then imgui.PopFont(); end
+        end
 
         local ready = 0;                              -- (how many VNMs are at 100%, for the tooltip)
         for _, v in ipairs(ventures) do if (v.progress or 0) >= 100 then ready = ready + 1; end end
 
         -- click / drag
-        imgui.SetCursorScreenPos({ cx - R - 6, cy - R - 6 });
-        imgui.InvisibleButton('##vengo_mini_btn', { (R + 6) * 2, (R + 6) * 2 });
+        local bw = lg and (LW / 2 - 14) or (R + 6);
+        imgui.SetCursorScreenPos({ cx - bw, cy - R - 6 });
+        imgui.InvisibleButton('##vengo_mini_btn', { bw * 2, (R + 6) * 2 });
         local hovered, active, released = imgui.IsItemHovered(), imgui.IsItemActive(), imgui.IsItemDeactivated();
+        if hovered and lg and not MINI.wasHover then MINI.born = os.clock(); end   -- (pointing at it: it strikes again)
+        MINI.wasHover = hovered;
         if hovered then
-            dl:AddCircle({ cx, cy }, R + 1, u32({ 1, 1, 1, 0.35 }), 48, 1.5);
+            if not lg then dl:AddCircle({ cx, cy }, R + 1, u32({ 1, 1, 1, 0.35 }), 48, 1.5); end
             local tipText = running and ('VenGo: waiting for a warp NPC for ' .. (ARMED.v.zone_name or '?')) or 'VenGo';
             if ready > 0 then tipText = tipText .. ('\n%d VNM%s at 100%%'):fmt(ready, ready == 1 and '' or 's'); end
             if ALERT then tipText = tipText .. ('\nVNM: %s, %s'):fmt(ALERT.v.nm, popWords(ALERT.pop_at - os.time()):lower()); end

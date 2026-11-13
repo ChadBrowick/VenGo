@@ -106,6 +106,12 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 
 `ventures.lua` is only a fallback until the game or the website sends the board.
 
+## The logo
+
+Shrunk (the round button at the top right), VenGo is its lightning logo: bolts gather into "VenGo", which then holds
+and strikes again every 9 seconds (every 3 while warping or during an alert, with a glow), or when you point at it.
+Click it to open VenGo, drag it to move it. "Animate the logo" in Settings off: it stays still.
+
 ## Crests
 
 On the venture list, the crest a zone's VNM drops (Ocean, Forest, Mountain, Tundra, Desert) is shown after the armour
