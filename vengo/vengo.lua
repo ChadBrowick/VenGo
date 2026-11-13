@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.78';
+addon.version = '4.79';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -3678,7 +3678,7 @@ local function tabVentures(z)
         imgui.TextColored(C.acc, ARMED.v.nm or '?');
         imgui.TextColored(C.text, ARMED.v.zone_name or '?');
     elseif pick and zone() == pick.zone then
-        imgui.TextColored(C.muted, TRF.trailShowing(pick) and 'STOP hides the arrows to' or 'GO shows the arrows to');
+        imgui.TextColored(C.muted, TRF.trailShowing(pick) and 'STOP hides the GPS to' or 'GO shows the GPS to');
         imgui.TextColored(C.acc, pick.nm or '?');
         imgui.TextColored(C.text, ('%s  (%s)  %s'):fmt(pick.zone_name or '?', pick.grid or '?', pctText(pick.progress)));
     elseif pick then
@@ -7682,15 +7682,15 @@ function TRF.BGI.settings()
 end
 
 TRF.sliders = function()
-    section('Arrows');
-    TRF.slider('##vengo_s_scale', 'Size', 'trail_scale', 0.4, 2.5, '%.2fx', 'How big each arrow is (Small 0.70, Medium 1.00, Large 1.40)');
-    TRF.slider('##vengo_s_space', 'Spacing', 'trail_spacing', 0.5, 3.0, '%.2fx', 'Space between arrows (or sets of three)');
-    TRF.slider('##vengo_s_speed', 'Speed', 'trail_speed', 0, 15, '%.1f yalms/s', 'How fast the arrows crawl toward the VNM (0: still)');
-    TRF.slider('##vengo_s_range', 'Reach', 'trail_range', 20, 150, '%.0f yalms', 'How far ahead of you arrows are drawn');
+    section('GPS');
+    TRF.slider('##vengo_s_scale', 'Size', 'trail_scale', 0.4, 2.5, '%.2fx', 'How big the GPS shapes are (Small 0.70, Medium 1.00, Large 1.40)');
+    TRF.slider('##vengo_s_space', 'Spacing', 'trail_spacing', 0.5, 3.0, '%.2fx', 'Space between the GPS shapes (arrows, sets of three, runes or motes)');
+    TRF.slider('##vengo_s_speed', 'Speed', 'trail_speed', 0, 15, '%.1f yalms/s', 'How fast the GPS moves toward the VNM (0: still, or slow for Runes, Light and Aether)');
+    TRF.slider('##vengo_s_range', 'Reach', 'trail_range', 20, 150, '%.0f yalms', 'How far ahead of you the GPS is drawn');
     section('Performance');
     TRF.slider('##vengo_s_seal', 'Venture Seal: check its spot', 'seal_check', 0.05, 2.0, 'every %.2f s', 'How often the Seal\'s own slot is looked at, once it\'s been found');
     TRF.slider('##vengo_s_scan', 'Venture Seal: search for it', 'seal_scan', 0.1, 5.0, 'every %.2f s', 'How often the whole list is searched while the Seal hasn\'t been found yet (2,300 slots)');
-    TRF.slider('##vengo_s_cam', 'Camera: read it', 'cam_every', 1, 5, 'every %d frame(s)', 'Every frame is smoothest; every 2-5 frames costs less (the arrows may lag a fast camera spin a moment)', true);
+    TRF.slider('##vengo_s_cam', 'Camera: read it', 'cam_every', 1, 5, 'every %d frame(s)', 'Every frame is smoothest; every 2-5 frames costs less (the GPS may lag a fast camera spin a moment)', true);
     TRF.slider('##vengo_s_glow', 'Glow passes', 'glow_q', 1, 2, '%d', '1: one soft pass (lighter)   2: fuller glow', true);
     hint('Lower numbers for the Seal and camera are faster and smoother but cost a little more. Lightweight mode (under Window) sets these in one click.');
 end
@@ -7753,7 +7753,7 @@ TRF.presets = function()
             button(('LOAD##vengo_pl%d'):format(i), { 120, 0 }, true, true);
         end
     end
-    hint('SAVE keeps every setting (colours, arrows, performance, alerts, window) in that slot; LOAD puts them all back.');
+    hint('SAVE keeps every setting (colours, GPS, performance, alerts, window) in that slot; LOAD puts them all back.');
 end
 
 -- Are the arrows up for this venture right now?
@@ -7765,13 +7765,13 @@ end
 TRF.trailGo = function(v)
     if TRF.trailShowing(v) then
         TRAIL.stopped, TRAIL.forced = v.key, nil;
-        msg(('Arrows to %s off. Press GO to show them again.'):fmt(v.nm or 'the VNM'));
+        msg(('GPS to %s off. Press GO to show it again.'):fmt(v.nm or 'the VNM'));
     else
         TRAIL.stopped, TRAIL.pick, TRAIL.zone_ = nil, v, zone();
         TRAIL.manual = v.key;                                     -- (shown even below 100%)
         if not config.trail then TRAIL.forced = v.key; end
         TRAIL.v = v;                                          -- (the button turns to STOP at once)
-        msg(('Arrows on: follow them to %s (%s).'):fmt(v.nm or 'the VNM', v.grid or '?'));
+        msg(('GPS on: follow it to %s (%s).'):fmt(v.nm or 'the VNM', v.grid or '?'));
     end
     return true;
 end
@@ -7800,6 +7800,324 @@ local function glowLine(dl, a, b, col, w, glow)
         dl:AddLine(a, b, u32({ col[1], col[2], col[3], col[4] * 0.22 }), w * 1.9);
     end
     dl:AddLine(a, b, u32(col), w);
+end
+
+------------------------------------------------------------------------
+-- GPS styles drawn on the ground (Settings > Trail to the VNM > GPS style): RUNES (rune circles joined by a line,
+-- a brightness running out along them), LIGHT (one bright line from an orb at your feet) and AETHER (wisps, drifting
+-- motes and a spirit light running the path). All three end in the same marker: rings on the ground, beams of
+-- light rising from them and two chevrons pointing down at the spot. E: the path this frame (see drawTrail).
+------------------------------------------------------------------------
+TRF.GPS = { STYLES = { runes = true, light = true, aether = true } };
+-- a point of the path: d along it, s across it, up above the ground -> screen x, y, depth
+function TRF.GPS.pt(E, d, s, up)
+    local x, y = E.px + E.ux * d + E.nx * (s or 0), E.py + E.uy * d + E.ny * (s or 0);
+    if up and up ~= 0 then return project(above(x, y, E.ph, up)); end
+    return project(toD3D(x, y, E.ph));
+end
+-- a circle lying on the ground, as screen points (nil if any of it is behind the camera)
+function TRF.GPS.ring(wx, wy, h, r, segs, rot)
+    local P = {};
+    for i = 0, segs - 1 do
+        local a = (rot or 0) + i / segs * math.pi * 2;
+        local x, y = project(toD3D(wx + math.cos(a) * r, wy + math.sin(a) * r, h));
+        if not x then return nil; end
+        P[i + 1] = { x, y };
+    end
+    return P;
+end
+function TRF.GPS.loop(dl, P, col, th) for i = 1, #P do dl:AddLine(P[i], P[i % #P + 1], col, th); end end
+function TRF.GPS.fan(dl, c, P, col) for i = 1, #P do dl:AddTriangleFilled(c, P[i], P[i % #P + 1], col); end end
+-- a soft ball of light on the screen: its colour fading out, a white heart
+function TRF.GPS.orb(dl, x, y, r, c, a)
+    dl:AddCircleFilled({ x, y }, r * 2.6, u32({ c[1], c[2], c[3], 0.07 * a }), 20);
+    dl:AddCircleFilled({ x, y }, r * 1.7, u32({ c[1], c[2], c[3], 0.16 * a }), 18);
+    dl:AddCircleFilled({ x, y }, r, u32({ 0.45 + c[1] * 0.55, 0.45 + c[2] * 0.55, 0.45 + c[3] * 0.55, 0.75 * a }), 16);
+    dl:AddCircleFilled({ x, y }, r * 0.5, u32({ 1, 1, 1, 0.95 * a }), 12);
+end
+-- a colour pushed toward white by b (0..1), with an alpha
+function TRF.GPS.hot(c, b, a) return { c[1] + (1 - c[1]) * b, c[2] + (1 - c[2]) * b, c[3] + (1 - c[3]) * b, a }; end
+
+-- RUNES: circles on the ground every few yalms (counted back from the VNM, so they stay put as you walk), each
+-- two rings with rune marks between them and a four-point star, joined by a line; a brightness runs out along them
+function TRF.GPS.runes(dl, E)
+    local G, c = TRF.GPS, E.col;
+    local every = 7 * E.SP * math.max(0.75, E.SZ);
+    local r = 1.6 * E.SZ;
+    local endd = math.min(E.len, E.dist - 3.4);
+    local run = (E.now * math.max(3, E.speed) * 1.8) % (endd + 14);
+    local base = math.atan2(E.uy, E.ux);
+    local k = math.max(1, math.ceil((E.dist - endd) / every));
+    while true do                                                -- (far to near, so the near ones are on top)
+        local d = E.dist - k * every;
+        if d < 2.2 then break; end
+        local b = math.exp(-((d - run) / 4.5) ^ 2);              -- (the brightness passing over this one)
+        local fade = 1 - (d / E.RANGE) * 0.55;
+        local cx, cy, cw = G.pt(E, d);
+        -- the line on to the next circle (or to the marker's ring)
+        local fa = math.min(endd, d + every - r);
+        if fa > d + r then
+            local ax, ay = G.pt(E, d + r);
+            local bx, by = G.pt(E, fa);
+            if ax and bx then
+                local th = cw and math.max(1.2, math.min(3, 46 / cw)) or 1.5;
+                glowLine(dl, { ax, ay }, { bx, by }, G.hot(c, 0.25, 0.85 * fade), th, E.glow);
+                if run > d + r and run < fa then                 -- (the bead of light on its way)
+                    local hx, hy, hw = G.pt(E, run);
+                    if hx then G.orb(dl, hx, hy, math.max(2, math.min(7, 90 / hw)) * E.SZ, c, fade); end
+                end
+            end
+        end
+        if cx then
+            local wx, wy = E.px + E.ux * d, E.py + E.uy * d;
+            local near = cw < 42;                                -- (close enough for the fine marks)
+            local segs = near and 28 or 14;
+            local P1 = G.ring(wx, wy, E.ph, r, segs, base);
+            if P1 then
+                local th = math.max(1.2, math.min(3.2, 52 / cw)) * (1 + b * 0.5);
+                if E.glow then
+                    G.fan(dl, { cx, cy }, P1, u32({ c[1], c[2], c[3], (0.07 + b * 0.30) * fade }));
+                    G.loop(dl, P1, u32({ c[1], c[2], c[3], (0.16 + b * 0.20) * fade }), th * 2.8);
+                end
+                G.loop(dl, P1, u32(G.hot(c, 0.20 + b * 0.6, 0.95 * fade)), th);
+                local P2 = G.ring(wx, wy, E.ph, r * 0.78, segs, base);
+                if P2 then G.loop(dl, P2, u32(G.hot(c, 0.10 + b * 0.5, 0.75 * fade)), math.max(1, th * 0.55)); end
+                if near then
+                    local rot = base + E.now * 0.22 * ((k % 2 == 0) and 1 or -1);   -- (the marks turn slowly, every other one the other way)
+                    local mc = u32(G.hot(c, 0.35 + b * 0.5, 0.85 * fade));
+                    local mt = math.max(1, th * 0.5);
+                    local function gp(a, rr) return project(toD3D(wx + math.cos(a) * rr, wy + math.sin(a) * rr, E.ph)); end
+                    for i = 0, 11 do                             -- (twelve rune marks: a stroke, a hook, a fork or a bar)
+                        local a = rot + i / 12 * math.pi * 2;
+                        local x1, y1 = gp(a, r * 0.82);
+                        local x2, y2 = gp(a, r * 0.96);
+                        if x1 and x2 then
+                            local kind = (i * 7 + k) % 4;
+                            if kind ~= 3 then dl:AddLine({ x1, y1 }, { x2, y2 }, mc, mt); end
+                            if kind == 1 then
+                                local x3, y3 = gp(a + 0.11, r * 0.90);
+                                if x3 then dl:AddLine({ x2, y2 }, { x3, y3 }, mc, mt); end
+                            elseif kind == 2 then
+                                local x3, y3 = gp(a + 0.10, r * 0.96);
+                                local x4, y4 = gp(a - 0.10, r * 0.96);
+                                if x3 and x4 then dl:AddLine({ x1, y1 }, { x3, y3 }, mc, mt); dl:AddLine({ x1, y1 }, { x4, y4 }, mc, mt); end
+                            elseif kind == 3 then
+                                local x3, y3 = gp(a - 0.09, r * 0.89);
+                                local x4, y4 = gp(a + 0.09, r * 0.89);
+                                if x3 and x4 then dl:AddLine({ x3, y3 }, { x4, y4 }, mc, mt); end
+                            end
+                        end
+                    end
+                    local P3 = G.ring(wx, wy, E.ph, r * 0.50, 14, base);
+                    if P3 then G.loop(dl, P3, u32(G.hot(c, 0.15 + b * 0.5, 0.55 * fade)), math.max(1, th * 0.4)); end
+                end
+                -- the four-point star in the middle (long points along and across the path)
+                local S = {};
+                for i = 0, 7 do
+                    local a = base + i * math.pi / 4;
+                    local rr = (i % 2 == 0) and r * 0.40 or r * 0.12;
+                    local x, y = project(toD3D(wx + math.cos(a) * rr, wy + math.sin(a) * rr, E.ph));
+                    if not x then S = nil; break; end
+                    S[i + 1] = { x, y };
+                end
+                if S then
+                    G.fan(dl, { cx, cy }, S, u32(G.hot(c, 0.55 + b * 0.45, 0.92 * fade)));
+                    if b > 0.25 then G.orb(dl, cx, cy, math.max(2, math.min(9, 110 / cw)) * E.SZ * b, c, fade); end
+                end
+            end
+        end
+        k = k + 1;
+    end
+end
+
+-- LIGHT: one bright line along the ground from an orb at your feet, a brighter length of it racing out to the VNM
+function TRF.GPS.light(dl, E)
+    local G, c = TRF.GPS, E.col;
+    local endd = math.min(E.len, E.dist - 3.4);
+    local run = (E.now * math.max(3, E.speed) * 2.2) % (endd + 18);
+    local lightg = (tonumber(config.glow_q) or 2) < 2;
+    local lx, ly, lw, ld;
+    local d = 1.6;
+    while true do
+        if d > endd then d = endd; end
+        local x, y, w = G.pt(E, d);
+        if x and lx then
+            local fade = 1 - (d / E.RANGE) * 0.5;
+            local b = math.exp(-((d - run) / 5) ^ 2);
+            local th = math.max(2.2, math.min(9, 130 / ((w + lw) / 2))) * math.sqrt(E.SZ);
+            local a, q = { lx, ly }, { x, y };
+            if E.glow then
+                dl:AddLine(a, q, u32({ c[1], c[2], c[3], (0.10 + b * 0.14) * fade }), th * (lightg and 2.6 or 3.4));
+                if not lightg then dl:AddLine(a, q, u32({ c[1], c[2], c[3], (0.22 + b * 0.20) * fade }), th * 1.8); end
+            end
+            dl:AddLine(a, q, u32(G.hot(c, 0.25 + b * 0.5, 0.95 * fade)), th * 0.85);
+            dl:AddLine(a, q, u32({ 1, 1, 1, (0.80 + b * 0.2) * fade }), math.max(1, th * 0.30));
+        end
+        lx, ly, lw, ld = x, y, w, d;
+        if d >= endd then break; end
+        d = d + 2.5;
+    end
+    if run < endd then                                           -- (the head of the racing light)
+        local hx, hy, hw = G.pt(E, run);
+        if hx then G.orb(dl, hx, hy, math.max(2.5, math.min(9, 120 / hw)) * E.SZ, c, 1 - (run / E.RANGE) * 0.5); end
+    end
+    -- the orb at your feet: two rings on the ground, a ball of light, a four-ray flare
+    local sx, sy, sw = G.pt(E, 1.6);
+    if sx then
+        local wx, wy = E.px + E.ux * 1.6, E.py + E.uy * 1.6;
+        local pl = 0.75 + 0.25 * math.sin(E.now * 3.2);
+        for i, rr in ipairs({ 1.5, 0.95 }) do
+            local P = G.ring(wx, wy, E.ph, rr * E.SZ, 28, 0);
+            if P then
+                if E.glow then G.loop(dl, P, u32({ c[1], c[2], c[3], 0.18 * pl }), 6 - i); end
+                G.loop(dl, P, u32(G.hot(c, 0.3, (i == 1) and 0.9 or 0.6)), (i == 1) and 2.2 or 1.4);
+            end
+        end
+        local r = math.max(4, math.min(13, 170 / sw)) * E.SZ;
+        G.orb(dl, sx, sy, r, c, pl);
+        local fl = u32({ 1, 1, 1, 0.75 * pl });
+        dl:AddLine({ sx - r * 2.4, sy }, { sx + r * 2.4, sy }, fl, 1.4);
+        dl:AddLine({ sx, sy - r * 1.6 }, { sx, sy + r * 1.6 }, fl, 1.4);
+    end
+end
+
+-- AETHER: three faint wisps weaving along the ground, motes of light drifting on toward the VNM, and a spirit
+-- light running the path with rings swirling round it
+function TRF.GPS.aether(dl, E)
+    local G, c = TRF.GPS, E.col;
+    local endd = math.min(E.len, E.dist - 3.4);
+    local lightg = (tonumber(config.glow_q) or 2) < 2;
+    local function side(s, d)                                    -- (how far across wisp s is at d)
+        local taper = math.max(0, math.min(1, d / 5, (endd - d) / 5));
+        return (0.40 + 0.22 * s) * E.SZ * taper * math.sin(d * (0.11 + 0.035 * s) - E.now * (0.5 + 0.28 * s) + s * 2.1);
+    end
+    if E.glow then                                               -- (a faint haze down the middle)
+        local lx, ly;
+        local d = 1.2;
+        while true do
+            if d > endd then d = endd; end
+            local x, y, w = G.pt(E, d);
+            if x and lx then dl:AddLine({ lx, ly }, { x, y }, u32({ c[1], c[2], c[3], 0.07 * (1 - (d / E.RANGE) * 0.5) }), math.max(4, math.min(26, 380 / w)) * E.SZ); end
+            lx, ly = x, y;
+            if d >= endd then break; end
+            d = d + 3;
+        end
+    end
+    for s = 1, (lightg and 2 or 3) do
+        local lx, ly;
+        local d = 1.2;
+        while d <= endd do
+            local x, y, w = G.pt(E, d, side(s, d));
+            if x and lx then
+                local fade = 1 - (d / E.RANGE) * 0.5;
+                local th = math.max(1.2, math.min(4.5, 70 / w)) * math.sqrt(E.SZ);
+                if E.glow then dl:AddLine({ lx, ly }, { x, y }, u32({ c[1], c[2], c[3], 0.08 * fade }), th * 3.0); end
+                dl:AddLine({ lx, ly }, { x, y }, u32(G.hot(c, 0.20, (0.42 - s * 0.08) * fade)), th * 0.55);
+            end
+            lx, ly = x, y;
+            d = d + ((d < 30) and 1.3 or 2.4);                   -- (finer close to you, where the bends show)
+        end
+    end
+    -- the motes: one every few yalms, drifting toward the VNM, bobbing and twinkling
+    local every = 6 * E.SP;
+    local drift = (E.now * math.max(1.5, E.speed) * 0.55) % every;
+    local first = math.floor((E.now * math.max(1.5, E.speed) * 0.55) / every);
+    local d, i = drift + 2, 0;
+    while d < endd do
+        local seed = (i - first) * 1.7;
+        local x, y, w = G.pt(E, d, side(1, d) * 0.8, 0.35 + 0.22 * math.sin(E.now * 1.6 + seed));
+        if x then
+            local tw = 0.65 + 0.35 * math.sin(E.now * 3.1 + seed * 2.3);
+            G.orb(dl, x, y, math.max(1.6, math.min(6, 80 / w)) * E.SZ, c, tw * (1 - (d / E.RANGE) * 0.5));
+        end
+        d = d + every;
+        i = i + 1;
+    end
+    -- the spirit light, and the rings swirling on the ground under it
+    local run = (E.now * math.max(3, E.speed) * 1.3) % (endd + 10);
+    if run > 1 and run < endd then
+        local wx, wy = E.px + E.ux * run, E.py + E.uy * run;
+        local fade = 1 - (run / E.RANGE) * 0.5;
+        for j = 1, 3 do                                          -- (three arcs, each most of a circle, turning at their own speed)
+            local rr = (0.7 + 0.55 * j) * E.SZ;
+            local a0 = E.now * (1.9 - j * 0.45) * ((j % 2 == 0) and -1 or 1) + j * 2;
+            local lx, ly;
+            for q = 0, 10 do
+                local a = a0 + q / 10 * math.pi * 1.35;
+                local x, y = project(toD3D(wx + math.cos(a) * rr, wy + math.sin(a) * rr, E.ph));
+                if x and lx then dl:AddLine({ lx, ly }, { x, y }, u32({ c[1], c[2], c[3], (0.55 - j * 0.10) * fade * (q / 10) }), 2.4 - j * 0.4); end
+                lx, ly = x, y;
+            end
+        end
+        local x, y, w = G.pt(E, run, 0, 0.5);
+        if x then G.orb(dl, x, y, math.max(4, math.min(15, 200 / w)) * E.SZ, c, fade); end
+    end
+end
+
+-- The marker at the VNM's spot for these three: rings on the ground, beams of light rising from the outer one, and
+-- two chevrons, one inside the other, pointing down at it. Returns where the name goes (above the chevrons).
+function TRF.GPS.marker(dl, E)
+    local G, c = TRF.GPS, E.col;
+    local tx, ty, gh = E.tx, E.ty, E.gh;
+    local mx, my, mw = project(toD3D(tx, ty, gh));
+    if not mx then return nil; end
+    local pl = 0.70 + 0.30 * math.sin(E.now * 3);
+    local th = math.max(1.5, math.min(4, 60 / mw));
+    local P1 = G.ring(tx, ty, gh, 3.2, 28, 0);
+    if P1 then
+        if E.glow then
+            G.fan(dl, { mx, my }, P1, u32({ c[1], c[2], c[3], 0.10 * pl }));
+            G.loop(dl, P1, u32({ c[1], c[2], c[3], 0.20 * pl }), th * 3);
+        end
+        G.loop(dl, P1, u32(G.hot(c, 0.35, 0.95)), th * 1.2);
+    end
+    local P2 = G.ring(tx, ty, gh, 2.3, 24, 0);
+    if P2 then G.loop(dl, P2, u32(G.hot(c, 0.20, 0.75 * pl)), th * 0.7); end
+    local P3 = G.ring(tx, ty, gh, 1.2, 16, 0);
+    if P3 then
+        G.fan(dl, { mx, my }, P3, u32(G.hot(c, 0.45, 0.45 * pl)));
+        G.loop(dl, P3, u32(G.hot(c, 0.6, 0.9)), th * 0.8);
+    end
+    for i = 0, 11 do                                             -- (the beams: brightest at the ground, gone by 5 yalms up)
+        local a = i / 12 * math.pi * 2 + 0.26;
+        local bx, by = tx + math.cos(a) * 3.2, ty + math.sin(a) * 3.2;
+        local fl = 0.55 + 0.45 * math.sin(E.now * 4 + i * 1.9);
+        local top = 3.2 + 1.8 * (0.5 + 0.5 * math.sin(E.now * 2.3 + i * 2.7));
+        local lx, ly = project(toD3D(bx, by, gh));
+        for s, al in ipairs({ 0.55, 0.30, 0.12 }) do
+            local x, y = project(above(bx, by, gh, top * s / 3));
+            if x and lx then dl:AddLine({ lx, ly }, { x, y }, u32({ c[1], c[2], c[3], al * fl }), th * (1.5 - s * 0.3)); end
+            lx, ly = x, y;
+        end
+    end
+    -- the chevrons, facing you, bobbing above the spot (as tall on the screen as 4 yalms are there)
+    local bob = 0.5 * math.sin(E.now * 2.4);
+    local cx, cy = project(above(tx, ty, gh, 8.2 + bob));
+    local _, ty2 = project(above(tx, ty, gh, 12.2 + bob));
+    if not cx or not ty2 then return project(above(tx, ty, gh, 7)); end
+    local s = math.max(10, math.min(90, math.abs(cy - ty2) * 0.5));
+    local function chev(oy, sc, bright)
+        local w, a, t = s * sc, s * sc * 0.78, s * sc * 0.36;   -- (half-width, drop from the ends to the point, thickness)
+        local y0 = cy + oy;
+        local L, B, R = { cx - w, y0 - a * 0.5 }, { cx, y0 + a * 0.5 }, { cx + w, y0 - a * 0.5 };
+        local L2, B2, R2 = { L[1], L[2] + t }, { B[1], B[2] + t }, { R[1], R[2] + t };
+        if E.glow then
+            local g = u32({ c[1], c[2], c[3], 0.16 * pl });
+            for _, e in ipairs({ { L, B }, { B, R }, { L2, B2 }, { B2, R2 } }) do dl:AddLine(e[1], e[2], g, math.max(4, s * 0.16)); end
+        end
+        local body = u32(G.hot(c, bright, 0.88));
+        dl:AddQuadFilled(L, B, B2, L2, body);
+        dl:AddQuadFilled(R, R2, B2, B, body);
+        local core = u32({ 1, 1, 1, 0.55 });
+        local m = t * 0.5;
+        dl:AddLine({ L[1] + s * 0.04, L[2] + m }, { B[1], B[2] + m }, core, math.max(1, t * 0.22));
+        dl:AddLine({ R[1] - s * 0.04, R[2] + m }, { B[1], B[2] + m }, core, math.max(1, t * 0.22));
+        local rim = u32(G.hot(c, 0.7, 0.95));
+        for _, e in ipairs({ { L, B }, { B, R }, { R, R2 }, { R2, B2 }, { B2, L2 }, { L2, L } }) do dl:AddLine(e[1], e[2], rim, math.max(1, s * 0.03)); end
+    end
+    chev(0, 1.0, 0.15);
+    chev(s * 0.62, 0.60, 0.40);
+    return cx, cy - s * 0.55;
 end
 
 drawTrail = function()
@@ -7853,8 +8171,14 @@ drawTrail = function()
         local SOLID_MIX = { { 1.00, 0.42, 0.18 }, { 0.15, 0.90, 0.85 }, { 0.30, 0.55, 1.00 } };   -- (orange, teal, blue)
         local nx, ny = -uy, ux;                                -- across the path
         local phase = now * (tonumber(config.trail_speed) or 5);
+        local gps = TRF.GPS.STYLES[style] and {                -- (RUNES, LIGHT, AETHER: the path this frame)
+            px = px, py = py, ph = ph, ux = ux, uy = uy, nx = nx, ny = ny, dist = dist, len = len, RANGE = RANGE,
+            col = col, glow = glow, SZ = SZ, SP = SP, now = now, speed = tonumber(config.trail_speed) or 5,
+            tx = tx, ty = ty, gh = gh } or nil;
 
-        if style == 'lines' then
+        if gps then
+            pcall(TRF.GPS[style], dl, gps);
+        elseif style == 'lines' then
             -- the first look: two glowing lines meeting at a point, flat on the screen
             local every = 4 * SP;
             local off = phase % every;
@@ -7978,18 +8302,26 @@ drawTrail = function()
         local mx, my, mw = project(toD3D(tx, ty, gh));
         if mx and mx > -50 and mx < W + 50 and my > -50 and my < H + 50 then
             local pulse = 0.6 + 0.4 * math.sin(now * 3);
-            local ring = {};
-            for i = 0, 24 do
-                local a = i / 24 * math.pi * 2;
-                local rx, ry = project(toD3D(tx + math.cos(a) * 3, ty + math.sin(a) * 3, gh));
-                if rx then ring[#ring + 1] = { rx, ry }; end
+            local fx, fy;
+            if gps then                                           -- (rings, beams and the chevrons pointing down)
+                local ok, gx, gy = pcall(TRF.GPS.marker, dl, gps);
+                if ok then fx, fy = gx, gy; end
+            else
+                local ring = {};
+                for i = 0, 24 do
+                    local a = i / 24 * math.pi * 2;
+                    local rx, ry = project(toD3D(tx + math.cos(a) * 3, ty + math.sin(a) * 3, gh));
+                    if rx then ring[#ring + 1] = { rx, ry }; end
+                end
+                for i = 2, #ring do glowLine(dl, ring[i - 1], ring[i], { col[1], col[2], col[3], 0.8 * pulse }, math.max(1.5, math.min(4, 60 / mw)), glow); end
+                fx, fy = project(above(tx, ty, gh, 7));
+                if fx then
+                    glowLine(dl, { mx, my }, { fx, fy }, { C.mp2[1], C.mp2[2], C.mp2[3], 0.9 }, math.max(1.5, math.min(4, 60 / mw)), glow);
+                    local fs = math.max(6, math.min(26, 400 / mw));
+                    dl:AddTriangleFilled({ fx, fy }, { fx + fs, fy + fs * 0.35 }, { fx, fy + fs * 0.7 }, u32({ col[1], col[2], col[3], 1 }));
+                end
             end
-            for i = 2, #ring do glowLine(dl, ring[i - 1], ring[i], { col[1], col[2], col[3], 0.8 * pulse }, math.max(1.5, math.min(4, 60 / mw)), glow); end
-            local fx, fy = project(above(tx, ty, gh, 7));
             if fx then
-                glowLine(dl, { mx, my }, { fx, fy }, { C.mp2[1], C.mp2[2], C.mp2[3], 0.9 }, math.max(1.5, math.min(4, 60 / mw)), glow);
-                local fs = math.max(6, math.min(26, 400 / mw));
-                dl:AddTriangleFilled({ fx, fy }, { fx + fs, fy + fs * 0.35 }, { fx, fy + fs * 0.7 }, u32({ col[1], col[2], col[3], 1 }));
                 local label = (kind == 'grid') and ('%s  %s  ·  %d yalms'):fmt(v.nm or 'VNM', v.grid or '', math.floor(dist + 0.5))
                     or ('Venture Seal  ·  %s  ·  %d yalms'):fmt(v.nm or 'VNM', math.floor(dist + 0.5));
                 local tw = imgui.CalcTextSize(label);
@@ -8008,33 +8340,37 @@ end
 trailSettings = function()
     section('Trail to the VNM');
     if rowSwitch('##vengo_trail', 'Trail on the ground to the VNM', config.trail ~= false,
-            'Glowing arrows on the ground from your feet to the VNM\'s grid square, in the venture\'s zone (and after GO)') then
+            'A glowing GPS trail on the ground from your feet to the VNM\'s grid square, in the venture\'s zone (and after GO)') then
         config.trail = not (config.trail ~= false);
         saveSettings();
     end
     if rowSwitch('##vengo_trail_full', 'Only when the VNM is at 100%', config.trail_full ~= false,
-            'The arrows come up on their own only once the zone\'s VNM is at 100% (or announced). Pressing GO in the zone still shows them any time.') then
+            'The GPS comes up on its own only once the zone\'s VNM is at 100% (or announced). Pressing GO in the zone still shows it any time.') then
         config.trail_full = not (config.trail_full ~= false);
         saveSettings();
     end
-    if rowSwitch('##vengo_trail_glow', 'Glow', config.trail_glow ~= false, 'A soft glow around the arrows') then
+    if rowSwitch('##vengo_trail_glow', 'Glow', config.trail_glow ~= false, 'A soft glow around the GPS') then
         config.trail_glow = not (config.trail_glow ~= false);
         saveSettings();
     end
     imgui.AlignTextToFramePadding();
-    imgui.TextColored(C.text, 'Arrow style');
+    imgui.TextColored(C.text, 'GPS style');
     imgui.SameLine(ROW_W - 400);
     local stl = pillChoice('##vengo_tstyle', { { 'lines', 'LINES' }, { 'bands', 'NEON BANDS' }, { 'solid', 'SOLID NEON' } }, config.trail_style or 'solid');
     if stl then config.trail_style = stl; saveSettings(); end
+    imgui.Dummy({ 1, 1 });                                    -- (a second row: the three drawn on the ground)
+    imgui.SameLine(ROW_W - 400);
+    local stl2 = pillChoice('##vengo_tstyle2', { { 'runes', 'RUNES' }, { 'light', 'LIGHT' }, { 'aether', 'AETHER' } }, config.trail_style or 'solid');
+    if stl2 then config.trail_style = stl2; saveSettings(); end
     imgui.AlignTextToFramePadding();
-    imgui.TextColored(C.text, 'Arrow size');
+    imgui.TextColored(C.text, 'GPS size');
     imgui.SameLine(ROW_W - 400);
     local sc_ = tonumber(config.trail_scale) or 1;
     local szcur = (math.abs(sc_ - 0.7) < 0.01 and 'small') or (math.abs(sc_ - 1) < 0.01 and 'medium') or (math.abs(sc_ - 1.4) < 0.01 and 'large') or '';
     local szc = pillChoice('##vengo_tsize', { { 'small', 'SMALL' }, { 'medium', 'MEDIUM' }, { 'large', 'LARGE' } }, szcur);
     if szc then config.trail_size = szc; config.trail_scale = ({ small = 0.7, medium = 1.0, large = 1.4 })[szc]; saveSettings(); end
     imgui.AlignTextToFramePadding();
-    imgui.TextColored(C.text, 'Arrow colour');
+    imgui.TextColored(C.text, 'GPS colour');
     imgui.SameLine(ROW_W - #TRAIL_COLORS * 30 + 4);
     local dl = imgui.GetWindowDrawList();
     for i, c in ipairs(TRAIL_COLORS) do
@@ -8101,7 +8437,7 @@ local function tabSettings()
 
     section('Window');
     if rowSwitch('##vengo_lite', 'Lightweight mode', config.lite == true,
-            'A quick preset for the Performance sliders: camera every 3 frames, arrows to 60 yalms, one glow pass, the Seal checked every 0.5 s. Off puts the normal values back. Move any slider after to fine-tune.') then
+            'A quick preset for the Performance sliders: camera every 3 frames, GPS to 60 yalms, one glow pass, the Seal checked every 0.5 s. Off puts the normal values back. Move any slider after to fine-tune.') then
         config.lite = not config.lite;
         local P_ = config.lite and { cam_every = 3, trail_range = 60, glow_q = 1, seal_check = 0.5, seal_scan = 1.0 }
             or { cam_every = 1, trail_range = 90, glow_q = 2, seal_check = 0.25, seal_scan = 0.5 };

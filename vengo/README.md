@@ -106,6 +106,18 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 
 `ventures.lua` is only a fallback until the game or the website sends the board.
 
+## GPS styles
+
+The trail on the ground to the VNM is the **GPS** (Settings > Trail to the VNM, and the GPS sliders). Six styles:
+LINES, NEON BANDS and SOLID NEON (arrows), and three drawn on the ground itself:
+
+- **RUNES**: rune circles every few yalms, joined by a line, with a brightness running out along them.
+- **LIGHT**: one bright line from an orb at your feet, a brighter length of it racing out to the VNM.
+- **AETHER**: faint wisps weaving along the ground, motes of light drifting on, and a spirit light running the path.
+
+These three end in their own marker: rings on the ground, beams of light and two chevrons pointing down at the spot.
+GPS colour, size, spacing, speed, reach and glow apply to all six.
+
 ## The logo
 
 Shrunk (the round button at the top right), VenGo is its lightning logo: bolts gather into "VenGo", which then holds
