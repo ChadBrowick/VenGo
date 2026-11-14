@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.82';
+addon.version = '4.83';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -75,7 +75,8 @@ local config = {
     login_refresh = true,      -- type !ventures once when you log in
     logo_anim = true,          -- shine and petals on the logo
     logo_clear = true,         -- nothing behind the shrunk logo (off: a dark cloud)
-    logo_style = 'bolt',       -- what VenGo shrinks to: bolt (the lightning logo) | orb (the round orb)
+    logo_style = 'bolt',       -- what VenGo shrinks to: bolt (the lightning logo) | orb (the round orb) | none (nothing)
+    win_scale = 1,             -- the main window's scale (the - and + at its top): 0.5 to 3
     logo_size = 1,             -- the shrunk lightning logo's size (drag its corner): 0.4 to 3
     trail = true,              -- the glowing path on the ground to the VNM
     trail_glow = true,         -- its glow
@@ -189,7 +190,7 @@ local function saveSettings()
     local f = io.open(settingsFile(), 'w');
     if f == nil then return; end
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
-    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'logo_style', 'logo_size', 'logo_clear', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
+    for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'win_scale', 'logo_style', 'logo_size', 'logo_clear', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
                            'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' }) do
         local v = config[k];
@@ -1838,6 +1839,7 @@ local function pushFont(f, size)
     end
     f, size = TRF.LANG.face(f, size);                             -- (Japanese: its own faces)
     if f == nil then return false; end
+    if TRF.Z and TRF.Z.on and newFont(f) then size = (size or f.LegacySize or 16) * TRF.Z.s; end   -- (the window's scale)
     if newFont(f) then return (pcall(imgui.PushFont, f, size)); end
     return (pcall(imgui.PushFont, f));
 end
@@ -2000,6 +2002,190 @@ function TRF.LANG.chat(text)
     local ok, s = pcall(function () return vana.encoding.to_shift_jis(t); end);
     return (ok and type(s) == 'string') and s or text;
 end
+------------------------------------------------------------------------
+-- WINDOW SCALE (the - and + beside the see-through button): the whole main window bigger or smaller, 50% to 300%.
+-- The window is laid out as at 100%; while it is drawn at another scale, the places sizes and positions go in
+-- and come out are put through the scale: positions about the window's top-left corner (what the code is told
+-- is as at 100%, what is drawn is scaled), sizes, line widths, roundings and font sizes multiplied. At 100%
+-- nothing is touched (and the hooks are only put in the first time another scale is used).
+------------------------------------------------------------------------
+TRF.Z = { on = false, s = 1, ox = 0, oy = 0 };
+function TRF.Z.scale() return math.max(0.5, math.min(3, tonumber(config.win_scale) or 1)); end
+-- a position as drawn, from one as laid out (and the other way)
+function TRF.Z.r(p)
+    local Z = TRF.Z;
+    if type(p) ~= 'table' then return p; end
+    local x, y = p[1] or p.x, p[2] or p.y;
+    if type(x) ~= 'number' or type(y) ~= 'number' then return p; end
+    return { Z.ox + (x - Z.ox) * Z.s, Z.oy + (y - Z.oy) * Z.s };
+end
+function TRF.Z.v(x, y)
+    local Z = TRF.Z;
+    return Z.ox + (x - Z.ox) / Z.s, Z.oy + (y - Z.oy) / Z.s;
+end
+-- a size (a number or { w, h }) as drawn; nil, zero and "to the edge" (negative) values of ImGui's left alone
+function TRF.Z.m(v)
+    local s = TRF.Z.s;
+    if type(v) == 'number' then return (v > 0) and v * s or v; end
+    if type(v) == 'table' then
+        local a, b = v[1] or v.x, v[2] or v.y;
+        if type(a) == 'number' and type(b) == 'number' then return { (a > 0) and a * s or a, (b > 0) and b * s or b }; end
+    end
+    return v;
+end
+-- The draw list's methods: which arguments are positions (p), lengths (l) or sizes of two (m)
+TRF.Z.DL = {
+    AddLine = { p = { 1, 2 }, l = { 4 } }, AddRectFilled = { p = { 1, 2 }, l = { 4 } }, AddRect = { p = { 1, 2 }, l = { 4, 6 } },
+    AddRectFilledMultiColor = { p = { 1, 2 } }, AddCircleFilled = { p = { 1 }, l = { 2 } }, AddCircle = { p = { 1 }, l = { 2, 5 } },
+    AddTriangleFilled = { p = { 1, 2, 3 } }, AddQuadFilled = { p = { 1, 2, 3, 4 } }, AddImage = { p = { 2, 3 } },
+    AddImageRounded = { p = { 2, 3 }, l = { 7 } }, PushClipRect = { p = { 1, 2 } }, PathLineTo = { p = { 1 } },
+    AddEllipse = { p = { 1 }, m = { 2 }, l = { 6 } }, AddEllipseFilled = { p = { 1 }, m = { 2 } },
+};
+function TRF.Z.wrapDL(name, orig)
+    local Z = TRF.Z;
+    if name == 'AddText' then                                     -- (pos, col, text) or (font, size, pos, col, text)
+        return function (self, a, b, c, ...)
+            if Z.on then
+                if type(a) == 'table' then a = Z.r(a);
+                else if type(b) == 'number' then b = b * Z.s; end c = Z.r(c); end
+            end
+            return orig(self, a, b, c, ...);
+        end
+    end
+    local spec = Z.DL[name];
+    return function (self, ...)
+        if not Z.on then return orig(self, ...); end
+        local n = select('#', ...);
+        local a = { ... };
+        if spec.p then for _, i in ipairs(spec.p) do a[i] = Z.r(a[i]); end end
+        if spec.l then for _, i in ipairs(spec.l) do if type(a[i]) == 'number' then a[i] = a[i] * Z.s; end end end
+        if spec.m then for _, i in ipairs(spec.m) do a[i] = Z.m(a[i]); end end
+        return orig(self, unpack(a, 1, n));
+    end
+end
+function TRF.Z.hook()
+    local Z = TRF.Z;
+    if Z.o == nil then
+        Z.o = {};
+        local o = Z.o;
+        for _, k in ipairs({ 'GetCursorScreenPos', 'GetMousePos', 'GetWindowSize', 'GetCursorPosX', 'GetTextLineHeight', 'GetFrameHeight',
+                'GetFontSize', 'CalcTextSize', 'SetCursorScreenPos', 'SetCursorPosX', 'Dummy', 'InvisibleButton', 'SameLine',
+                'PushTextWrapPos', 'Indent', 'Unindent', 'PushItemWidth', 'BeginChild', 'Image', 'PushStyleVar' }) do o[k] = imgui[k]; end
+        -- what comes out: as laid out
+        local function pos2(f)
+            return function (...)
+                local x, y = f(...);
+                if Z.on and type(x) == 'number' and type(y) == 'number' then return Z.v(x, y); end
+                return x, y;
+            end
+        end
+        local function len2(f)
+            return function (...)
+                local x, y = f(...);
+                if Z.on and type(x) == 'number' then return x / Z.s, (type(y) == 'number') and y / Z.s or y; end
+                return x, y;
+            end
+        end
+        if o.GetCursorScreenPos then imgui.GetCursorScreenPos = pos2(o.GetCursorScreenPos); end
+        if o.GetMousePos then imgui.GetMousePos = pos2(o.GetMousePos); end
+        for _, k in ipairs({ 'GetWindowSize', 'GetCursorPosX', 'GetTextLineHeight', 'GetFrameHeight', 'GetFontSize', 'CalcTextSize' }) do
+            if o[k] then imgui[k] = len2(imgui[k]); end                -- (CalcTextSize: over the Japanese one, if that is in)
+        end
+        -- what goes in: as drawn
+        if o.SetCursorScreenPos then imgui.SetCursorScreenPos = function (p, ...) if Z.on then p = Z.r(p); end return o.SetCursorScreenPos(p, ...); end end
+        if o.SetCursorPosX then imgui.SetCursorPosX = function (x, ...) if Z.on and type(x) == 'number' then x = x * Z.s; end return o.SetCursorPosX(x, ...); end end
+        if o.Dummy then imgui.Dummy = function (sz, ...) if Z.on then sz = Z.m(sz); end return o.Dummy(sz, ...); end end
+        if o.InvisibleButton then imgui.InvisibleButton = function (id, sz, ...) if Z.on then sz = Z.m(sz); end return o.InvisibleButton(id, sz, ...); end end
+        if o.SameLine then
+            imgui.SameLine = function (off, sp, ...)
+                if not Z.on then return o.SameLine(off, sp, ...); end
+                if off == nil then return o.SameLine(); end
+                if sp == nil then return o.SameLine(Z.m(off)); end
+                return o.SameLine(Z.m(off), Z.m(sp), ...);
+            end
+        end
+        for _, k in ipairs({ 'PushTextWrapPos', 'Indent', 'Unindent', 'PushItemWidth' }) do
+            local f = o[k];
+            if f then
+                imgui[k] = function (w, ...)
+                    if not Z.on or w == nil then return f(w, ...); end
+                    return f(Z.m(w), ...);                           -- (zero and negative values are ImGui's own: left alone)
+                end
+            end
+        end
+        if o.BeginChild then imgui.BeginChild = function (id, sz, ...) if Z.on then sz = Z.m(sz); end return o.BeginChild(id, sz, ...); end end
+        if o.Image then imgui.Image = function (tex, sz, ...) if Z.on then sz = Z.m(sz); end return o.Image(tex, sz, ...); end end
+        if o.PushStyleVar then imgui.PushStyleVar = function (k, v, ...) if Z.on then v = Z.m(v); end return o.PushStyleVar(k, v, ...); end end
+    end
+    if Z.dl == nil then                                           -- (the draw lists, through their metatable)
+        Z.dl = false;
+        pcall(function ()
+            local dl = imgui.GetBackgroundDrawList();
+            local mt = dl and debug.getmetatable(dl);
+            if mt == nil then return; end
+            local ix = mt.__index;
+            if type(ix) == 'table' then
+                for name in pairs(Z.DL) do
+                    if type(ix[name]) == 'function' then ix[name] = Z.wrapDL(name, ix[name]); end
+                end
+                if type(ix.AddText) == 'function' then ix.AddText = Z.wrapDL('AddText', ix.AddText); end
+                Z.dl = true;
+            elseif type(ix) == 'function' then
+                local w = {};
+                mt.__index = function (self, k)
+                    if Z.DL[k] or k == 'AddText' then
+                        if w[k] == nil then
+                            local f = ix(self, k);
+                            w[k] = (type(f) == 'function') and Z.wrapDL(k, f) or false;
+                        end
+                        if w[k] then return w[k]; end
+                    end
+                    return ix(self, k);
+                end
+                Z.dl = true;
+            end
+        end);
+    end
+end
+-- Before the main window: take up a change asked for by - / + (the window resized to match, its top-right corner
+-- kept where it is, so the buttons stay under the pointer), and turn the scale on for it. Returns the scale.
+function TRF.Z.begin()
+    local Z = TRF.Z;
+    local cur = Z.scale();
+    if Z.want and Z.want ~= cur then
+        if Z.last then
+            local r = Z.want / cur;
+            local nw, nh = Z.last.w * r, Z.last.h * r;
+            Z.resize = { size = { nw, nh }, pos = { math.max(0, Z.last.x + Z.last.w - nw), Z.last.y } };
+        end
+        config.win_scale = Z.want;
+        saveSettings();
+        cur = Z.want;
+    end
+    Z.want = nil;
+    Z.s = cur;
+    if cur ~= 1 and (Z.o == nil or Z.dl == nil) then Z.hook(); end
+    Z.on = (cur ~= 1) and Z.dl == true;                           -- (no draw-list hook: no scaling at all, not half of it)
+    return Z.on and cur or 1;
+end
+-- Just inside the main window: where it is (its corner is what the scale turns about)
+function TRF.Z.origin()
+    local Z = TRF.Z;
+    local was = Z.on;
+    Z.on = false;
+    local x, y = imgui.GetWindowPos();
+    local w, h = imgui.GetWindowSize();
+    Z.on = was;
+    if type(x) == 'number' and type(y) == 'number' then Z.ox, Z.oy = x, y; end
+    if type(w) == 'number' and type(h) == 'number' then Z.last = { x = Z.ox, y = Z.oy, w = w, h = h }; end
+end
+-- The - and + at the top of the window (10% a press)
+function TRF.Z.step(d)
+    local Z = TRF.Z;
+    local cur = Z.scale();
+    Z.want = math.max(0.5, math.min(3, math.floor((cur + d) * 10 + 0.5) / 10));
+end
+
 -- The EN / JP switch (top of the window): two halves, the language on in the accent
 function TRF.LANG.toggle(dl, x, y, h)
     local L = TRF.LANG;
@@ -2097,6 +2283,7 @@ function TRF.PH.font(f, size)                                    -- (a face at a
     f, size = TRF.LANG.face(f, size);
     if f == nil then return false; end
     local ok_ = pcall(function () return f.LegacySize; end);
+    if ok_ and TRF.Z.on then size = (size or f.LegacySize or 16) * TRF.Z.s; end   -- (the window's scale)
     if ok_ then return (pcall(imgui.PushFont, f, size)); end
     return (pcall(imgui.PushFont, f));
 end
@@ -3472,7 +3659,24 @@ local function topButtons(dl, wx, wy, ww)
     local xClose = wx + ww - 24 - bs;
     local xMin   = xClose - bs - 8;
     local xClear = xMin - bs - 8;
-    pcall(TRF.LANG.toggle, dl, xClear - 58 - 12, by, bs);     -- (EN / JP)
+    local xPlus  = xClear - bs - 8;
+    local xMinus = xPlus - bs - 6;
+    pcall(TRF.LANG.toggle, dl, xMinus - 58 - 12, by, bs);     -- (EN / JP)
+    -- the window's scale: smaller / bigger, 50% to 300%
+    local pct = math.floor(TRF.Z.scale() * 100 + 0.5);
+    if iconButton(dl, '##vengo_zm', xMinus, by, bs, { C.acc[1], C.acc[2], C.acc[3], 0.22 },
+            ('Smaller window (now %d%%, 50%% to 300%%)'):fmt(pct), function (cx, cy, r, col)
+                dl:AddLine({ cx - r, cy }, { cx + r, cy }, col, 1.8);
+            end) then
+        TRF.Z.step(-0.1);
+    end
+    if iconButton(dl, '##vengo_zp', xPlus, by, bs, { C.acc[1], C.acc[2], C.acc[3], 0.22 },
+            ('Bigger window (now %d%%, 50%% to 300%%)'):fmt(pct), function (cx, cy, r, col)
+                dl:AddLine({ cx - r, cy }, { cx + r, cy }, col, 1.8);
+                dl:AddLine({ cx, cy - r }, { cx, cy + r }, col, 1.8);
+            end) then
+        TRF.Z.step(0.1);
+    end
     -- see-through on / off
     if iconButton(dl, '##vengo_clear', xClear, by, bs, { C.acc[1], C.acc[2], C.acc[3], 0.22 },
             config.transparent and 'Solid window' or 'See-through window', function (cx, cy, r, col)
@@ -3498,6 +3702,7 @@ local function topButtons(dl, wx, wy, ww)
             end) then
         config.minimized, config.strip = true, false;
         saveSettings();
+        if config.logo_style == 'none' then msg('VenGo is hidden (No icon): type /vengo to open it again.'); end
     end
 end
 
@@ -7698,7 +7903,7 @@ TRF.sliders = function()
 end
 
 -- Three preset slots: every setting, saved to vengo_presets.lua and loaded back with one click
-TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'logo_style', 'logo_size', 'logo_clear',
+TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'win_scale', 'logo_style', 'logo_size', 'logo_clear',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
     'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' };
@@ -8385,9 +8590,10 @@ local function tabSettings()
     do                                                            -- (which icon VenGo shrinks to)
         imgui.AlignTextToFramePadding();
         imgui.TextColored(C.text, 'Icon');
-        tip('What VenGo shrinks to. Lightning: the new lightning logo. Orb: the round orb from before.');
+        tip('What VenGo shrinks to. Lightning: the new lightning logo. Orb: the round orb from before. No icon: nothing on screen; type /vengo to open VenGo again.');
         imgui.SameLine(0, 12);
-        local pick = pillChoice('##vengo_logo_style', { { 'bolt', 'LIGHTNING' }, { 'orb', 'ORB' } }, config.logo_style == 'orb' and 'orb' or 'bolt');
+        local pick = pillChoice('##vengo_logo_style', { { 'bolt', 'LIGHTNING' }, { 'orb', 'ORB' }, { 'none', 'NO ICON' } },
+            (config.logo_style == 'orb' or config.logo_style == 'none') and config.logo_style or 'bolt');
         if pick then config.logo_style = pick; saveSettings(); end
     end
     if rowSwitch('##vengo_logoclear', 'See-through logo', config.logo_clear ~= false,
@@ -8923,8 +9129,13 @@ end
 local function drawUI()
     if not ui.open[1] then return; end
     if config.strip then TRF.drawStrip(); return; end
-    if config.minimized then TRF.logoPreview = false; drawMini(); return; end
-    if TRF.logoPreview then pcall(drawMini); end                  -- (Settings > Window > PREVIEW)
+    if config.minimized then
+        TRF.logoPreview = false;
+        if config.logo_style ~= 'none' then drawMini(); end       -- (No icon: nothing on screen; /vengo opens it again)
+        return;
+    end
+    if TRF.logoPreview and config.logo_style ~= 'none' then pcall(drawMini); end   -- (Settings > Window > PREVIEW)
+    local zs = TRF.Z.begin();                                     -- (the window's scale, on from here to its End)
     local nc, nv = pushTheme();
     -- the resize grip in the bottom-right corner, in the panel's violet
     imgui.PushStyleColor(ImGuiCol_ResizeGrip, { NEON2[1], NEON2[2], NEON2[3], 0.25 });
@@ -8932,13 +9143,19 @@ local function drawUI()
     imgui.PushStyleColor(ImGuiCol_ResizeGripActive, { NEON2[1], NEON2[2], NEON2[3], 0.90 });
     nc = nc + 3;
     imgui.SetNextWindowPos({ 240, 160 }, ImGuiCond_FirstUseEver);
-    imgui.SetNextWindowSize({ WIN_W, WIN_H }, ImGuiCond_FirstUseEver);
-    pcall(imgui.SetNextWindowSizeConstraints, { MIN_W, MIN_H }, { 4000, 3000 });
+    imgui.SetNextWindowSize({ WIN_W * zs, WIN_H * zs }, ImGuiCond_FirstUseEver);
+    pcall(imgui.SetNextWindowSizeConstraints, { MIN_W * zs, MIN_H * zs }, { 8000, 6000 });
+    if TRF.Z.resize then                                          -- (- or + was pressed: the window resized to match)
+        imgui.SetNextWindowSize(TRF.Z.resize.size, ImGuiCond_Always);
+        imgui.SetNextWindowPos(TRF.Z.resize.pos, ImGuiCond_Always);
+        TRF.Z.resize = nil;
+    end
     local flags = bit.bor(ImGuiWindowFlags_NoTitleBar, ImGuiWindowFlags_NoCollapse,
         ImGuiWindowFlags_NoBackground, ImGuiWindowFlags_NoScrollbar, ImGuiWindowFlags_NoScrollWithMouse);
     local pushed = pushFont(fonts.panel, 16);
     if TRF.PAD.focus then TRF.PAD.focus = false; pcall(imgui.SetNextWindowFocus); end
     if imgui.Begin('VenGo##vengo_main', { true }, flags) then
+        TRF.Z.origin();
         TRF.PAD.frame();
         local dl = imgui.GetWindowDrawList();
         local wx, wy = imgui.GetWindowPos();
@@ -9004,10 +9221,12 @@ local function drawUI()
     if pushed then imgui.PopFont(); end
     imgui.PopStyleVar(nv);
     imgui.PopStyleColor(nc);
+    TRF.Z.on = false;
 end
 
 ashita.events.register('d3d_present', 'vengo_present', function ()
     local now = os.clock();
+    TRF.Z.on = false;                                             -- (the scale is only ever on inside the main window)
     pcall(TRF.LANG.frame);
     if TRF.SV.job then pcall(TRF.SV.tick); end
     tickAlert();

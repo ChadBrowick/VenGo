@@ -106,6 +106,12 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 
 `ventures.lua` is only a fallback until the game or the website sends the board.
 
+## Window size
+
+The **-** and **+** at the top of the window, left of the see-through button, make the whole window smaller or
+bigger: 10% a press, from 50% to 300%. Point at either to see the size it is at. The window keeps its top-right
+corner where it is, so the buttons stay under the pointer. The size is saved with your settings and presets.
+
 ## GPS styles
 
 The trail on the ground to the VNM is the **GPS** (Settings > Trail to the VNM, and the GPS sliders). Four styles:
@@ -124,7 +130,8 @@ running light of Runes, Light and Aether crosses the ground, from 1 to 40 yalms 
 Shrunk (the round button at the top right), VenGo is its lightning logo: bolts gather into "VenGo", which then holds
 and strikes again every 9 seconds (every 3 while warping or during an alert, with a glow), or when you point at it.
 Click it to open VenGo, drag it to move it, drag its bottom-right corner to resize it (nothing is drawn behind it). "Animate the logo" in Settings off: it stays still.
-Settings > Window also has **Icon** (LIGHTNING, or ORB for the round orb from before), **See-through logo** (off: a dark cloud behind it), **Logo size** with - and +, and
+Settings > Window also has **Icon** (LIGHTNING, ORB for the round orb from before, or NO ICON: nothing on screen when
+shrunk, `/vengo` opens VenGo again), **See-through logo** (off: a dark cloud behind it), **Logo size** with - and +, and
 **PREVIEW**, which shows the logo beside the open window. Size, see-through and the corner grip work for both icons
 (see-through on the orb makes its glass let the game through).
 
