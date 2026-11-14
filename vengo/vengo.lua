@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.83';
+addon.version = '4.84';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -3659,9 +3659,10 @@ local function topButtons(dl, wx, wy, ww)
     local xClose = wx + ww - 24 - bs;
     local xMin   = xClose - bs - 8;
     local xClear = xMin - bs - 8;
-    local xPlus  = xClear - bs - 8;
+    local xLang  = xClear - 58 - 12;
+    local xPlus  = xLang - bs - 12;                           -- (the scale: on the far side of the language switch)
     local xMinus = xPlus - bs - 6;
-    pcall(TRF.LANG.toggle, dl, xMinus - 58 - 12, by, bs);     -- (EN / JP)
+    pcall(TRF.LANG.toggle, dl, xLang, by, bs);                -- (EN / JP)
     -- the window's scale: smaller / bigger, 50% to 300%
     local pct = math.floor(TRF.Z.scale() * 100 + 0.5);
     if iconButton(dl, '##vengo_zm', xMinus, by, bs, { C.acc[1], C.acc[2], C.acc[3], 0.22 },

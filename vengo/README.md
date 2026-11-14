@@ -108,7 +108,7 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 
 ## Window size
 
-The **-** and **+** at the top of the window, left of the see-through button, make the whole window smaller or
+The **-** and **+** at the top of the window, left of the EN / JP switch, make the whole window smaller or
 bigger: 10% a press, from 50% to 300%. Point at either to see the size it is at. The window keeps its top-right
 corner where it is, so the buttons stay under the pointer. The size is saved with your settings and presets.
 
