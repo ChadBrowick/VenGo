@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.84';
+addon.version = '4.85';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1954,37 +1954,16 @@ function TRF.LANG.hook()
         if o.SliderFloat then imgui.SliderFloat = function (a, b, c, d, e, ...) return o.SliderFloat(a, b, c, d, L.fmt(e), ...); end end
         if o.SliderInt then imgui.SliderInt = function (a, b, c, d, e, ...) return o.SliderInt(a, b, c, d, L.fmt(e), ...); end end
     end
-    if L.dl == nil then                                           -- (the draw lists' AddText, through their metatable)
-        L.dl = false;
-        pcall(function ()
-            local dl = imgui.GetBackgroundDrawList();
-            local mt = dl and debug.getmetatable(dl);
-            if mt == nil then return; end
-            local tr = L.tr;
-            local function wrap(orig)
-                return function (self, a, b, c, d, e, ...)
-                    if L.live then
-                        if type(c) == 'string' then c = tr(c); elseif type(e) == 'string' then e = tr(e); end
-                    end
-                    return orig(self, a, b, c, d, e, ...);
-                end
-            end
-            local ix = mt.__index;
-            if type(ix) == 'table' and type(ix.AddText) == 'function' then
-                ix.AddText = wrap(ix.AddText);
-                L.dl = true;
-            elseif type(ix) == 'function' then
-                local w;
-                mt.__index = function (self, k)
-                    if k == 'AddText' then
-                        if w == nil then w = wrap(ix(self, k)); end
-                        return w;
-                    end
-                    return ix(self, k);
-                end
-                L.dl = true;
-            end
-        end);
+end
+-- The draw list's AddText, with the translation put in (TRF.DLH puts this on and takes it off)
+function TRF.LANG.wrapText(orig)
+    local L = TRF.LANG;
+    local tr = L.tr;
+    return function (self, a, b, c, d, e, ...)
+        if L.live then
+            if type(c) == 'string' then c = tr(c); elseif type(e) == 'string' then e = tr(e); end
+        end
+        return orig(self, a, b, c, d, e, ...);
     end
 end
 -- Each frame: Japanese on or off (the hooks look at this, not at the settings)
@@ -1992,7 +1971,8 @@ function TRF.LANG.frame()
     local L = TRF.LANG;
     if config.lang == 'jp' and L.D == nil and not L.tried then L.tried = true; L.load(); end
     L.live = L.on();
-    if L.live and (L.o == nil or L.dl == nil) then L.hook(); end
+    if L.live and L.o == nil then L.hook(); end
+    if L.live or TRF.DLH.want.lang then TRF.DLH.set('lang', L.live); end   -- (off again in English: nothing in the way of drawing)
 end
 -- A chat line in Japanese: translated, and in Shift-JIS for the game
 function TRF.LANG.chat(text)
@@ -2117,34 +2097,62 @@ function TRF.Z.hook()
         if o.Image then imgui.Image = function (tex, sz, ...) if Z.on then sz = Z.m(sz); end return o.Image(tex, sz, ...); end end
         if o.PushStyleVar then imgui.PushStyleVar = function (k, v, ...) if Z.on then v = Z.m(v); end return o.PushStyleVar(k, v, ...); end end
     end
-    if Z.dl == nil then                                           -- (the draw lists, through their metatable)
-        Z.dl = false;
-        pcall(function ()
-            local dl = imgui.GetBackgroundDrawList();
-            local mt = dl and debug.getmetatable(dl);
-            if mt == nil then return; end
-            local ix = mt.__index;
-            if type(ix) == 'table' then
-                for name in pairs(Z.DL) do
-                    if type(ix[name]) == 'function' then ix[name] = Z.wrapDL(name, ix[name]); end
-                end
-                if type(ix.AddText) == 'function' then ix.AddText = Z.wrapDL('AddText', ix.AddText); end
-                Z.dl = true;
-            elseif type(ix) == 'function' then
-                local w = {};
-                mt.__index = function (self, k)
-                    if Z.DL[k] or k == 'AddText' then
-                        if w[k] == nil then
-                            local f = ix(self, k);
-                            w[k] = (type(f) == 'function') and Z.wrapDL(k, f) or false;
-                        end
-                        if w[k] then return w[k]; end
-                    end
-                    return ix(self, k);
-                end
-                Z.dl = true;
+end
+------------------------------------------------------------------------
+-- The draw lists' hooks (Japanese: AddText translated; the window's scale: positions and sizes scaled). They sit on
+-- the draw lists' metatable, so they are only there while one of the two is in use: in English at 100% the
+-- metatable is exactly as the game made it, and drawing costs nothing extra.
+------------------------------------------------------------------------
+TRF.DLH = { want = { lang = false, z = false }, ok = nil };
+function TRF.DLH.set(which, on)
+    local D = TRF.DLH;
+    on = on and true or false;
+    if D.want[which] == on then return D.ok == true; end
+    D.want[which] = on;
+    pcall(D.apply);
+    return D.ok == true;
+end
+function TRF.DLH.apply()
+    local D, Z = TRF.DLH, TRF.Z;
+    if D.mt == nil then                                           -- (the first time: the metatable and what it had)
+        local dl = imgui.GetBackgroundDrawList();
+        local mt = dl and debug.getmetatable(dl);
+        if mt == nil then D.ok = false; return; end
+        D.mt, D.ix, D.orig = mt, mt.__index, {};
+        if type(D.ix) ~= 'table' and type(D.ix) ~= 'function' then D.ok = false; return; end
+        D.ok = true;
+    end
+    if not D.ok then return; end
+    local lang, z = D.want.lang, D.want.z;
+    local function dress(k, f)                                    -- (a method with what is wanted put round it; nil: leave it)
+        if type(f) ~= 'function' then return nil; end
+        local out = nil;
+        if z and (Z.DL[k] or k == 'AddText') then out = Z.wrapDL(k, f); end
+        if lang and k == 'AddText' then out = TRF.LANG.wrapText(out or f); end
+        return out;
+    end
+    if type(D.ix) == 'table' then
+        local names = { 'AddText' };
+        for k in pairs(Z.DL) do names[#names + 1] = k; end
+        for _, k in ipairs(names) do
+            if D.orig[k] == nil then D.orig[k] = D.ix[k] or false; end
+            if D.orig[k] then D.ix[k] = dress(k, D.orig[k]) or D.orig[k]; end
+        end
+    else
+        if not lang and not z then D.mt.__index = D.ix; return; end
+        local ix, cache = D.ix, {};
+        D.mt.__index = function (self, k)
+            local w = cache[k];
+            if w then return w; end
+            if w == nil and (k == 'AddText' or Z.DL[k]) then
+                w = dress(k, ix(self, k)) or false;
+                cache[k] = w;
+                if w then return w; end
+            elseif w == nil then
+                cache[k] = false;
             end
-        end);
+            return ix(self, k);
+        end
     end
 end
 -- Before the main window: take up a change asked for by - / + (the window resized to match, its top-right corner
@@ -2164,7 +2172,9 @@ function TRF.Z.begin()
     end
     Z.want = nil;
     Z.s = cur;
-    if cur ~= 1 and (Z.o == nil or Z.dl == nil) then Z.hook(); end
+    if cur ~= 1 and Z.o == nil then Z.hook(); end
+    Z.dl = false;
+    if cur ~= 1 or TRF.DLH.want.z then Z.dl = TRF.DLH.set('z', cur ~= 1); end   -- (at 100%: taken off again)
     Z.on = (cur ~= 1) and Z.dl == true;                           -- (no draw-list hook: no scaling at all, not half of it)
     return Z.on and cur or 1;
 end
@@ -2277,8 +2287,9 @@ function TRF.PH.ql(dl, a, b, c, d, e, f, g, h, col, th)
     dl:AddLine({ a, b }, { c, d }, col, th); dl:AddLine({ c, d }, { e, f }, col, th);
     dl:AddLine({ e, f }, { g, h }, col, th); dl:AddLine({ g, h }, { a, b }, col, th);
 end
-function TRF.PH.clip(dl) pcall(function () dl:PushClipRect({ -10000, -10000 }, { 20000, 20000 }, false); end); end
-function TRF.PH.unclip(dl) pcall(function () dl:PopClipRect(); end); end
+TRF.PH.CLIP = { { -10000, -10000 }, { 20000, 20000 } };
+function TRF.PH.clip(dl) pcall(dl.PushClipRect, dl, TRF.PH.CLIP[1], TRF.PH.CLIP[2], false); end
+function TRF.PH.unclip(dl) pcall(dl.PopClipRect, dl); end
 function TRF.PH.font(f, size)                                    -- (a face at a size: true if it was pushed)
     f, size = TRF.LANG.face(f, size);
     if f == nil then return false; end
@@ -2522,17 +2533,25 @@ function TRF.NE.col(a) local c = C.acc; return u32({ c[1], c[2], c[3], a or 1 })
 -- a convex outline, filled (in one path, else as a fan of triangles)
 function TRF.NE.fill(dl, P, col)
     local N = TRF.NE;
-    if #P < 3 then return; end
-    if N.pok ~= false then
-        local ok = pcall(function ()
+    local n = #P;
+    if n < 3 then return; end
+    if n == 3 then dl:AddTriangleFilled(P[1], P[2], P[3], col); return; end
+    if n == 4 then dl:AddQuadFilled(P[1], P[2], P[3], P[4], col); return; end
+    if N.pok == nil then                                          -- (the path calls: tried once, then used straight)
+        N.pok = pcall(function ()
             dl:PathClear();
-            for i = 1, #P do dl:PathLineTo(P[i]); end
+            for i = 1, n do dl:PathLineTo(P[i]); end
             dl:PathFillConvex(col);
         end);
-        if ok then N.pok = true; return; end
-        N.pok = false; pcall(function () dl:PathClear(); end);
+        if N.pok then return; end
+        pcall(function () dl:PathClear(); end);
+    elseif N.pok then
+        dl:PathClear();
+        for i = 1, n do dl:PathLineTo(P[i]); end
+        dl:PathFillConvex(col);
+        return;
     end
-    for i = 2, #P - 1 do dl:AddTriangleFilled(P[1], P[i], P[i + 1], col); end
+    for i = 2, n - 1 do dl:AddTriangleFilled(P[1], P[i], P[i + 1], col); end
 end
 -- the outline pushed out by o all round (in, if negative)
 function TRF.NE.grow(P, o)
@@ -2794,10 +2813,11 @@ function TRF.NE.row(dl, x0, y0, x1, y1, s, on, over, label)
                 local xx = hx0 + ((rw % 2 == 1) and dx / 2 or 0);
                 while xx < x1 + K + dx do
                     local fade = math.max(0, math.min(1, (xx - hx0) / ((x1 - hx0) * 0.6)));
-                    local hc = u32({ 1, 0.85, 0.85, 0.22 * fade });
-                    for k = 0, 2 do
-                        local a0, a1 = math.rad(30 + k * 60), math.rad(90 + k * 60);
-                        dl:AddLine({ xx + math.cos(a0) * r, yy + math.sin(a0) * r }, { xx + math.cos(a1) * r, yy + math.sin(a1) * r }, hc, 1 * s);
+                    if fade > 0.04 then
+                        local hc = u32({ 1, 0.85, 0.85, 0.22 * fade });
+                        dl:AddLine({ xx + r * 0.866, yy + r * 0.5 }, { xx, yy + r }, hc, 1 * s);
+                        dl:AddLine({ xx, yy + r }, { xx - r * 0.866, yy + r * 0.5 }, hc, 1 * s);
+                        dl:AddLine({ xx - r * 0.866, yy + r * 0.5 }, { xx - r * 0.866, yy - r * 0.5 }, hc, 1 * s);
                     end
                     xx = xx + dx;
                 end
@@ -3811,7 +3831,8 @@ local function ventureRow(v, z, at, showPool)
         imgui.TextColored(C.seal, v.drops);
         vnmTip(v);
     end
-    local crest = (v.crest and v.crest ~= '') and v.crest or TRF.crestOf(v.zone_name);
+    if (v.crest == nil or v.crest == '') and not v.crestTried then v.crestTried = true; v.crest = TRF.crestOf(v.zone_name) or ''; end
+    local crest = v.crest;
     if crest and TRF.CRESTC[crest] then                           -- (the crest it drops, in its armour set's colour)
         if v.drops and v.drops ~= '' then imgui.SameLine(0, 8); else imgui.SameLine(x0 + at.drops); end
         imgui.TextColored(TRF.CRESTC[crest], crest);
@@ -4253,8 +4274,11 @@ local function projectWith(v, p, x, y, z)
     local cy = vx * p[2] + vy * p[6] + vz * p[10] + p[14];
     local cw = vx * p[4] + vy * p[8] + vz * p[12] + p[16];
     if cw <= 0.05 then return nil; end
-    local ds = imgui.GetIO().DisplaySize;
-    local W, H = (ds and ds.x) or 1920, (ds and ds.y) or 1080;
+    local W, H = CAM.W, CAM.H;                                    -- (the screen's size: read once a frame by drawTrail)
+    if W == nil then
+        local ds = imgui.GetIO().DisplaySize;
+        W, H = (ds and ds.x) or 1920, (ds and ds.y) or 1080;
+    end
     return (cx / cw * 0.5 + 0.5) * W, (0.5 - cy / cw * 0.5) * H, cw;
 end
 local function project(x, y, z)
@@ -5151,7 +5175,10 @@ function TRF.SV.canBuy()
     return math.max(0, n), math.max(0, math.min(n, S.scan().free));
 end
 -- The Sparks NPC beside you: index, server id, name, distance
-function TRF.SV.npc()
+function TRF.SV.npc(fresh)
+    local S = TRF.SV;
+    if not fresh and S.npcAt and os.clock() - S.npcAt < 1 then return S.npcSeen; end   -- (1,023 names to read: once a second)
+    S.npcAt, S.npcSeen = os.clock(), nil;
     local x, y = pos();
     if x == nil then return nil; end
     local best = nil;
@@ -5168,13 +5195,14 @@ function TRF.SV.npc()
             end
         end
     end);
+    S.npcSeen = best;
     return best;
 end
 -- BUY: talk to the NPC (the menu kept shut), then one shield at a time
 function TRF.SV.buy(n)
     local S = TRF.SV;
     if S.job then return; end
-    local np = S.npc();
+    local np = S.npc(true);
     if np == nil then S.say('No Sparks NPC here: go to Isakoth (Bastok Markets), Rolandienne (Southern San d\'Oria), Fhelm Jobeizat (Windurst Woods) or Eternal Flame (Western Adoulin).', true); return; end
     if np.d > 5.5 then S.say(('Walk up to %s (%.0f yalms away), then press BUY.'):fmt(np.name, np.d), true); return; end
     if n < 1 then S.say('Not enough sparks or bag space for an Acheron Shield.', true); return; end
@@ -8070,6 +8098,7 @@ function TRF.GPS.runes(dl, E)
     local endd = math.min(E.len, E.dist - 3.4);
     local run = G.run(E, 'runes', E.pulse, endd, 14);
     local base = math.atan2(E.uy, E.ux);
+    local lightg = (tonumber(config.glow_q) or 2) < 2;          -- (Glow passes 1, or Light mode: no filled glow, no inner ring)
     local k = math.max(1, math.ceil((E.dist - endd) / every));
     while true do                                                -- (far to near, so the near ones are on top)
         local d = E.dist - k * every;
@@ -8091,19 +8120,20 @@ function TRF.GPS.runes(dl, E)
                 end
             end
         end
-        if cx then
+        if cx and cx > -120 and cx < E.W + 120 and cy > -120 and cy < E.H + 120 then   -- (on the screen)
             local wx, wy = E.px + E.ux * d, E.py + E.uy * d;
-            local near = cw < 42;                                -- (close enough for the fine marks)
-            local segs = near and 28 or 14;
+            local near = cw < 32;                                -- (close enough for the fine marks)
+            local far = cw > 75;                                 -- (far enough that one ring and the star will do)
+            local segs = near and 24 or (far and 10 or 14);
             local P1 = G.ring(wx, wy, E.ph, r, segs, base);
             if P1 then
                 local th = math.max(1.2, math.min(3.2, 52 / cw)) * (1 + b * 0.5);
-                if E.glow then
-                    G.fan(dl, { cx, cy }, P1, u32({ c[1], c[2], c[3], (0.07 + b * 0.30) * fade }));
+                if E.glow and not far then
+                    if not lightg and (near or b > 0.05) then G.fan(dl, { cx, cy }, P1, u32({ c[1], c[2], c[3], (0.07 + b * 0.30) * fade })); end
                     G.loop(dl, P1, u32({ c[1], c[2], c[3], (0.16 + b * 0.20) * fade }), th * 2.8);
                 end
                 G.loop(dl, P1, u32(G.hot(c, 0.20 + b * 0.6, 0.95 * fade)), th);
-                local P2 = G.ring(wx, wy, E.ph, r * 0.78, segs, base);
+                local P2 = (not far) and G.ring(wx, wy, E.ph, r * 0.78, segs, base) or nil;
                 if P2 then G.loop(dl, P2, u32(G.hot(c, 0.10 + b * 0.5, 0.75 * fade)), math.max(1, th * 0.55)); end
                 if near then
                     local rot = base + E.now * 0.22 * ((k % 2 == 0) and 1 or -1);   -- (the marks turn slowly, every other one the other way)
@@ -8131,7 +8161,7 @@ function TRF.GPS.runes(dl, E)
                             end
                         end
                     end
-                    local P3 = G.ring(wx, wy, E.ph, r * 0.50, 14, base);
+                    local P3 = (not lightg) and G.ring(wx, wy, E.ph, r * 0.50, 14, base) or nil;
                     if P3 then G.loop(dl, P3, u32(G.hot(c, 0.15 + b * 0.5, 0.55 * fade)), math.max(1, th * 0.4)); end
                 end
                 -- the four-point star in the middle (long points along and across the path)
@@ -8164,7 +8194,7 @@ function TRF.GPS.light(dl, E)
     while true do
         if d > endd then d = endd; end
         local x, y, w = G.pt(E, d);
-        if x and lx then
+        if x and lx and not ((x < 0 and lx < 0) or (x > E.W and lx > E.W) or (y < 0 and ly < 0) or (y > E.H and ly > E.H)) then
             local fade = 1 - (d / E.RANGE) * 0.5;
             local b = math.exp(-((d - run) / 5) ^ 2);
             local th = math.max(2.2, math.min(9, 130 / ((w + lw) / 2))) * math.sqrt(E.SZ);
@@ -8231,7 +8261,7 @@ function TRF.GPS.aether(dl, E)
         local d = 1.2;
         while d <= endd do
             local x, y, w = G.pt(E, d, side(s, d));
-            if x and lx then
+            if x and lx and not ((x < 0 and lx < 0) or (x > E.W and lx > E.W) or (y < 0 and ly < 0) or (y > E.H and ly > E.H)) then
                 local fade = 1 - (d / E.RANGE) * 0.5;
                 local th = math.max(1.2, math.min(4.5, 70 / w)) * math.sqrt(E.SZ);
                 if E.glow then dl:AddLine({ lx, ly }, { x, y }, u32({ c[1], c[2], c[3], 0.08 * fade }), th * 3.0); end
@@ -8251,7 +8281,7 @@ function TRF.GPS.aether(dl, E)
     while d < endd do
         local seed = (i + first) * 1.7;
         local x, y, w = G.pt(E, d, side(1, d) * 0.8, 0.35 + 0.22 * math.sin(E.now * 1.6 + seed));
-        if x then
+        if x and x > -30 and x < E.W + 30 and y > -30 and y < E.H + 30 then
             local tw = 0.65 + 0.35 * math.sin(E.now * 3.1 + seed * 2.3);
             G.orb(dl, x, y, math.max(1.6, math.min(6, 80 / w)) * E.SZ, c, tw * (1 - (d / E.RANGE) * 0.5));
         end
@@ -8355,6 +8385,10 @@ drawTrail = function()
     local px, py, ph = pos();
     if px == nil then return; end
     local now = os.clock();
+    do                                                            -- (the screen's size, for every point projected this frame)
+        local ds0 = imgui.GetIO().DisplaySize;
+        CAM.W, CAM.H = (ds0 and ds0.x) or 1920, (ds0 and ds0.y) or 1080;
+    end
     local fresh = (#CAM.cands > 0);
     if not fresh and CAM.view == nil then CAM.on, CAM.max, CAM.tries = true, 1, 0; camSample(); fresh = (#CAM.cands > 0); end   -- (no draws seen: try now)
     if fresh and not calibrate(px, py, ph) then
@@ -8399,7 +8433,7 @@ drawTrail = function()
         local gps = TRF.GPS.STYLES[style] and {                -- (RUNES, LIGHT, AETHER: the path this frame)
             px = px, py = py, ph = ph, ux = ux, uy = uy, nx = nx, ny = ny, dist = dist, len = len, RANGE = RANGE,
             col = col, glow = glow, SZ = SZ, SP = SP, now = now, speed = tonumber(config.trail_speed) or 5, pulse = math.max(0.5, tonumber(config.pulse_speed) or 9),
-            tx = tx, ty = ty, gh = gh, vkey = v.key } or nil;
+            tx = tx, ty = ty, gh = gh, vkey = v.key, W = W, H = H } or nil;
 
         if gps then
             pcall(TRF.GPS[style], dl, gps);

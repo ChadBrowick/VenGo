@@ -106,6 +106,13 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 
 `ventures.lua` is only a fallback until the game or the website sends the board.
 
+## Keeping frames up
+
+What costs the most, most first: the **RUNES** GPS style (LIGHT is the cheapest of the three), **Glow** on the GPS,
+the window at a scale other than 100%, Japanese, and the Neon style. Settings > Window > **Light mode** and
+Settings > Performance > **Glow passes 1** cut the GPS's cost (Runes then drops its filled glow and inner ring).
+In English at 100% VenGo puts nothing in the way of drawing.
+
 ## Window size
 
 The **-** and **+** at the top of the window, left of the EN / JP switch, make the whole window smaller or
