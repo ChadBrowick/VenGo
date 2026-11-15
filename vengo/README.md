@@ -135,7 +135,8 @@ running light of Runes, Light and Aether crosses the ground, from 1 to 40 yalms 
 ## The logo
 
 Shrunk (the round button at the top right), VenGo is its lightning logo: bolts gather into "VenGo", which then holds
-and strikes again every 9 seconds (every 3 while warping or during an alert, with a glow), or when you point at it.
+and strikes again every 9 seconds (every 3 while warping), or when you point at it. While a VNM is up the bolts
+keep striking and the logo is brighter; the Aether icon's lights swell, brighten and blink instead.
 Click it to open VenGo, drag it to move it, drag its bottom-right corner to resize it (nothing is drawn behind it). "Animate the logo" in Settings off: it stays still.
 Settings > Window also has **Icon** (LIGHTNING, AETHER for the chrome VenGo with three aether lights circling it,
 CHADBROWICK for the emblem from the window's corner with its shine and petals,

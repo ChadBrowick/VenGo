@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.87';
+addon.version = '4.88';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -8972,7 +8972,7 @@ end
 -- the orbital-glow logo with its painted orbs taken out), and three aether lights drawn round it: one looping the
 -- V, one sweeping round the whole word, a small one between. Each is a soft ball with a white heart and a comet's
 -- tail, behind the word on the far half of its way and in front on the near half; a few motes twinkle about.
--- Faster while warping or during an alert (which also puts a pulsing glow round it); still with the animation off.
+-- Faster while warping or during an alert (when the lights also swell, brighten and blink); still with the animation off.
 function TRF.logoAether(dl, tex, cx, cy, LW, LH, sc, t, hot, running)
     local c = { 0.25, 0.62, 1.00 };
     local w = LW * 0.80;
@@ -8985,12 +8985,7 @@ function TRF.logoAether(dl, tex, cx, cy, LW, LH, sc, t, hot, running)
             pcall(dl.AddEllipseFilled, dl, { cx, cy }, { LW * 0.47 * q, LH * 0.40 * q }, u32({ 0.02, 0.02, 0.05, 0.20 }), 0, 40);
         end
     end
-    if hot then                                                   -- (an alert: a pulse of its colour round it)
-        local gp = 0.5 + 0.5 * math.sin(t * 5);
-        for k = 1, 3 do
-            pcall(dl.AddEllipse, dl, { cx, cy }, { LW * 0.46 + k * 2, LH * 0.40 + k * 2 }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.14 * (4 - k) * gp }), 0, 40, 2.5);
-        end
-    end
+    local blink = hot and (0.5 + 0.5 * math.sin(t * 9)) or 0;    -- (a VNM is up: the lights swell, brighten and blink)
     -- the lights: centre (of the word's width / height), radii, seconds a turn, where it starts, its size, which way
     local O = {
         { -0.33, 0.06, 0.12, 0.50, 3.2, 0.0, 1.00,  1 },
@@ -9003,7 +8998,7 @@ function TRF.logoAether(dl, tex, cx, cy, LW, LH, sc, t, hot, running)
     local function light(o)
         local a = o[6] + o[8] * tt * math.pi * 2 / o[5];
         local x, y, z = at(o, a);
-        local r = (4.2 + 1.2 * z) * o[7] * sc;
+        local r = (4.2 + 1.2 * z) * o[7] * sc * (hot and (1.35 + 0.35 * blink) or 1);
         local lx, ly = x, y;
         for k = 1, 12 do                                          -- (the tail: where it was, fading and thinning)
             local px, py = at(o, a - o[8] * k * 0.11);
@@ -9012,10 +9007,14 @@ function TRF.logoAether(dl, tex, cx, cy, LW, LH, sc, t, hot, running)
             dl:AddLine({ lx, ly }, { px, py }, u32({ 0.75, 0.90, 1, 0.55 * u * u * u }), math.max(1, r * 0.5 * u));
             lx, ly = px, py;
         end
-        dl:AddCircleFilled({ x, y }, r * 2.6, u32({ c[1], c[2], c[3], 0.08 }), 18);
-        dl:AddCircleFilled({ x, y }, r * 1.7, u32({ c[1], c[2], c[3], 0.20 }), 16);
-        dl:AddCircleFilled({ x, y }, r, u32({ 0.45 + c[1] * 0.55, 0.45 + c[2] * 0.55, 0.45 + c[3] * 0.55, 0.85 }), 14);
-        dl:AddCircleFilled({ x, y }, r * 0.5, u32({ 1, 1, 1, 0.97 }), 10);
+        if hot then                                               -- (a wide flare that comes and goes)
+            dl:AddCircleFilled({ x, y }, r * 4.2, u32({ c[1], c[2], c[3], 0.10 * blink }), 22);
+            dl:AddCircleFilled({ x, y }, r * 3.2, u32({ c[1], c[2], c[3], 0.16 * blink }), 20);
+        end
+        dl:AddCircleFilled({ x, y }, r * 2.6, u32({ c[1], c[2], c[3], 0.08 + 0.20 * blink }), 18);
+        dl:AddCircleFilled({ x, y }, r * 1.7, u32({ c[1], c[2], c[3], 0.20 + 0.30 * blink }), 16);
+        dl:AddCircleFilled({ x, y }, r, u32({ 0.45 + c[1] * 0.55, 0.45 + c[2] * 0.55, 0.45 + c[3] * 0.55, hot and (0.70 + 0.30 * blink) or 0.85 }), 14);
+        dl:AddCircleFilled({ x, y }, r * (hot and (0.5 + 0.25 * blink) or 0.5), u32({ 1, 1, 1, 0.97 }), 10);
     end
     local function near(o) return math.sin(o[6] + o[8] * tt * math.pi * 2 / o[5]) >= 0; end
     for _, o in ipairs(O) do if not near(o) then light(o); end end          -- (behind the word)
@@ -9106,12 +9105,15 @@ drawMini = function()
             R = size / 2 - 4;                                     -- (the place to click)
         elseif lg then
             -- THE LIGHTNING LOGO: bolts gather into "VenGo" (9 frames, 0.15 s each), which then holds, breathing,
-            -- and strikes again every 9 s (every 3 s while warping or during an alert, with a glow in its colour)
+            -- and strikes again every 9 s (every 3 s while warping). While a VNM is up the bolts keep striking and it is brighter.
             if MINI.born == nil or t - (MINI.seen or 0) > 0.5 then MINI.born = t; end   -- (just shrunk to it: it strikes)
             MINI.seen = t;
-            local period = (hot or running) and 3 or 9;
+            local period = running and 3 or 9;
             local e = (t - MINI.born) % period;
             local fr = config.logo_anim and math.min(8, math.floor(e / 0.15)) or 8;
+            if hot and config.logo_anim then                      -- (a VNM is up: the bolts keep striking, one after another)
+                fr = math.min(8, math.floor(t / 0.10) % 11);
+            end
             if config.logo_clear == false then                    -- (see-through off: a dark cloud behind it)
                 for k = 1, 4 do
                     local q = 1 - (k - 1) * 0.2;
@@ -9120,20 +9122,21 @@ drawMini = function()
                     end);
                 end
             end
-            if hot then                                           -- (an alert: a pulse of its colour round it)
-                local gp = 0.5 + 0.5 * math.sin(t * 5);
-                for k = 1, 3 do
-                    pcall(function ()
-                        dl:AddEllipse({ cx, cy }, { LW * 0.44 + k * 2, LH * 0.34 + k * 2 }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.14 * (4 - k) * gp }), 0, 40, 2.5);
-                    end);
-                end
-            end
             local col, row = fr % 4, math.floor(fr / 4);
             local u0, v0 = (col * 512 + 2) / 2048, (row * 340 + 2) / 1024;
             local u1, v1 = (col * 512 + 510) / 2048, (row * 340 + 338) / 1024;
             local w, h = LW - 8, (LW - 8) * 336 / 508;
             local breathe = (fr == 8 and config.logo_anim) and (0.90 + 0.10 * math.sin(t * 2.2)) or 1;
+            if hot then                                           -- (a VNM is up: brighter, a glow of itself round it, flickering)
+                local fl = 0.65 + 0.35 * math.sin(t * 11);
+                local g = 1.07;
+                pcall(dl.AddImage, dl, lg.ptr, { cx - w * g / 2, cy - h * g / 2 }, { cx + w * g / 2, cy + h * g / 2 }, { u0, v0 }, { u1, v1 }, u32({ 1, 1, 1, 0.40 * fl }));
+                breathe = 1;
+            end
             pcall(dl.AddImage, dl, lg.ptr, { cx - w / 2, cy - h / 2 }, { cx + w / 2, cy + h / 2 }, { u0, v0 }, { u1, v1 }, u32({ 1, 1, 1, breathe }));
+            if hot then                                           -- (and drawn over itself, so the light adds up)
+                pcall(dl.AddImage, dl, lg.ptr, { cx - w / 2, cy - h / 2 }, { cx + w / 2, cy + h / 2 }, { u0, v0 }, { u1, v1 }, u32({ 1, 1, 1, 0.55 + 0.35 * math.sin(t * 11) }));
+            end
             R = LH / 2 - 12;                                      -- (the place to click)
         else
 
