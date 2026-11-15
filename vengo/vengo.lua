@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.88';
+addon.version = '4.89';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -9032,6 +9032,50 @@ function TRF.logoAether(dl, tex, cx, cy, LW, LH, sc, t, hot, running)
     end
 end
 
+-- Cherry blossoms falling across the emblem while a VNM is up: nine large five-petalled flowers, each turning and
+-- swaying as it falls, fading in at the top and out at the bottom, with a few loose petals between them.
+function TRF.sakura(dl, lx, ly, size, t)
+    for j = 1, 9 do
+        local seed = j * 0.6180339;
+        local per = 2.6 + (j % 4) * 0.55;                         -- (seconds to fall)
+        local k = (t / per + seed) % 1;
+        local fade = math.min(1, k * 7, (1 - k) * 5);
+        local x = lx + size * (0.08 + 0.84 * ((seed * 7.31) % 1)) + size * 0.07 * math.sin(t * (1.1 + j * 0.13) + j * 2.1);
+        local y = ly - size * 0.12 + k * size * 1.22;
+        local r = size * (0.085 + 0.035 * ((j * 3) % 4) / 3);     -- (large: up to an eighth of the emblem)
+        local rot = t * (0.9 + (j % 3) * 0.5) * ((j % 2 == 0) and 1 or -1) + j;
+        local tilt = 0.72 + 0.28 * math.sin(t * 1.7 + j * 1.3);   -- (it tips as it falls, so it looks to turn over)
+        local function pt(a, d) return { x + math.cos(a) * d, y + math.sin(a) * d * tilt }; end
+        local pink = u32({ 1.00, 0.72, 0.84, 0.95 * fade });
+        local pale = u32({ 1.00, 0.90, 0.95, 0.85 * fade });
+        local edge = u32({ 0.93, 0.45, 0.66, 0.60 * fade });
+        for i = 0, 4 do
+            local a = rot + i * math.pi * 2 / 5;
+            local c0, L, R = pt(a, r * 0.10), pt(a - 0.50, r * 0.64), pt(a + 0.50, r * 0.64);
+            local T1, T2, N = pt(a - 0.13, r), pt(a + 0.13, r), pt(a, r * 0.86);   -- (the tip, with the blossom's small notch)
+            dl:AddQuadFilled(c0, L, T1, N, pink);
+            dl:AddQuadFilled(c0, N, T2, R, pink);
+            dl:AddTriangleFilled(c0, pt(a - 0.20, r * 0.55), pt(a + 0.20, r * 0.55), pale);
+            dl:AddLine(L, T1, edge, 1);
+            dl:AddLine(T2, R, edge, 1);
+        end
+        dl:AddCircleFilled({ x, y }, r * 0.20, u32({ 0.96, 0.40, 0.60, 0.95 * fade }), 12);
+        dl:AddCircleFilled({ x, y }, r * 0.09, u32({ 1.00, 0.92, 0.55, 0.95 * fade }), 8);
+    end
+    for j = 1, 6 do                                               -- (loose petals)
+        local seed = j * 0.3819660;
+        local k = (t / (2.1 + (j % 3) * 0.4) + seed) % 1;
+        local fade = math.min(1, k * 7, (1 - k) * 5);
+        local x = lx + size * ((seed * 5.77) % 1) + size * 0.10 * math.sin(t * 1.6 + j);
+        local y = ly - size * 0.08 + k * size * 1.16;
+        local a = t * (2 + j * 0.4) + j;
+        local r1, r2 = size * 0.045, size * 0.020;
+        local ca, sa = math.cos(a), math.sin(a);
+        local function pt(u, v) return { x + u * ca - v * sa, y + u * sa + v * ca }; end
+        dl:AddQuadFilled(pt(-r1, 0), pt(0, -r2), pt(r1, 0), pt(0, r2), u32({ 1.00, 0.78, 0.88, 0.85 * fade }));
+    end
+end
+
 local MINI = { x = nil, y = nil, dragged = false };
 
 -- An arc of a circle drawn as short lines (no ImGui path calls needed)
@@ -9096,12 +9140,9 @@ drawMini = function()
             if config.logo_clear == false then                    -- (see-through off: a dark disc behind it)
                 dl:AddCircleFilled({ cx, cy }, size * 0.52, u32({ 0.02, 0.02, 0.05, 0.60 }), 48);
             end
-            if hot then                                           -- (an alert: a pulse of its colour round it)
-                local gp = 0.5 + 0.5 * math.sin(t * 5);
-                for k = 1, 3 do dl:AddCircle({ cx, cy }, size / 2 + k * 2, u32({ NEON2[1], NEON2[2], NEON2[3], 0.16 * (4 - k) * gp }), 48, 2.5); end
-            end
             pcall(dl.AddImage, dl, em.ptr, { lx, ly }, { lx + size, ly + size }, { 0, 0 }, { 1, 1 }, u32({ 1, 1, 1, 1 }));
             if config.logo_anim then pcall(logoFx, dl, lx, ly, size); end
+            if hot then pcall(TRF.sakura, dl, lx, ly, size, t); end   -- (a VNM is up: large cherry blossoms fall across it)
             R = size / 2 - 4;                                     -- (the place to click)
         elseif lg then
             -- THE LIGHTNING LOGO: bolts gather into "VenGo" (9 frames, 0.15 s each), which then holds, breathing,
