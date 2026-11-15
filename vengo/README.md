@@ -138,6 +138,7 @@ Shrunk (the round button at the top right), VenGo is its lightning logo: bolts g
 and strikes again every 9 seconds (every 3 while warping or during an alert, with a glow), or when you point at it.
 Click it to open VenGo, drag it to move it, drag its bottom-right corner to resize it (nothing is drawn behind it). "Animate the logo" in Settings off: it stays still.
 Settings > Window also has **Icon** (LIGHTNING, AETHER for the chrome VenGo with three aether lights circling it,
+CHADBROWICK for the emblem from the window's corner with its shine and petals,
 ORB for the round orb from before, or NO ICON: nothing on screen when
 shrunk, `/vengo` opens VenGo again), **See-through logo** (off: a dark cloud behind it), **Logo size** with - and +, and
 **PREVIEW**, which shows the logo beside the open window. Size, see-through and the corner grip work for both icons

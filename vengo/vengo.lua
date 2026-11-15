@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.86';
+addon.version = '4.87';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -75,7 +75,7 @@ local config = {
     login_refresh = true,      -- type !ventures once when you log in
     logo_anim = true,          -- shine and petals on the logo
     logo_clear = true,         -- nothing behind the shrunk logo (off: a dark cloud)
-    logo_style = 'bolt',       -- what VenGo shrinks to: bolt (the lightning logo) | aether (chrome, aether lights) | orb (the round orb) | none (nothing)
+    logo_style = 'bolt',       -- what VenGo shrinks to: bolt (the lightning logo) | aether (chrome, aether lights) | emblem (the Chadbrowick logo) | orb (the round orb) | none (nothing)
     win_scale = 1,             -- the main window's scale (the - and + at its top): 0.5 to 3
     logo_size = 1,             -- the shrunk lightning logo's size (drag its corner): 0.4 to 3
     trail = true,              -- the glowing path on the ground to the VNM
@@ -8625,10 +8625,10 @@ local function tabSettings()
     do                                                            -- (which icon VenGo shrinks to)
         imgui.AlignTextToFramePadding();
         imgui.TextColored(C.text, 'Icon');
-        tip('What VenGo shrinks to. Lightning: the lightning logo. Aether: the chrome VenGo with aether lights circling it. Orb: the round orb from before. No icon: nothing on screen; type /vengo to open VenGo again.');
+        tip('What VenGo shrinks to. Lightning: the lightning logo. Aether: the chrome VenGo with aether lights circling it. Chadbrowick: the emblem from the corner of this window, with its shine and petals. Orb: the round orb from before. No icon: nothing on screen; type /vengo to open VenGo again.');
         imgui.SameLine(0, 12);
-        local pick = pillChoice('##vengo_logo_style', { { 'bolt', 'LIGHTNING' }, { 'aether', 'AETHER' }, { 'orb', 'ORB' }, { 'none', 'NO ICON' } },
-            (config.logo_style == 'orb' or config.logo_style == 'none' or config.logo_style == 'aether') and config.logo_style or 'bolt');
+        local pick = pillChoice('##vengo_logo_style', { { 'bolt', 'LIGHTNING' }, { 'aether', 'AETHER' }, { 'emblem', 'CHADBROWICK' }, { 'orb', 'ORB' }, { 'none', 'NO ICON' } },
+            (config.logo_style == 'orb' or config.logo_style == 'none' or config.logo_style == 'aether' or config.logo_style == 'emblem') and config.logo_style or 'bolt');
         if pick then config.logo_style = pick; saveSettings(); end
     end
     if rowSwitch('##vengo_logoclear', 'See-through logo', config.logo_clear ~= false,
@@ -9072,6 +9072,8 @@ drawMini = function()
     if lg then LW, LH = math.floor(200 * sc), math.floor(132 * sc); end
     local ae = (config.logo_style == 'aether') and TRF.imageTex('logo_chrome.png') or nil;   -- (the chrome word, aether lights round it)
     if ae then lg, LW, LH = ae, math.floor(250 * sc), math.floor(112 * sc); end
+    local em = (config.logo_style == 'emblem') and imageTex('logo.png') or nil;   -- (the Chadbrowick emblem, as in the window's corner)
+    if em then lg, LW, LH = em, math.floor(132 * sc), math.floor(132 * sc); end
     if MINI.x then imgui.SetNextWindowPos({ MINI.x, MINI.y }, ImGuiCond_Always);
     else imgui.SetNextWindowPos({ 240, 160 }, ImGuiCond_FirstUseEver); end
     imgui.SetNextWindowSize({ LW, LH }, ImGuiCond_Always);
@@ -9088,6 +9090,20 @@ drawMini = function()
         if ae then
             pcall(TRF.logoAether, dl, ae, cx, cy, LW, LH, sc, t, hot, running);
             R = LH / 2 - 10;                                      -- (the place to click)
+        elseif em then
+            -- THE EMBLEM: the Chadbrowick logo from the window's corner, with its shine and drifting petals
+            local size = LW - 14;
+            local lx, ly = cx - size / 2, cy - size / 2;
+            if config.logo_clear == false then                    -- (see-through off: a dark disc behind it)
+                dl:AddCircleFilled({ cx, cy }, size * 0.52, u32({ 0.02, 0.02, 0.05, 0.60 }), 48);
+            end
+            if hot then                                           -- (an alert: a pulse of its colour round it)
+                local gp = 0.5 + 0.5 * math.sin(t * 5);
+                for k = 1, 3 do dl:AddCircle({ cx, cy }, size / 2 + k * 2, u32({ NEON2[1], NEON2[2], NEON2[3], 0.16 * (4 - k) * gp }), 48, 2.5); end
+            end
+            pcall(dl.AddImage, dl, em.ptr, { lx, ly }, { lx + size, ly + size }, { 0, 0 }, { 1, 1 }, u32({ 1, 1, 1, 1 }));
+            if config.logo_anim then pcall(logoFx, dl, lx, ly, size); end
+            R = size / 2 - 4;                                     -- (the place to click)
         elseif lg then
             -- THE LIGHTNING LOGO: bolts gather into "VenGo" (9 frames, 0.15 s each), which then holds, breathing,
             -- and strikes again every 9 s (every 3 s while warping or during an alert, with a glow in its colour)

@@ -558,6 +558,7 @@ local X = {
     ['the requested items'] = '依頼されたアイテム', ['the hunt'] = 'ハント', ['the Summit'] = 'サミット',
     ['ACE'] = 'ACE', ['CW'] = 'CW', ['Vnm armor'] = 'VNM防具', ['Odious codex'] = '禁断の書', ['Special thanks'] = 'スペシャルサンクス',
     ['Language'] = '言語',
+    ['What VenGo shrinks to. Lightning: the lightning logo. Aether: the chrome VenGo with aether lights circling it. Chadbrowick: the emblem from the corner of this window, with its shine and petals. Orb: the round orb from before. No icon: nothing on screen; type /vengo to open VenGo again.'] = 'VenGoを縮小したときの表示。ライトニング: 稲妻ロゴ。エーテル: エーテルの光が回るクロームのVenGo。Chadbrowick: このウィンドウの隅にあるエンブレム(光と花びら付き)。オーブ: 以前の丸いオーブ。アイコンなし: 画面に何も表示しません。/vengoでVenGoを開きます。',
     ['What VenGo shrinks to. Lightning: the lightning logo. Aether: the chrome VenGo with aether lights circling it. Orb: the round orb from before. No icon: nothing on screen; type /vengo to open VenGo again.'] = 'VenGoを縮小したときの表示。ライトニング: 稲妻ロゴ。エーテル: エーテルの光が回るクロームのVenGo。オーブ: 以前の丸いオーブ。アイコンなし: 画面に何も表示しません。/vengoでVenGoを開きます。',
     ['Smaller window (now %d%%, 50%% to 300%%)'] = 'ウィンドウを小さく(現在 {1}%、50%〜300%)',
     ['Bigger window (now %d%%, 50%% to 300%%)'] = 'ウィンドウを大きく(現在 {1}%、50%〜300%)',
