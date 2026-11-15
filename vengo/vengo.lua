@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.85';
+addon.version = '4.86';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -75,7 +75,7 @@ local config = {
     login_refresh = true,      -- type !ventures once when you log in
     logo_anim = true,          -- shine and petals on the logo
     logo_clear = true,         -- nothing behind the shrunk logo (off: a dark cloud)
-    logo_style = 'bolt',       -- what VenGo shrinks to: bolt (the lightning logo) | orb (the round orb) | none (nothing)
+    logo_style = 'bolt',       -- what VenGo shrinks to: bolt (the lightning logo) | aether (chrome, aether lights) | orb (the round orb) | none (nothing)
     win_scale = 1,             -- the main window's scale (the - and + at its top): 0.5 to 3
     logo_size = 1,             -- the shrunk lightning logo's size (drag its corner): 0.4 to 3
     trail = true,              -- the glowing path on the ground to the VNM
@@ -8625,10 +8625,10 @@ local function tabSettings()
     do                                                            -- (which icon VenGo shrinks to)
         imgui.AlignTextToFramePadding();
         imgui.TextColored(C.text, 'Icon');
-        tip('What VenGo shrinks to. Lightning: the new lightning logo. Orb: the round orb from before. No icon: nothing on screen; type /vengo to open VenGo again.');
+        tip('What VenGo shrinks to. Lightning: the lightning logo. Aether: the chrome VenGo with aether lights circling it. Orb: the round orb from before. No icon: nothing on screen; type /vengo to open VenGo again.');
         imgui.SameLine(0, 12);
-        local pick = pillChoice('##vengo_logo_style', { { 'bolt', 'LIGHTNING' }, { 'orb', 'ORB' }, { 'none', 'NO ICON' } },
-            (config.logo_style == 'orb' or config.logo_style == 'none') and config.logo_style or 'bolt');
+        local pick = pillChoice('##vengo_logo_style', { { 'bolt', 'LIGHTNING' }, { 'aether', 'AETHER' }, { 'orb', 'ORB' }, { 'none', 'NO ICON' } },
+            (config.logo_style == 'orb' or config.logo_style == 'none' or config.logo_style == 'aether') and config.logo_style or 'bolt');
         if pick then config.logo_style = pick; saveSettings(); end
     end
     if rowSwitch('##vengo_logoclear', 'See-through logo', config.logo_clear ~= false,
@@ -8968,6 +8968,71 @@ end
 
 -- Minimised: a small glowing tag with "VenGo" (Go shimmering). Click it to open the
 -- panel again; drag it to move it. A dot pulses while VenGo is running somewhere.
+-- THE AETHER LOGO (Settings > Window > Icon > AETHER): the chrome "VenGo" (images\logo_chrome.png, the word of
+-- the orbital-glow logo with its painted orbs taken out), and three aether lights drawn round it: one looping the
+-- V, one sweeping round the whole word, a small one between. Each is a soft ball with a white heart and a comet's
+-- tail, behind the word on the far half of its way and in front on the near half; a few motes twinkle about.
+-- Faster while warping or during an alert (which also puts a pulsing glow round it); still with the animation off.
+function TRF.logoAether(dl, tex, cx, cy, LW, LH, sc, t, hot, running)
+    local c = { 0.25, 0.62, 1.00 };
+    local w = LW * 0.80;
+    local h = w * 241 / 723;
+    local still = not config.logo_anim;
+    local tt = still and 0.6 or t * ((hot and 2.0) or (running and 1.6) or 1);
+    if config.logo_clear == false then                            -- (see-through off: a dark cloud behind it)
+        for k = 1, 4 do
+            local q = 1 - (k - 1) * 0.2;
+            pcall(dl.AddEllipseFilled, dl, { cx, cy }, { LW * 0.47 * q, LH * 0.40 * q }, u32({ 0.02, 0.02, 0.05, 0.20 }), 0, 40);
+        end
+    end
+    if hot then                                                   -- (an alert: a pulse of its colour round it)
+        local gp = 0.5 + 0.5 * math.sin(t * 5);
+        for k = 1, 3 do
+            pcall(dl.AddEllipse, dl, { cx, cy }, { LW * 0.46 + k * 2, LH * 0.40 + k * 2 }, u32({ NEON2[1], NEON2[2], NEON2[3], 0.14 * (4 - k) * gp }), 0, 40, 2.5);
+        end
+    end
+    -- the lights: centre (of the word's width / height), radii, seconds a turn, where it starts, its size, which way
+    local O = {
+        { -0.33, 0.06, 0.12, 0.50, 3.2, 0.0, 1.00,  1 },
+        {  0.02, 0.08, 0.47, 0.56, 5.6, 2.1, 0.80, -1 },
+        {  0.20, 0.00, 0.28, 0.46, 4.3, 4.0, 0.55,  1 },
+    };
+    local function at(o, a)                                       -- (a point of its way, and how near it is: -1 far, 1 near)
+        return cx + o[1] * w + math.cos(a) * o[3] * w, cy + o[2] * h + math.sin(a) * o[4] * h * 0.55 + math.cos(a) * o[4] * h * 0.25, math.sin(a);
+    end
+    local function light(o)
+        local a = o[6] + o[8] * tt * math.pi * 2 / o[5];
+        local x, y, z = at(o, a);
+        local r = (4.2 + 1.2 * z) * o[7] * sc;
+        local lx, ly = x, y;
+        for k = 1, 12 do                                          -- (the tail: where it was, fading and thinning)
+            local px, py = at(o, a - o[8] * k * 0.11);
+            local u = 1 - k / 13;
+            dl:AddLine({ lx, ly }, { px, py }, u32({ c[1], c[2], c[3], 0.55 * u * u }), math.max(1, r * 1.9 * u));
+            dl:AddLine({ lx, ly }, { px, py }, u32({ 0.75, 0.90, 1, 0.55 * u * u * u }), math.max(1, r * 0.5 * u));
+            lx, ly = px, py;
+        end
+        dl:AddCircleFilled({ x, y }, r * 2.6, u32({ c[1], c[2], c[3], 0.08 }), 18);
+        dl:AddCircleFilled({ x, y }, r * 1.7, u32({ c[1], c[2], c[3], 0.20 }), 16);
+        dl:AddCircleFilled({ x, y }, r, u32({ 0.45 + c[1] * 0.55, 0.45 + c[2] * 0.55, 0.45 + c[3] * 0.55, 0.85 }), 14);
+        dl:AddCircleFilled({ x, y }, r * 0.5, u32({ 1, 1, 1, 0.97 }), 10);
+    end
+    local function near(o) return math.sin(o[6] + o[8] * tt * math.pi * 2 / o[5]) >= 0; end
+    for _, o in ipairs(O) do if not near(o) then light(o); end end          -- (behind the word)
+    local breathe = still and 1 or (0.93 + 0.07 * math.sin(t * 2.0));
+    pcall(dl.AddImage, dl, tex.ptr, { cx - w / 2, cy - h / 2 }, { cx + w / 2, cy + h / 2 }, { 0, 0 }, { 723 / 1024, 241 / 256 }, u32({ 1, 1, 1, breathe }));
+    for _, o in ipairs(O) do if near(o) then light(o); end end              -- (in front of it)
+    for i = 1, 6 do                                               -- (motes: twinkling, drifting up a little)
+        local sx = cx + math.sin(i * 12.9898) * w * 0.48;
+        local sy = cy + math.cos(i * 78.233) * h * 0.55 - ((tt * 5 + i * 7) % 14 - 7) * sc * 0.5;
+        local tw = 0.5 + 0.5 * math.sin(tt * 2.6 + i * 1.7);
+        if tw > 0.15 then
+            dl:AddCircleFilled({ sx, sy }, 2.4 * sc * tw, u32({ c[1], c[2], c[3], 0.25 * tw }), 10);
+            dl:AddCircleFilled({ sx, sy }, 0.9 * sc, u32({ 0.85, 0.95, 1, 0.9 * tw }), 8);
+        end
+    end
+end
+
 local MINI = { x = nil, y = nil, dragged = false };
 
 -- An arc of a circle drawn as short lines (no ImGui path calls needed)
@@ -9005,6 +9070,8 @@ drawMini = function()
     local lg = (config.logo_style ~= 'orb') and TRF.imageTex('logo_bolt.png') or nil;         -- (the lightning logo: 9 frames, 4 a row, 512 x 340 each)
     local LW, LH = S, S;
     if lg then LW, LH = math.floor(200 * sc), math.floor(132 * sc); end
+    local ae = (config.logo_style == 'aether') and TRF.imageTex('logo_chrome.png') or nil;   -- (the chrome word, aether lights round it)
+    if ae then lg, LW, LH = ae, math.floor(250 * sc), math.floor(112 * sc); end
     if MINI.x then imgui.SetNextWindowPos({ MINI.x, MINI.y }, ImGuiCond_Always);
     else imgui.SetNextWindowPos({ 240, 160 }, ImGuiCond_FirstUseEver); end
     imgui.SetNextWindowSize({ LW, LH }, ImGuiCond_Always);
@@ -9018,7 +9085,10 @@ drawMini = function()
         local running = ARMED ~= nil;
         local hot = ALERT ~= nil;
 
-        if lg then
+        if ae then
+            pcall(TRF.logoAether, dl, ae, cx, cy, LW, LH, sc, t, hot, running);
+            R = LH / 2 - 10;                                      -- (the place to click)
+        elseif lg then
             -- THE LIGHTNING LOGO: bolts gather into "VenGo" (9 frames, 0.15 s each), which then holds, breathing,
             -- and strikes again every 9 s (every 3 s while warping or during an alert, with a glow in its colour)
             if MINI.born == nil or t - (MINI.seen or 0) > 0.5 then MINI.born = t; end   -- (just shrunk to it: it strikes)
