@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.91';
+addon.version = '4.92';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -106,6 +106,7 @@ local config = {
     bg_img = '',               -- your own picture behind the window (a file in images\)
     bg_img_alpha = 0.45,       -- how much of it shows
     trail_size = 'medium',     -- small | medium | large
+    pad_combo = true,          -- LB + Y opens VenGo with the controller (LB / RB change the menu, B closes it)
 };
 
 -- VenGo's shared helpers and features (stars, controller, updates, the trail's GO / STOP, the collection tabs):
@@ -192,7 +193,7 @@ local function saveSettings()
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
     for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'win_scale', 'logo_style', 'logo_size', 'logo_clear', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
-                           'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' }) do
+                           'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'check_updates' }) do
         local v = config[k];
         f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v)));
     end
@@ -7090,7 +7091,8 @@ function TRF.PAD.set(on)
         ui.open[1] = true;
         if config.minimized or config.strip then config.minimized, config.strip = false, false; saveSettings(); end
         TRF.PAD.focus = true;
-        msg('VenGo has the controller: d-pad to move, A to press. Back / Select (or /vengo pad) gives it back.');
+        msg((config.pad_combo ~= false) and 'VenGo has the controller: d-pad to move, A to press, LB / RB to change the menu, B to close.'
+            or 'VenGo has the controller: d-pad to move, A to press. Back / Select (or /vengo pad) gives it back.');
     else
         pcall(vana.gamepad.nav, false);
         msg('The controller is back with the game.');
@@ -7157,25 +7159,70 @@ end
 function TRF.PAD.frame()
     if not TRF.PAD.on then return; end
     if not ui.open[1] or config.minimized or config.strip then TRF.PAD.set(false); return; end
+    TRF.PAD.busy = imgui.IsAnyItemActive and imgui.IsAnyItemActive() or false;   -- (a slider or box being changed: B is ImGui's)
     pcall(vana.gamepad.nav, true);
 end
+-- LB + Y (Settings > Controller, on unless switched off): opens VenGo with the controller, or closes it again.
+-- While VenGo has the controller: LB / RB the menu before / after, B closes VenGo and gives the controller back
+-- (unless you're in the middle of changing a slider or a box: then B is ImGui's, to cancel that), Back / Select
+-- gives the controller back and leaves VenGo open. K: the pad's buttons (xinput or dinput numbering).
+TRF.PAD.XI = { lb = 8, rb = 9, a = 12, b = 13, y = 15, back = 5, down = function (e) return (e.state or 0) ~= 0; end };
+TRF.PAD.DI = { lb = 52, rb = 53, a = 49, b = 50, y = 51, back = 56, down = function (e) return (e.state or 0) >= 128; end };
+function TRF.PAD.tab(d)                                           -- (the menu before / after, round the ends)
+    local n = #TABS;
+    ui.tab = ((ui.tab or 1) - 1 + d) % n + 1;
+end
+function TRF.PAD.close()
+    ui.open[1] = false;
+    TRF.PAD.set(false);
+end
+function TRF.PAD.key(e, K)
+    local P = TRF.PAD;
+    local btn, down = e.button, K.down(e);
+    if btn == K.lb then                                           -- (LB: held for the combos; a tap alone, with VenGo
+        P.seen = true;                                            --  holding the controller, is the menu before)
+        if down then P.lb, P.lbUsed = true, false; else
+            local tap = P.lb and not P.lbUsed;
+            P.lb = false;
+            if tap and P.on then P.tab(-1); end
+        end
+        return P.on;
+    end
+    if P.lb and (btn == K.a or btn == K.b or btn == K.y) then P.lbUsed = true; end
+    if btn == K.y and P.lb and config.pad_combo ~= false then   -- LB + Y: open / close
+        if down then
+            if P.on then P.close(); else
+                ui.open[1] = true;
+                P.set(true);
+            end
+        end
+        return true;
+    end
+    if P.alertKey(btn, down, K.lb, K.a, K.b) then return true; end   -- (LB + A / LB + B on the VNM alert)
+    if not P.on then return false; end
+    if btn == K.back then if down then P.set(false); end return true; end
+    if btn == K.rb then if down then P.tab(1); end return true; end
+    if btn == K.b and not P.busy and config.pad_combo ~= false then
+        if down then P.close(); end
+        return true;
+    end
+    return false;
+end
+-- (a button's release goes where its press went, so the game never sees a release without its press, nor misses
+--  the release of one it saw pressed: LB held into LB + Y, B pressed as VenGo closes)
+TRF.PAD.ate = {};
+function TRF.PAD.event(e, K)
+    local P = TRF.PAD;
+    local id = tostring(K.lb) .. ':' .. tostring(e.button);
+    local down = K.down(e);
+    local eat = P.key(e, K);
+    if down then P.ate[id] = eat or nil;
+    else eat = P.ate[id] == true; P.ate[id] = nil; end
+    if eat then e.blocked = true; return true; end
+end
 pcall(function ()
-    ashita.events.register('xinput_button', 'vengo_pad_x', function (e)
-        if TRF.PAD.on and e.button == 5 and (e.state or 0) ~= 0 then  -- (Back)
-            TRF.PAD.set(false);
-            e.blocked = true;
-            return true;
-        end
-        if TRF.PAD.alertKey(e.button, (e.state or 0) ~= 0, 8, 12, 13) then e.blocked = true; return true; end   -- (LB, A, B)
-    end);
-    ashita.events.register('dinput_button', 'vengo_pad_d', function (e)
-        if TRF.PAD.on and e.button == 56 and (e.state or 0) >= 128 then -- (Share / Select on most pads)
-            TRF.PAD.set(false);
-            e.blocked = true;
-            return true;
-        end
-        if TRF.PAD.alertKey(e.button, (e.state or 0) >= 128, 52, 49, 50) then e.blocked = true; return true; end -- (L1, Cross, Circle)
-    end);
+    ashita.events.register('xinput_button', 'vengo_pad_x', function (e) return TRF.PAD.event(e, TRF.PAD.XI); end);
+    ashita.events.register('dinput_button', 'vengo_pad_d', function (e) return TRF.PAD.event(e, TRF.PAD.DI); end);
 end);
 
 ------------------------------------------------------------------------
@@ -7334,7 +7381,12 @@ TRF.extraSettings = function()
 
     section('Controller');
     if button((TRF.PAD.on and 'GIVE CONTROLLER BACK' or 'USE CONTROLLER') .. '##vengo_pad', { 320, 0 }) then TRF.PAD.set(not TRF.PAD.on); end
-    hint('VenGo takes the controller: the d-pad moves between buttons and tabs, A presses. Back / Select gives it back to the game. Put /vengo pad in a macro to switch from the game.');
+    if rowSwitch('##vengo_pad_combo', 'LB + Y opens VenGo', config.pad_combo ~= false,
+            'Hold LB and press Y (L1 + Triangle on a PlayStation pad) to open VenGo with the controller, and again to close it. While it has the controller: LB / RB change the menu, B closes VenGo.') then
+        config.pad_combo = (config.pad_combo == false);
+        saveSettings();
+    end
+    hint('VenGo takes the controller: the d-pad moves between buttons and tabs, A presses, LB / RB change the menu, B closes VenGo. Back / Select gives the controller back and leaves VenGo open. Put /vengo pad in a macro to switch from the game.');
 end
 
 -- Settings: Updates (at the top of the tab)
@@ -8230,7 +8282,7 @@ end
 TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'win_scale', 'logo_style', 'logo_size', 'logo_clear',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
-    'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'check_updates' };
+    'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'check_updates' };
 function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
 function TRF.loadPresets()
     TRF.slots = {};
