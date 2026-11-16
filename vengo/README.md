@@ -139,7 +139,7 @@ and strikes again every 9 seconds (every 3 while warping), or when you point at 
 keep striking and the logo is brighter; the Aether icon's lights swell, brighten and blink instead.
 Click it to open VenGo, drag it to move it, drag its bottom-right corner to resize it (nothing is drawn behind it). "Animate the logo" in Settings off: it stays still.
 Settings > Window also has **Icon** (LIGHTNING, AETHER for the chrome VenGo with three aether lights circling it,
-CHADBROWICK for the emblem from the window's corner with its shine and petals (large cherry blossoms fall across
+CHADBROWICK for the emblem from the Special Thanks page with its shine and petals (large cherry blossoms fall across
 it while a VNM is up),
 ORB for the round orb from before, or NO ICON: nothing on screen when
 shrunk, `/vengo` opens VenGo again), **See-through logo** (off: a dark cloud behind it), **Logo size** with - and +, and

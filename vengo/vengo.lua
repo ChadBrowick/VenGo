@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.90';
+addon.version = '4.91';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -3912,9 +3912,7 @@ local function sidebar(dl, x0, y0, sw)
     local lh = imgui.GetTextLineHeight();
     local bh = 30 + #lines * (lh + 3) + 4;
     local sy = tabsEnd + 18;
-    local logoTop = tabsEnd + 12;
     if sy + bh < y0 + WIN_H - 34 - 40 then
-        logoTop = sy + bh + 14;
         dl:AddRectFilled({ x0 - 4, sy }, { x0 + sw, sy + bh }, u32({ C.well[1], C.well[2], C.well[3], 0.95 }), 8);
         spaced(dl, x0 + 6, sy + 8, 'STATUS', u32(C.label), 2);
         local ly = sy + 28;
@@ -3931,17 +3929,7 @@ local function sidebar(dl, x0, y0, sw)
         end
     end
 
-    -- the logo, bottom left, as big as the room allows
-    local bottom = y0 + WIN_H - 86 - 14;
-    local size = math.min(sw + 4, bottom - logoTop);
-    if size >= 60 then
-        local tex = imageTex('logo.png');
-        if tex then
-            local lx = x0 - 4 + (sw + 4 - size) / 2;
-            pcall(function () dl:AddImage(tex.ptr, { lx, bottom - size }, { lx + size, bottom }); end);
-            if config.logo_anim then pcall(logoFx, dl, lx, bottom - size, size); end
-        end
-    end
+    -- (the Chadbrowick logo is on the SPECIAL THANKS page)
 end
 
 -- A round icon button at the top right: draws(cx, cy, r, col) draws its mark
@@ -4428,14 +4416,38 @@ local function tabThanks()
     section('Special Thanks');
     hint('VenGo is built on the work of these people. Thank you!');
     imgui.Spacing();
+    -- the Chadbrowick logo on the right, with its shine and petals; the names keep to the left of it, and go
+    -- the full width again once they're below it
+    local lx0, ly0 = imgui.GetCursorScreenPos();
+    local size = math.floor(math.min(260, ROW_W * 0.36));
+    local gap = 22;
+    local tex = (size >= 90) and imageTex('logo.png') or nil;
+    if tex then
+        local dl = imgui.GetWindowDrawList();
+        local lx = lx0 + ROW_W - size - 4;
+        pcall(function () dl:AddImage(tex.ptr, { lx, ly0 }, { lx + size, ly0 + size }); end);
+        if config.logo_anim then
+            pcall(function ()
+                dl:PushClipRect({ lx - 4, ly0 - 4 }, { lx + size + 4, ly0 + size + 4 }, true);
+                logoFx(dl, lx, ly0, size);
+                dl:PopClipRect();
+            end);
+        end
+    end
     for _, t in ipairs(THANKS) do
+        local _, cy = imgui.GetCursorScreenPos();
+        local room = (tex and cy < ly0 + size + 6) and (ROW_W - size - gap) or ROW_W;
         imgui.TextColored({ NEON2[1], NEON2[2], NEON2[3], 1 }, t[1]);
         imgui.Indent(18);
-        imgui.PushTextWrapPos(imgui.GetCursorPosX() + ROW_W - 18);
+        imgui.PushTextWrapPos(imgui.GetCursorPosX() + room - 18);
         imgui.TextColored(C.text, t[2]);
         imgui.PopTextWrapPos();
         imgui.Unindent(18);
         imgui.Spacing();
+    end
+    if tex then                                                   -- (room for the whole logo, if the names end above its foot)
+        local _, cy = imgui.GetCursorScreenPos();
+        if cy < ly0 + size + 8 then imgui.Dummy({ 1, ly0 + size + 8 - cy }); end
     end
 end
 
@@ -8908,7 +8920,7 @@ local function tabSettings()
     do                                                            -- (which icon VenGo shrinks to)
         imgui.AlignTextToFramePadding();
         imgui.TextColored(C.text, 'Icon');
-        tip('What VenGo shrinks to. Lightning: the lightning logo. Aether: the chrome VenGo with aether lights circling it. Chadbrowick: the emblem from the corner of this window, with its shine and petals. Orb: the round orb from before. No icon: nothing on screen; type /vengo to open VenGo again.');
+        tip('What VenGo shrinks to. Lightning: the lightning logo. Aether: the chrome VenGo with aether lights circling it. Chadbrowick: the emblem from the Special Thanks page, with its shine and petals. Orb: the round orb from before. No icon: nothing on screen; type /vengo to open VenGo again.');
         imgui.SameLine(0, 12);
         local pick = pillChoice('##vengo_logo_style', { { 'bolt', 'LIGHTNING' }, { 'aether', 'AETHER' }, { 'emblem', 'CHADBROWICK' }, { 'orb', 'ORB' }, { 'none', 'NO ICON' } },
             (config.logo_style == 'orb' or config.logo_style == 'none' or config.logo_style == 'aether' or config.logo_style == 'emblem') and config.logo_style or 'bolt');
@@ -9401,7 +9413,7 @@ drawMini = function()
     if lg then LW, LH = math.floor(200 * sc), math.floor(132 * sc); end
     local ae = (config.logo_style == 'aether') and TRF.imageTex('logo_chrome.png') or nil;   -- (the chrome word, aether lights round it)
     if ae then lg, LW, LH = ae, math.floor(250 * sc), math.floor(112 * sc); end
-    local em = (config.logo_style == 'emblem') and imageTex('logo.png') or nil;   -- (the Chadbrowick emblem, as in the window's corner)
+    local em = (config.logo_style == 'emblem') and imageTex('logo.png') or nil;   -- (the Chadbrowick emblem, as on the Special Thanks page)
     if em then lg, LW, LH = em, math.floor(132 * sc), math.floor(132 * sc); end
     if MINI.x then imgui.SetNextWindowPos({ MINI.x, MINI.y }, ImGuiCond_Always);
     else imgui.SetNextWindowPos({ 240, 160 }, ImGuiCond_FirstUseEver); end
@@ -9420,7 +9432,7 @@ drawMini = function()
             pcall(TRF.logoAether, dl, ae, cx, cy, LW, LH, sc, t, hot, running);
             R = LH / 2 - 10;                                      -- (the place to click)
         elseif em then
-            -- THE EMBLEM: the Chadbrowick logo from the window's corner, with its shine and drifting petals
+            -- THE EMBLEM: the Chadbrowick logo from the Special Thanks page, with its shine and drifting petals
             local size = LW - 14;
             local lx, ly = cx - size / 2, cy - size / 2;
             if config.logo_clear == false then                    -- (see-through off: a dark disc behind it)
