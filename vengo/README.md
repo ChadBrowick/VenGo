@@ -42,7 +42,8 @@ a venture zone.
   every venture that drops it. Watched VNMs get a chat line and a sound at 90%, at 100% and a minute before the pop.
 - **LB + Y** (L1 + Triangle on a PlayStation pad) opens VenGo with the controller, and closes it again. While VenGo has
   the controller, LB / RB change the menu and B closes VenGo (B cancels a slider you're changing first). Switch it off
-  in Settings > Controller.
+  in Settings > Controller. **When closed** (same place) picks what closing VenGo from the controller (LB + Y or B)
+  goes back to: nothing on screen, the VenGo orb, or the venture bar.
 - **Controller:** `/vengo pad` (or Settings > Controller) gives VenGo the controller: d-pad to move, A to press.
   Back / Select gives it back to the game.
 - **VNM alert from the controller:** while the VNM INCOMING alert is up, hold LB and press A for GO (or STOP / cancel)

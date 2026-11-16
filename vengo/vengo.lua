@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.93';
+addon.version = '4.94';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -107,6 +107,7 @@ local config = {
     bg_img_alpha = 0.45,       -- how much of it shows
     trail_size = 'medium',     -- small | medium | large
     pad_combo = true,          -- LB + Y opens VenGo with the controller (LB / RB change the menu, B closes it)
+    pad_close = 'none',        -- what closing VenGo from the controller (LB + Y, B) leaves on screen: none | orb | bar
 };
 
 -- VenGo's shared helpers and features (stars, controller, updates, the trail's GO / STOP, the collection tabs):
@@ -193,7 +194,7 @@ local function saveSettings()
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
     for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'win_scale', 'logo_style', 'logo_size', 'logo_clear', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
-                           'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'check_updates' }) do
+                           'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'check_updates' }) do
         local v = config[k];
         f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v)));
     end
@@ -7172,9 +7173,14 @@ function TRF.PAD.tab(d)                                           -- (the menu b
     local n = #TABS;
     ui.tab = ((ui.tab or 1) - 1 + d) % n + 1;
 end
+-- (closing from the controller: to what Settings > Controller > "When closed" says: nothing, the VenGo orb, or the
+--  venture bar)
 function TRF.PAD.close()
-    ui.open[1] = false;
+    local to = config.pad_close or 'none';
     TRF.PAD.set(false);
+    if to == 'orb' then config.minimized, config.strip = true, false; saveSettings();
+    elseif to == 'bar' then config.strip, config.minimized = true, false; saveSettings();
+    else ui.open[1] = false; end
 end
 function TRF.PAD.key(e, K)
     local P = TRF.PAD;
@@ -7385,6 +7391,15 @@ TRF.extraSettings = function()
             'Hold LB and press Y (L1 + Triangle on a PlayStation pad) to open VenGo with the controller, and again to close it. While it has the controller: LB / RB change the menu, B closes VenGo.') then
         config.pad_combo = (config.pad_combo == false);
         saveSettings();
+    end
+    do
+        local x0 = imgui.GetCursorPosX();
+        imgui.AlignTextToFramePadding();
+        imgui.TextColored(C.text, 'When closed');
+        tip('What closing VenGo from the controller (LB + Y or B) goes back to: nothing on screen, the VenGo orb (your icon), or the venture bar. LB + Y opens the full window again from any of them.');
+        imgui.SameLine(x0 + 130);
+        local pc = pillChoice('##vengo_pad_close', { { 'none', 'NOTHING' }, { 'orb', 'ORB' }, { 'bar', 'VENTURE BAR' } }, config.pad_close or 'none');
+        if pc then config.pad_close = pc; saveSettings(); end
     end
     hint('VenGo takes the controller: the d-pad moves between buttons and tabs, A presses, LB / RB change the menu, B closes VenGo. Back / Select gives the controller back and leaves VenGo open. Put /vengo pad in a macro to switch from the game.');
 end
@@ -8282,7 +8297,7 @@ end
 TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'win_scale', 'logo_style', 'logo_size', 'logo_clear',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
-    'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'check_updates' };
+    'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'check_updates' };
 function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
 function TRF.loadPresets()
     TRF.slots = {};
