@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.89';
+addon.version = '4.90';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -2257,7 +2257,7 @@ TRF.PH = {
     EDGE = { { 'White', { 0.97, 0.96, 0.94 } }, { 'Cream', { 0.98, 0.92, 0.80 } }, { 'Silver', { 0.78, 0.80, 0.84 } }, { 'Black', { 0.06, 0.06, 0.06 } } },
     edge = { 0.97, 0.96, 0.94 }, sel = { 0.04, 0.04, 0.04, 1 }, orig = nil,
 };
-function TRF.PH.on() return config.style == 'phantom' or config.style == 'neon'; end   -- (Neon rides on Phantom's plumbing)
+function TRF.PH.on() return config.style == 'phantom' or config.style == 'neon' or config.style == 'aether'; end   -- (Neon and Aether ride on Phantom's plumbing)
 function TRF.PH.pick(L, v) for _, t in ipairs(L) do if t[1] == v then return t; end end return L[1]; end
 -- The palette: Phantom's over the theme's (text, slab, accent, edge); the theme's back when it's off
 function TRF.PH.apply()
@@ -2300,6 +2300,7 @@ function TRF.PH.font(f, size)                                    -- (a face at a
 end
 -- The panel: a slanted slab edged in white, a red one behind it sticking out down and to the right
 function TRF.PH.frame(dl, x, y, w, h)
+    if TRF.AE.on() then return TRF.AE.panel(dl, x, y, x + w, y + h, 1); end
     if TRF.NE.on() then return TRF.NE.panel(dl, x, y, x + w, y + h, 1); end
     local P = TRF.PH;
     local a = config.transparent and 0.6 or 1;
@@ -2388,6 +2389,11 @@ TRF.PH.IMG = { ['VENTURES'] = { 'ph_ventures', 248, 90, 256, 128 }, ['HELM'] = {
 -- when there's no picture. Returns its width and height.
 function TRF.PH.title(dl, x, y, t, s, acc, star)
     local P = TRF.PH;
+    if TRF.AE.on() then                                           -- (Aether: its own title too)
+        local key = tostring(t or ''):upper();
+        local w = TRF.AE.title(dl, x + 18, y + 54, t, 0.82, acc, TRF.NE.ICON[key], TRF.NE.jp(key));
+        return w + 10, 70;
+    end
     if TRF.NE.on() then                                           -- (Neon: its own title, the Japanese under it)
         local key = tostring(t or ''):upper();
         local w = TRF.NE.title(dl, x + 18, y + 54, t, 0.85, acc, TRF.NE.ICON[key], TRF.NE.jp(key));
@@ -2423,6 +2429,7 @@ function TRF.PH.title(dl, x, y, t, s, acc, star)
 end
 -- The header: the page's name as cut-out letters, "VenGo" and the version beside it
 function TRF.PH.header(dl, x0, y0, name)
+    if TRF.AE.on() then return TRF.AE.header(dl, x0, y0, name); end
     if TRF.NE.on() then return TRF.NE.header(dl, x0, y0, name); end
     local w = TRF.PH.title(dl, x0 - 4, y0 - 8, name, 0.78);
     if w == 0 then w = TRF.PH.badge(dl, x0 + 4, y0 + 44, name, 0.82); end
@@ -2442,6 +2449,7 @@ end
 -- One menu entry: a dark slanted strip (staggered a little, like steps); the page you're on is a white slab with a
 -- red slash running past its edge and a pointer bobbing at its left
 function TRF.PH.sideItem(dl, k, x0, y, sw, ih, on, over, label)
+    if TRF.AE.on() then return TRF.AE.sideItem(dl, k, x0, y, sw, ih, on, over, label); end
     if TRF.NE.on() then return TRF.NE.sideItem(dl, k, x0, y, sw, ih, on, over, label); end
     local P = TRF.PH;
     local sx = ((k % 3) - 1) * 3;
@@ -2466,6 +2474,7 @@ end
 -- A button: a slanted slab. The main one white with black letters, a red shard behind it when the mouse is on it;
 -- the quiet ones dark with white letters and a red line under them on the mouse. (Returns nothing: the click is the caller's.)
 function TRF.PH.button(dl, x, y, w, h, name, lw, lh, sp, quiet, small, hov, act)
+    if TRF.AE.on() then return TRF.AE.button(dl, x, y, w, h, name, lw, lh, sp, quiet, small, hov, act); end
     if TRF.NE.on() then return TRF.NE.button(dl, x, y, w, h, name, lw, lh, sp, quiet, small, hov, act); end
     local P = TRF.PH;
     local k = math.min(6, h * 0.18);
@@ -2490,6 +2499,7 @@ function TRF.PH.button(dl, x, y, w, h, name, lw, lh, sp, quiet, small, hov, act)
 end
 -- The VNM alert's panel: a black slab edged white on a red (gold for a starred VNM) one that pulses out behind it
 function TRF.PH.alertFrame(dl, x, y, w, h, gc, pulse)
+    if TRF.AE.on() then return TRF.AE.alertFrame(dl, x, y, w, h, gc, pulse); end
     if TRF.NE.on() then return TRF.NE.alertFrame(dl, x, y, w, h, gc, pulse); end
     local P = TRF.PH;
     local k = math.min(12, w * 0.03);
@@ -2503,6 +2513,7 @@ function TRF.PH.alertFrame(dl, x, y, w, h, gc, pulse)
 end
 -- A section's name: white capitals on a small black slab edged white, a red shard behind, a thin line after
 function TRF.PH.section(dl, x0, y0, text)
+    if TRF.AE.on() then return TRF.AE.section(dl, x0, y0, text); end
     if TRF.NE.on() then return TRF.NE.section(dl, x0, y0, text); end
     local P = TRF.PH;
     local t = text:upper();
@@ -2903,6 +2914,278 @@ function TRF.NE.section(dl, x0, y0, text)
     pcall(function ()
         dl:AddRectFilledMultiColor({ x1 + 8, y0 + (y1 - y0) / 2 }, { x0 + ROW_W, y0 + (y1 - y0) / 2 + 1.5 },
             N.col(0.55), N.col(0), N.col(0), N.col(0.55));
+    end);
+    return y1 - y0 + 4;
+end
+
+------------------------------------------------------------------------
+-- AETHER (Settings > Colours > Style): ChadcoreMenu's "Aether" look, made for VenGo from how it looks on screen
+-- (nothing of ChadcoreMenu's is needed). Dark blue-black panels with round corners in a thin line of pale light,
+-- a leaning title bar with the icon in its own box at the right end and the Japanese under the name, menu rows
+-- in italic serif (the one you're on in a bright outline with a double chevron), and glints and motes of light
+-- twinkling round the window. It rides on Phantom's plumbing and uses Neon's helpers (its letters, icons and the
+-- spark that runs round the title).
+------------------------------------------------------------------------
+TRF.AE = {};
+function TRF.AE.on() return config.style == 'aether'; end
+-- the pale light: the accent halfway to white (c: another colour to use instead, as the alert's)
+function TRF.AE.ice(c, k)
+    c = c or C.acc; k = k or 0.50;
+    return { c[1] + (1 - c[1]) * k, c[2] + (1 - c[2]) * k, c[3] + (1 - c[3]) * k };
+end
+function TRF.AE.navy(a) return { C.panel[1] * 0.4 + 0.040, C.panel[2] * 0.4 + 0.052, C.panel[3] * 0.4 + 0.075, a or 1 }; end
+-- A leaning slab with its corners taken off (so it reads as rounded): its foot K to the right of its head
+function TRF.AE.slab(x0, y0, x1, y1, K, cut)
+    local c = math.min(cut or 4, (y1 - y0) * 0.3);
+    local k = K * c / (y1 - y0);                                  -- (how far the lean moves over a corner's height)
+    return {
+        { x0 + c, y0 }, { x1 - c, y0 }, { x1 + k, y0 + c }, { x1 + K - k, y1 - c },
+        { x1 + K - c, y1 }, { x0 + K + c, y1 }, { x0 + K - k, y1 - c }, { x0 + k, y0 + c },
+    };
+end
+-- An outline in the pale light: a wide soft glow, a narrower one, the thin bright line
+function TRF.AE.line(dl, P, ice, a, s, glow)
+    local N = TRF.NE;
+    a = a or 1; s = s or 1; glow = glow or 1;
+    N.outline(dl, P, u32({ ice[1], ice[2], ice[3], 0.10 * a * glow }), 6 * s);
+    N.outline(dl, P, u32({ ice[1], ice[2], ice[3], 0.24 * a * glow }), 3.2 * s);
+    N.outline(dl, P, u32({ ice[1] * 0.5 + 0.5, ice[2] * 0.5 + 0.5, ice[3] * 0.5 + 0.5, 0.95 * a }), 1.2 * s);
+end
+-- A glint: a four-point star of light (long thin arms, a bright heart)
+function TRF.AE.glint(dl, x, y, r, ice, a)
+    if a <= 0.02 then return; end
+    dl:AddLine({ x - r, y }, { x + r, y }, u32({ ice[1], ice[2], ice[3], 0.55 * a }), 1);
+    dl:AddLine({ x, y - r * 1.25 }, { x, y + r * 1.25 }, u32({ ice[1], ice[2], ice[3], 0.55 * a }), 1);
+    dl:AddLine({ x - r * 0.45, y }, { x + r * 0.45, y }, u32({ 1, 1, 1, 0.9 * a }), 1);
+    dl:AddLine({ x, y - r * 0.55 }, { x, y + r * 0.55 }, u32({ 1, 1, 1, 0.9 * a }), 1);
+    dl:AddCircleFilled({ x, y }, 1.3, u32({ 1, 1, 1, a }), 6);
+end
+-- The lights round a box: glints that come and go at places along its edge (each somewhere new every time), and
+-- motes drifting up past it
+function TRF.AE.lights(dl, x0, y0, x1, y1, ice, n, seed)
+    local A = TRF.AE;
+    local t = os.clock();
+    local w, h = x1 - x0, y1 - y0;
+    local per = 2 * (w + h);
+    for i = 1, n do
+        local life = 1.6 + (i % 5) * 0.35;
+        local k = t / life + i * 0.37 + (seed or 0);
+        local turn = math.floor(k);
+        local u = k - turn;                                       -- (0..1 through this glint's life)
+        local hsh = (math.sin(turn * 12.9898 + i * 78.233) * 43758.5453) % 1;
+        local d = hsh * per;                                      -- (where along the edge)
+        local off = ((hsh * 7.13) % 1 - 0.5) * 26;                -- (a little in or out of it)
+        local x, y;
+        if d < w then x, y = x0 + d, y0 + off;
+        elseif d < w + h then x, y = x1 + off, y0 + (d - w);
+        elseif d < 2 * w + h then x, y = x1 - (d - w - h), y1 + off;
+        else x, y = x0 + off, y1 - (d - 2 * w - h); end
+        A.glint(dl, x, y, 5 + ((hsh * 3.7) % 1) * 7, ice, math.sin(u * math.pi) ^ 2);
+    end
+    for i = 1, math.floor(n * 0.8) do                             -- (motes)
+        local sx = x0 + ((math.sin(i * 91.7 + (seed or 0)) * 0.5 + 0.5) * 1.06 - 0.03) * w;
+        local rise = (t * (5 + (i % 4) * 2.5) + i * 37) % (h + 30);
+        local y = y1 + 10 - rise;
+        local a = math.min(1, rise / 20, (h + 30 - rise) / 20) * (0.55 + 0.45 * math.sin(t * 2.3 + i));
+        if a > 0.05 then
+            dl:AddCircleFilled({ sx + math.sin(t * 0.9 + i) * 4, y }, 3.2, u32({ ice[1], ice[2], ice[3], 0.14 * a }), 10);
+            dl:AddCircleFilled({ sx + math.sin(t * 0.9 + i) * 4, y }, 1.3, u32({ ice[1] * 0.4 + 0.6, ice[2] * 0.4 + 0.6, 1, 0.85 * a }), 8);
+        end
+    end
+end
+-- The panel: a dark blue-black slab with round corners in the pale line, the lights twinkling round it
+function TRF.AE.panel(dl, x0, y0, x1, y1, s, c, a, glow)
+    local A = TRF.AE;
+    local ice = A.ice(c);
+    a = a or 1; glow = glow or 1; s = s or 1;
+    local r = 14 * s;
+    local nv = A.navy(config.transparent and 0.62 or 0.97);
+    TRF.PH.clip(dl);
+    dl:AddRect({ x0 - 3, y0 - 3 }, { x1 + 3, y1 + 3 }, u32({ ice[1], ice[2], ice[3], 0.07 * a * glow }), r + 3, 0, 9 * s);
+    dl:AddRect({ x0 - 1, y0 - 1 }, { x1 + 1, y1 + 1 }, u32({ ice[1], ice[2], ice[3], 0.20 * a * glow }), r + 1, 0, 4 * s);
+    dl:AddRectFilled({ x0, y0 }, { x1, y1 }, u32(nv), r);
+    if TRF.BGI then pcall(TRF.BGI.draw, dl, x0, y0, x1 - x0, y1 - y0, r); end
+    dl:AddRect({ x0, y0 }, { x1, y1 }, u32({ ice[1] * 0.5 + 0.5, ice[2] * 0.5 + 0.5, ice[3] * 0.5 + 0.5, 0.95 * a }), r, 0, 1.3 * s);
+    dl:AddRect({ x0 + 4 * s, y0 + 4 * s }, { x1 - 4 * s, y1 - 4 * s }, u32({ ice[1], ice[2], ice[3], 0.16 * a }), r - 3 * s, 0, 1);
+    A.lights(dl, x0, y0, x1, y1, ice, math.max(8, math.min(22, math.floor((x1 - x0 + y1 - y0) / 110))), 0);
+    TRF.PH.unclip(dl);
+end
+-- The title: a dark leaning bar in the pale line with the name in serif capitals and the Japanese under it, the
+-- icon in its own leaning box at the bar's right end (a little taller than the bar), a small "VENGO" tag at its
+-- top-left, a short white line under it, and a spark running round both. y: where the bar's foot sits (less 6).
+-- Returns its width from x and its top.
+function TRF.AE.title(dl, x, y, t, s, c, icon, jp)
+    local A, N = TRF.AE, TRF.NE;
+    local ice = A.ice(c);
+    t = tostring(t or ''):upper();
+    local jh = (jp and fonts.jp) and 9 * s or 0;
+    local bh = 40 * s + jh;
+    local bot = y + 6 * s;
+    local top = bot - bh;
+    local K = bh * 0.36;                                          -- (the lean: the foot this far right of the head)
+    local nw = N.caps(dl, 0, 0, t, 32 * s, 24 * s, s, 1, true);
+    local bx0 = x - 14 * s;
+    local bx1 = bx0 + nw + 62 * s;
+    local iw, e = 58 * s, 7 * s;
+    local ix0 = bx1 - 10 * s - e * 0.36;
+    local B = A.slab(bx0, top, bx1, bot, K, 5 * s);
+    local I = A.slab(ix0, top - e, ix0 + iw, bot + e, K + e * 0.72, 6 * s);
+    TRF.PH.clip(dl);
+    -- the tag
+    local tagp = TRF.PH.font(fonts.ph or fonts.panel, 10 * s);
+    local tw = imgui.CalcTextSize('VENGO');
+    local T = A.slab(bx0 + 10 * s, top - 13 * s, bx0 + 22 * s + tw, top - 1 * s, 4 * s, 2 * s);
+    N.fill(dl, T, u32({ 0.02, 0.025, 0.035, 0.92 }));
+    N.outline(dl, T, u32({ ice[1], ice[2], ice[3], 0.35 }), 1);
+    do
+        local L = TRF.LANG;
+        local was = L.live;
+        L.live = false;
+        dl:AddText({ bx0 + 17 * s, top - 13 * s }, u32({ 0.80, 0.86, 0.95, 0.9 }), 'VENGO');
+        L.live = was;
+    end
+    if tagp then imgui.PopFont(); end
+    -- the bar
+    N.fill(dl, B, u32(A.navy(0.97)));
+    TRF.PH.q(dl, B[1][1], B[1][2], B[2][1], B[2][2], B[2][1] + K * 0.45, top + bh * 0.45, B[1][1] + K * 0.45, top + bh * 0.45, u32({ 1, 1, 1, 0.035 }));
+    A.line(dl, B, ice, 1, s);
+    dl:AddLine({ (bx0 + bx1) / 2 - 10 * s + K, bot + 3 * s }, { (bx0 + bx1) / 2 + 70 * s + K, bot + 3 * s }, u32({ 1, 1, 1, 0.6 }), 1.6 * s);
+    N.caps(dl, bx0 + K * 0.5 + 16 * s, bot - 10 * s - jh, t, 32 * s, 24 * s, s);
+    if jh > 0 then                                               -- (the Japanese, small, under the name)
+        local L = TRF.LANG;
+        local was = L.live;
+        L.live = false;
+        local pushed = TRF.PH.font(fonts.jp, 11 * s);
+        local jx = bx0 + K * 0.8 + 16 * s + nw / 2 - imgui.CalcTextSize(jp) / 2;
+        local jy = bot - 8 * s - jh;
+        dl:AddText({ jx + 1, jy + 1 }, u32({ 0, 0, 0, 1 }), jp);
+        dl:AddText({ jx, jy }, u32({ 0.90, 0.93, 0.98, 1 }), jp);
+        if pushed then imgui.PopFont(); end
+        L.live = was;
+    end
+    -- the icon's box, over the bar's end
+    N.fill(dl, I, u32(A.navy(0.98)));
+    A.line(dl, I, ice, 1, s);
+    N.icon(dl, ix0 + iw / 2 + (K + e * 0.72) / 2, (top + bot) / 2, 15 * s, icon or 'list', s, ice);
+    N.pulse(dl, B, s, ice, 1, 0);
+    N.pulse(dl, I, s, ice, 0.9, 1.3);
+    A.lights(dl, bx0, top - e, ix0 + iw + K, bot + e, ice, 5, 3.3);
+    TRF.PH.unclip(dl);
+    return ix0 + iw + K + e - x, top - 14 * s;
+end
+-- The header: the page's title, "VenGo" and the version beside it
+function TRF.AE.header(dl, x0, y0, name)
+    local A, N = TRF.AE, TRF.NE;
+    local w = A.title(dl, x0 + 18, y0 + 50, name, 0.92, nil, N.ICON[name], N.jp(name));
+    local x = x0 + w + 30;
+    local pushed = TRF.PH.font(fonts.ne or fonts.title, 26);
+    local ven = imgui.CalcTextSize('Ven');
+    local _, th = imgui.CalcTextSize('VenGo');
+    local y = y0 + 30;
+    N.text(dl, x, y, 'Ven', C.text, 1, 1.4);
+    N.text(dl, x + ven, y, 'Go', A.ice(nil, 0.35), 1, 1.4);
+    local gw = imgui.CalcTextSize('Go');
+    if pushed then imgui.PopFont(); end
+    local vs = 'v' .. tostring(addon.version or '');
+    local _, vh = imgui.CalcTextSize(vs);
+    dl:AddText({ x + ven + gw + 8, y + th - vh - 3 }, u32(C.muted), vs);
+end
+-- A menu row: a dark leaning strip with a small tab before it, its name in italic serif, a chevron at its end.
+-- The one you're on: in the bright outline, lighter inside, a double chevron (bobbing), a glint on it.
+function TRF.AE.row(dl, x0, y0, x1, y1, s, on, over, label)
+    local A, N = TRF.AE, TRF.NE;
+    local ice = A.ice();
+    local h = y1 - y0;
+    local K = h * 0.30;
+    local cy = (y0 + y1) / 2;
+    local tb = 6 * s;
+    TRF.PH.q(dl, x0, y0 + 2, x0 + tb, y0 + 2, x0 + tb + K, y1 - 2, x0 + K, y1 - 2, u32({ ice[1] * 0.45, ice[2] * 0.45, ice[3] * 0.5, on and 0.95 or 0.55 }));
+    x0 = x0 + tb + 5 * s;
+    local P = A.slab(x0, y0, x1 - K, y1, K, 4 * s);
+    if on then
+        TRF.PH.clip(dl);
+        N.fill(dl, P, u32({ 0.10 + ice[1] * 0.06, 0.13 + ice[2] * 0.07, 0.19 + ice[3] * 0.08, 0.97 }));
+        TRF.PH.q(dl, P[1][1], y0 + 1, P[2][1], y0 + 1, P[2][1] + K * 0.4, y0 + h * 0.42, P[1][1] + K * 0.4, y0 + h * 0.42, u32({ 1, 1, 1, 0.07 }));
+        A.line(dl, P, ice, 1, s, 0.85 + 0.15 * math.sin(os.clock() * 3.5));
+        local bob = math.sin(os.clock() * 5) * 1.5 * s;
+        for k = 0, 1 do
+            local vx = x1 - 20 * s + k * 7 * s + bob;
+            dl:AddLine({ vx - 4 * s, cy - 6 * s }, { vx + 2 * s, cy }, u32({ 1, 1, 1, 1 }), 2.4 * s);
+            dl:AddLine({ vx + 2 * s, cy }, { vx - 4 * s, cy + 6 * s }, u32({ 1, 1, 1, 1 }), 2.4 * s);
+        end
+        local gt = (os.clock() * 0.45) % 1;                       -- (a glint crossing it)
+        A.glint(dl, x0 + K + (x1 - x0 - K * 2) * gt, cy + math.sin(gt * 9) * h * 0.2, 6 * s, ice, math.sin(gt * math.pi));
+        TRF.PH.unclip(dl);
+    else
+        N.fill(dl, P, u32(over and { 0.11, 0.13, 0.17, 0.96 } or { 0.075, 0.088, 0.115, 0.94 }));
+        if over then N.outline(dl, P, u32({ ice[1], ice[2], ice[3], 0.45 }), 1); end
+        local vx = x1 - 14 * s;
+        dl:AddLine({ vx - 3.5 * s, cy - 5 * s }, { vx + 1.5 * s, cy }, u32({ 0.86, 0.90, 0.96, 0.9 }), 2 * s);
+        dl:AddLine({ vx + 1.5 * s, cy }, { vx - 3.5 * s, cy + 5 * s }, u32({ 0.86, 0.90, 0.96, 0.9 }), 2 * s);
+    end
+    if label then
+        local pushed = TRF.PH.font(fonts.ne or fonts.title, 17 * s);
+        N.text(dl, x0 + K + 10 * s, cy - imgui.GetTextLineHeight() / 2, label, on and { 1, 1, 1 } or { 0.88, 0.90, 0.95 }, 1, 1);
+        if pushed then imgui.PopFont(); end
+    end
+end
+-- (the side menu's names as on ChadcoreMenu: "Ventures", not "VENTURES")
+function TRF.AE.sideItem(dl, k, x0, y, sw, ih, on, over, label)
+    local lb = tostring(label or '');
+    if not TRF.LANG.on() and lb == lb:upper() then                -- (in Japanese the name goes through as it is, to be put into Japanese)
+        lb = lb:lower():gsub('(%a)(%a*)', function (f, r) return f:upper() .. r; end):gsub('^Vnm', 'VNM');
+    end
+    TRF.AE.row(dl, x0 - 4, y + 1, x0 + sw - 14, y + ih - 1, 1, on, over, lb);
+end
+-- A button: round-ended and dark. The main one in the bright outline with a lighter inside (glowing as you point
+-- at it); a small main one in a thin pale line; the quiet ones in a faint grey line.
+function TRF.AE.button(dl, x, y, w, h, name, lw, lh, sp, quiet, small, hov, act)
+    local A = TRF.AE;
+    local ice = A.ice();
+    local r = math.min(h * 0.42, 10);
+    if not quiet and not small then
+        local pl = (hov or act) and (0.85 + 0.15 * math.sin(os.clock() * 5)) or 0.55;
+        dl:AddRect({ x - 2, y - 2 }, { x + w + 2, y + h + 2 }, u32({ ice[1], ice[2], ice[3], 0.16 * pl }), r + 2, 0, 6);
+        dl:AddRect({ x - 1, y - 1 }, { x + w + 1, y + h + 1 }, u32({ ice[1], ice[2], ice[3], 0.36 * pl }), r + 1, 0, 3);
+        local f = act and 0.6 or 1;
+        dl:AddRectFilled({ x, y }, { x + w, y + h }, u32({ (0.10 + ice[1] * 0.08) * f, (0.14 + ice[2] * 0.09) * f, (0.21 + ice[3] * 0.10) * f, 0.98 }), r);
+        dl:AddRectFilled({ x + 2, y + 2 }, { x + w - 2, y + h * 0.45 }, u32({ 1, 1, 1, 0.06 }), r);
+        dl:AddRect({ x, y }, { x + w, y + h }, u32({ ice[1] * 0.4 + 0.6, ice[2] * 0.4 + 0.6, ice[3] * 0.4 + 0.6, 0.98 }), r, 0, 1.4);
+    elseif not quiet then
+        dl:AddRectFilled({ x, y }, { x + w, y + h }, u32(act and { 0.13, 0.16, 0.21, 1 } or (hov and { 0.10, 0.12, 0.16, 1 } or { 0.055, 0.068, 0.092, 1 })), r);
+        if hov then dl:AddRect({ x - 1, y - 1 }, { x + w + 1, y + h + 1 }, u32({ ice[1], ice[2], ice[3], 0.28 }), r + 1, 0, 3); end
+        dl:AddRect({ x, y }, { x + w, y + h }, u32({ ice[1], ice[2], ice[3], hov and 1 or 0.75 }), r, 0, 1.1);
+    else
+        dl:AddRectFilled({ x, y }, { x + w, y + h }, u32(act and { 0.16, 0.18, 0.22, 0.96 } or (hov and { 0.12, 0.14, 0.18, 0.96 } or { 0.075, 0.088, 0.115, 0.96 })), r);
+        dl:AddRect({ x, y }, { x + w, y + h }, u32({ 0.58, 0.64, 0.74, hov and 0.9 or 0.45 }), r, 0, 1);
+    end
+    if small then imgui.SetWindowFontScale(0.82); end
+    TRF.spaced(dl, x + (w - lw) / 2, y + (h - lh) / 2, name, u32(C.text), sp);
+    if small then imgui.SetWindowFontScale(1); end
+end
+-- The VNM alert's panel: the same slab, its light in the alert's colour (gold for a starred VNM), pulsing
+function TRF.AE.alertFrame(dl, x, y, w, h, gc, pulse)
+    TRF.AE.panel(dl, x, y, x + w, y + h, 1, gc, 1, 0.8 + 0.9 * pulse);
+end
+-- A section's name: bold italic serif on a black strip (as "Target" on ChadcoreMenu), a pale line fading after it
+function TRF.AE.section(dl, x0, y0, text)
+    local A, N = TRF.AE, TRF.NE;
+    local ice = A.ice();
+    local t = tostring(text or '');
+    if not TRF.LANG.on() and t == t:upper() then t = t:sub(1, 1) .. t:sub(2):lower(); end
+    local pushed = TRF.PH.font(fonts.ne or fonts.title, 18);
+    local w = imgui.CalcTextSize(t);
+    local lh = imgui.GetTextLineHeight();
+    local x1, y1 = x0 + math.max(w + 44, 200), y0 + lh + 7;
+    pcall(function ()
+        dl:AddRectFilledMultiColor({ x0, y0 }, { x1, y1 }, u32({ 0, 0, 0, 0.92 }), u32({ 0, 0, 0, 0.25 }), u32({ 0, 0, 0, 0.25 }), u32({ 0, 0, 0, 0.92 }));
+    end);
+    dl:AddRectFilled({ x0, y0 + 2 }, { x0 + 3, y1 - 2 }, u32({ ice[1], ice[2], ice[3], 0.9 }), 1);
+    N.text(dl, x0 + 14, y0 + 3, t, { 1, 1, 1 }, 1, 1);
+    if pushed then imgui.PopFont(); end
+    pcall(function ()
+        dl:AddRectFilledMultiColor({ x1 + 8, y0 + (y1 - y0) / 2 }, { x0 + ROW_W, y0 + (y1 - y0) / 2 + 1.2 },
+            u32({ ice[1], ice[2], ice[3], 0.45 }), u32({ ice[1], ice[2], ice[3], 0 }), u32({ ice[1], ice[2], ice[3], 0 }), u32({ ice[1], ice[2], ice[3], 0.45 }));
     end);
     return y1 - y0 + 4;
 end
@@ -8688,10 +8971,13 @@ local function tabSettings()
     local sx0 = imgui.GetCursorPosX();
     imgui.AlignTextToFramePadding();
     imgui.TextColored(C.text, 'Style');
-    tip('Classic: VenGo\'s own look. Phantom: red, black and white, slanted, with cut-out titles (like ChadcoreMenu\'s Phantom style). Neon: ChadcoreMenu\'s Neon look: dark slabs in a glowing line, serif titles with an icon and the Japanese under them, a spark running round the title.');
+    tip('Classic: VenGo\'s own look. Phantom: red, black and white, slanted, with cut-out titles (like ChadcoreMenu\'s Phantom style). Neon: ChadcoreMenu\'s Neon look: dark slabs in a glowing line, serif titles with an icon and the Japanese under them, a spark running round the title. Aether: ChadcoreMenu\'s Aether look: dark blue panels with round corners in a line of pale light, leaning title bars and menu rows, glints and motes of light twinkling round the window.');
     imgui.SameLine(sx0 + 130);
-    local stl = pillChoice('##vengo_style', { { 'classic', 'CLASSIC' }, { 'phantom', 'PHANTOM' }, { 'neon', 'NEON' } }, config.style or 'classic');
-    if stl then config.style = stl; C.apply(); saveSettings(); end
+    local stl = pillChoice('##vengo_style', { { 'classic', 'CLASSIC' }, { 'phantom', 'PHANTOM' }, { 'neon', 'NEON' }, { 'aether', 'AETHER' } }, config.style or 'classic');
+    if stl then
+        if stl == 'aether' and (config.ph_accent or 'Red') == 'Red' then config.ph_accent = 'Blue'; end   -- (Aether's own light, unless you've picked one)
+        config.style = stl; C.apply(); saveSettings();
+    end
     if TRF.PH.on() then                                           -- (Phantom's own picks: accent, slab, edge)
         local P = TRF.PH;
         local function L(src) local out = {}; for _, e in ipairs(src) do out[#out + 1] = { e[1], e[1], e[2], e[3], e[4] }; end return out; end
@@ -8710,7 +8996,7 @@ local function tabSettings()
             dl:AddCircle({ cx, cy }, 9, u32({ 1, 1, 1, 0.35 }), 24, 1);
         end);
         if ps then config.ph_slab = ps; C.apply(); saveSettings(); end
-        if not TRF.NE.on() then                                   -- (Neon has no white edge)
+        if not (TRF.NE.on() or TRF.AE.on()) then                  -- (Neon and Aether have no white edge)
         imgui.AlignTextToFramePadding();
         imgui.TextColored(C.text, 'Edge');
         local pe = swatches('##vengo_phe_', L(P.EDGE), config.ph_edge or 'White', function (dl, cx, cy, e)

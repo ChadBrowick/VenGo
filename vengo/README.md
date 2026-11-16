@@ -68,7 +68,7 @@ Venture points (EXP, Battle) on VENTURES, Summit points on SUMMIT, Daily points 
 
 ## Colours and your own background
 
-**Style** (Settings > Colours): **Classic** is VenGo's own look; **Neon** is ChadcoreMenu 3.57's Neon look: dark slabs in a glowing line of the accent, italic serif titles with an icon box and the Japanese under them, a spark running round the title, menu rows that lean with a honeycomb on the one you're on (font: TeX Gyre Termes Bold Italic, GUST Font License); **Phantom** is red, black and white and slanted, like
+**Style** (Settings > Colours): **Classic** is VenGo's own look; **Neon** is ChadcoreMenu 3.57's Neon look: dark slabs in a glowing line of the accent, italic serif titles with an icon box and the Japanese under them, a spark running round the title, menu rows that lean with a honeycomb on the one you're on (font: TeX Gyre Termes Bold Italic, GUST Font License); **Aether** is ChadcoreMenu's Aether look: dark blue panels with round corners in a thin line of pale light, a leaning title bar with its icon in a box at the end and the Japanese under the name, leaning menu rows in italic serif (the one you're on outlined in light with a double chevron), and glints and motes of light twinkling round the window (it picks the Blue accent when you first choose it; any accent works); **Phantom** is red, black and white and slanted, like
 ChadcoreMenu's Phantom style: the panel a black slab edged white on a red one, the page's name in cut-out letters, the
 menu as dark strips with the page you're on a white slab and a red slash, and a bold narrow font. Phantom has its own
 colour picks: accent, slab and edge. Its fonts are in `fonts` (Inter Black, SIL Open Font License; TeX Gyre Heros Cn
@@ -109,7 +109,7 @@ HELM, Fishing and Dynamis ventures, and the exact reset time. Turn it off in Set
 ## Keeping frames up
 
 What costs the most, most first: the **RUNES** GPS style (LIGHT is the cheapest of the three), **Glow** on the GPS,
-the window at a scale other than 100%, Japanese, and the Neon style. Settings > Window > **Light mode** and
+the window at a scale other than 100%, Japanese, and the Neon and Aether styles. Settings > Window > **Light mode** and
 Settings > Performance > **Glow passes 1** cut the GPS's cost (Runes then drops its filled glow and inner ring).
 In English at 100% VenGo puts nothing in the way of drawing.
 
