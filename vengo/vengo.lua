@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.95';
+addon.version = '4.96';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -107,6 +107,7 @@ local config = {
     bg_img_alpha = 0.45,       -- how much of it shows
     trail_size = 'medium',     -- small | medium | large
     pad_combo = true,          -- LB + Y opens VenGo with the controller (LB / RB change the menu, B closes it)
+    gp_guild = 'Fishing',      -- the guild shown on GUILD POINTS
     pad_close = 'none',        -- what closing VenGo from the controller (LB + Y, B) leaves on screen: none | orb | bar
 };
 
@@ -194,7 +195,7 @@ local function saveSettings()
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
     for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'win_scale', 'logo_style', 'logo_size', 'logo_clear', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
-                           'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'check_updates' }) do
+                           'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'gp_guild', 'check_updates' }) do
         local v = config[k];
         f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v)));
     end
@@ -8052,7 +8053,7 @@ end
 -- GUILD POINTS (from catseyexi.com/events): today's items each crafting guild takes for points, for your rank in
 -- that craft (click a guild for every rank). Each item's name is a link to catseyexi.com/database, as on DAILIES.
 ------------------------------------------------------------------------
-TRF.GP = { open = {}, RANKS = { 'Novice', 'Apprentice', 'Journeyman', 'Craftsman', 'Artisan', 'Adept', 'Veteran' },
+TRF.GP = { RANKS = { 'Novice', 'Apprentice', 'Journeyman', 'Craftsman', 'Artisan', 'Adept', 'Veteran' },
     ORDER = { 'Fishing', 'Woodworking', 'Smithing', 'Goldsmithing', 'Clothcraft', 'Leathercraft', 'Bonecraft', 'Alchemy', 'Cooking' },
     NAMES = { [0] = 'Amateur', 'Recruit', 'Initiate', 'Novice', 'Apprentice', 'Journeyman', 'Craftsman', 'Artisan', 'Adept', 'Veteran', 'Expert' },
     COL = { Fishing = { 0.40, 0.70, 1.00 }, Woodworking = { 0.70, 0.50, 0.30 }, Smithing = { 0.75, 0.75, 0.80 }, Goldsmithing = { 1.00, 0.80, 0.30 },
@@ -8114,72 +8115,118 @@ function TRF.GP.item(dl, id, it, x, y, lh)
     dl:AddLine({ nx, y + lh }, { nx + nw, y + lh }, u32({ lc[1], lc[2], lc[3], hov and 0.9 or 0.4 }), 1);
     if hov then imgui.SetTooltip(('Look up %s on catseyexi.com/database'):fmt(nm)); end
     if click then TRF.DL.open(nm); end
-    local pts, st = TRF.num(tonumber(it.points) or 0), tonumber(it.stackSize) or 1;
-    local info = (st > 1) and ('%s pts each   ·   stacks of %d'):fmt(pts, st) or ('%s pts each'):fmt(pts);
-    dl:AddText({ nx + math.max(nw, 200) + 16, y }, u32(C.muted), info);
+    local info = ('(%s pts, max: %s)'):fmt(TRF.num(tonumber(it.points) or 0), TRF.num(tonumber(it.maxPoints) or 0));
+    dl:AddText({ nx + nw + 10, y }, u32(C.muted), info);
 end
 TRF.gpTab = function()
     local G = TRF.GP;
     section('Guild points');
-    imgui.TextColored(C.muted, 'Today\'s items change at JP midnight, in');
-    imgui.SameLine(0, 6);
-    imgui.TextColored(C.gold, TRF.dur(TRF.DL.deadline() - os.time()));
     local D = SITE.x.guild;
-    if not config.website or D == nil or type(D.guilds) ~= 'table' then TRF.noData('the guild point items'); return; end
-    local my = G.mine();
     local dl = imgui.GetWindowDrawList();
     local lh = imgui.GetTextLineHeight();
-    for gi, gname in ipairs(G.ORDER) do
+    -- the pattern of the day (its letter in a box on the right), the reset, the site
+    local x, y = imgui.GetCursorScreenPos();
+    local pat = D and D.currentPattern and tostring(D.currentPattern) or nil;
+    imgui.TextColored(C.text, 'Pattern of the day:');
+    if pat then
+        local bs = lh * 2 + 8;
+        local bx = x + ROW_W - bs;
+        dl:AddRectFilled({ bx, y }, { bx + bs, y + bs }, u32({ C.acc[1] * 0.55, C.acc[2] * 0.55, C.acc[3] * 0.55, 1 }), 6);
+        dl:AddRect({ bx, y }, { bx + bs, y + bs }, u32({ C.acc[1], C.acc[2], C.acc[3], 0.8 }), 6, C.rall, 1);
+        local big = pushFont(fonts.big, 30);
+        local pw = imgui.CalcTextSize(pat);
+        local ph = imgui.GetTextLineHeight();
+        dl:AddText({ bx + (bs - pw) / 2, y + (bs - ph) / 2 }, u32(C.text), pat);
+        if big then imgui.PopFont(); end
+    end
+    imgui.TextColored(C.muted, 'Resets at JST midnight (15:00 UTC), in');
+    imgui.SameLine(0, 6);
+    imgui.TextColored(C.gold, TRF.dur(TRF.DL.deadline() - os.time()));
+    if button('OPEN CATSEYEXI.COM/EVENTS##vengo_gpweb', { 0, 0 }, true, true) then
+        if not TRF.UP.shell('https://catseyexi.com/events', '') then msg('Could not open your browser. Link: https://catseyexi.com/events'); end
+    end
+    if not config.website or D == nil or type(D.guilds) ~= 'table' then TRF.noData('the guild point items'); return; end
+    local my = G.mine();
+
+    -- pick a guild: a grid of three across
+    imgui.Spacing();
+    local sx, sy = imgui.GetCursorScreenPos();
+    spaced(dl, sx, sy, 'SELECT GUILD', u32(C.label), 2);
+    imgui.Dummy({ ROW_W, lh + 6 });
+    local cur = D.guilds[config.gp_guild or ''] and config.gp_guild or 'Fishing';
+    local gap, cols = 8, 3;
+    local tw, th = (ROW_W - gap * (cols - 1)) / cols, lh + 18;
+    x, y = imgui.GetCursorScreenPos();
+    for i, gname in ipairs(G.ORDER) do
         local g = D.guilds[gname];
-        if type(g) == 'table' and type(g.ranks) == 'table' then
-            local myR = my and my[gname:lower()] or nil;
-            local site = G.rankFor(myR);
-            local all = G.open[gname] or site == nil;
-            -- which ranks to show: yours, or all of them
-            local rows = {};
-            for _, rk in ipairs(G.RANKS) do
-                local e = g.ranks[rk];
-                if type(e) == 'table' and (all or rk == site) then rows[#rows + 1] = { rk, e }; end
-            end
-            local n = 0;
-            for _, r in ipairs(rows) do n = n + 1 + #(r[2].items or {}); end
-            local x, y = imgui.GetCursorScreenPos();
-            local h = 14 + lh + 8 + n * (lh + 8) + 4;
-            local hov, click = TRF.hot('##vengo_gph' .. gi, x, y, ROW_W, lh + 18);
-            if not site then hov = false; end
-            TRF.card(dl, x, y, ROW_W, h, nil, hov, 8);
-            local gc = G.COL[gname] or C.acc;
-            dl:AddCircleFilled({ x + 16, y + 10 + lh / 2 }, 4, u32({ gc[1], gc[2], gc[3], 1 }), 12);
-            dl:AddText({ x + 30, y + 10 }, u32(C.text), gname);
-            local sub = myR and ('Your rank: %s'):fmt(myR) or 'Your rank isn\'t known: every rank shown';
-            dl:AddText({ x + 30 + imgui.CalcTextSize(gname) + 14, y + 10 }, u32(C.muted), sub);
-            if site then
-                local t = all and 'YOUR RANK ONLY' or 'ALL RANKS';
+        local tx = x + ((i - 1) % cols) * (tw + gap);
+        local ty = y + math.floor((i - 1) / cols) * (th + gap);
+        local hov, click = TRF.hot('##vengo_gpg' .. i, tx, ty, tw, th);
+        local on = (gname == cur);
+        local gc = G.COL[gname] or C.acc;
+        dl:AddRectFilled({ tx, ty }, { tx + tw, ty + th }, u32(on and { gc[1] * 0.22, gc[2] * 0.22, gc[3] * 0.22, 1 } or (hov and { 0.15, 0.14, 0.19, 1 } or { C.well[1], C.well[2], C.well[3], 0.95 })), 6);
+        dl:AddRect({ tx, ty }, { tx + tw, ty + th }, u32(on and { gc[1], gc[2], gc[3], 0.9 } or { 1, 1, 1, hov and 0.25 or 0.10 }), 6, C.rall, on and 1.4 or 1);
+        -- its icon: today's Novice item of that guild
+        local nov = g and g.ranks and g.ranks.Novice and g.ranks.Novice.items and g.ranks.Novice.items[1];
+        local nw = imgui.CalcTextSize(gname);
+        local iw = nov and (lh + 6) or 0;
+        local cx = tx + (tw - nw - iw) / 2;
+        if nov and nov.itemId then TRF.icon(dl, tonumber(nov.itemId), cx, ty + (th - lh - 2) / 2, lh + 2, 1); end
+        dl:AddText({ cx + iw, ty + (th - lh) / 2 }, u32(on and C.text or { 0.85, 0.85, 0.90, 1 }), gname);
+        if my and my[gname:lower()] and G.rankFor(my[gname:lower()]) then   -- (a dot: you've a rank in it)
+            dl:AddCircleFilled({ tx + tw - 10, ty + 10 }, 2.5, u32({ gc[1], gc[2], gc[3], 0.9 }), 8);
+        end
+        if click and not on then config.gp_guild = gname; saveSettings(); end
+    end
+    imgui.Dummy({ ROW_W, 3 * th + 2 * gap + 8 });
+
+    -- the guild: every rank, yours marked, each with the items it takes
+    local g = D.guilds[cur];
+    if type(g) ~= 'table' or type(g.ranks) ~= 'table' then return; end
+    local myR = my and my[cur:lower()] or nil;
+    local site = G.rankFor(myR);
+    local n, nr = 0, 0;
+    for _, rk in ipairs(G.RANKS) do local e = g.ranks[rk]; if type(e) == 'table' then nr = nr + 1; n = n + #(e.items or {}); end end
+    x, y = imgui.GetCursorScreenPos();
+    local h = 16 + lh + 14 + nr * (lh + 10) + n * (lh + 8) + (nr - 1) * 9 + 8;
+    TRF.card(dl, x, y, ROW_W, h, nil, false, 8);
+    local gc = G.COL[cur] or C.acc;
+    local big = pushFont(fonts.big, 20);
+    dl:AddText({ x + 18, y + 12 }, u32(C.text), cur);
+    local cw = imgui.CalcTextSize(cur);
+    if big then imgui.PopFont(); end
+    dl:AddCircleFilled({ x + 10, y + 12 + lh / 2 + 2 }, 3.5, u32({ gc[1], gc[2], gc[3], 1 }), 12);
+    dl:AddText({ x + 18 + cw + 14, y + 16 }, u32(C.muted), myR and ('Your rank: %s'):fmt(myR) or 'Your rank isn\'t known');
+    local cy = y + 16 + lh + 14;
+    local first = true;
+    for ri, rk in ipairs(G.RANKS) do
+        local e = g.ranks[rk];
+        if type(e) == 'table' then
+            if not first then dl:AddLine({ x + 16, cy - 5 }, { x + ROW_W - 16, cy - 5 }, u32({ 1, 1, 1, 0.07 }), 1); cy = cy + 4; end
+            first = false;
+            local mine = (rk == site);
+            if mine then dl:AddRectFilled({ x + 6, cy - 2 }, { x + 9, cy + lh + 2 + #(e.items or {}) * (lh + 8) }, u32({ C.gold[1], C.gold[2], C.gold[3], 0.9 }), 1); end
+            dl:AddText({ x + 18, cy }, u32(mine and C.gold or C.text), rk);
+            local rw = imgui.CalcTextSize(rk);
+            local sub = e.itemRank and ('(Trading %s items)'):fmt(tostring(e.itemRank)) or '';
+            dl:AddText({ x + 18 + rw + 10, cy }, u32(C.muted), sub);
+            if mine then
+                local t = 'YOUR RANK';
                 imgui.SetWindowFontScale(0.82);
-                local tw = spacedW(t, 1.5);
-                spaced(dl, x + ROW_W - tw - 14, y + 12, t, u32(hov and C.acc or C.label), 1.5);
+                local w_ = spacedW(t, 1.5);
+                spaced(dl, x + ROW_W - w_ - 18, cy + 2, t, u32(C.gold), 1.5);
                 imgui.SetWindowFontScale(1);
-                if click then G.open[gname] = not G.open[gname]; end
             end
-            local cy = y + 14 + lh + 8;
-            for ri, r in ipairs(rows) do
-                local lab = r[1]:upper();
-                imgui.SetWindowFontScale(0.82);
-                spaced(dl, x + 30, cy + 2, lab, u32(r[1] == site and C.gold or C.label), 1.5);
-                imgui.SetWindowFontScale(1);
-                local mx = tonumber((r[2].items or {})[1] and r[2].items[1].maxPoints);
-                if mx then dl:AddText({ x + 160, cy }, u32(C.muted), ('up to %s points today'):fmt(TRF.num(mx))); end
+            cy = cy + lh + 10;
+            for ii, it in ipairs(e.items or {}) do
+                G.item(dl, ('##vengo_gpi%d_%d'):format(ri, ii), it, x + 26, cy, lh);
                 cy = cy + lh + 8;
-                for ii, it in ipairs(r[2].items or {}) do
-                    G.item(dl, ('##vengo_gpi%d_%d_%d'):format(gi, ri, ii), it, x + 44, cy, lh);
-                    cy = cy + lh + 8;
-                end
             end
-            imgui.Dummy({ ROW_W, h + 6 });
+            cy = cy + 5;
         end
     end
-    imgui.Spacing();
-    hint('Trade these to the guild master of each craft for guild points (the most each day is shown for each rank). Click a guild for every rank; click an item for it on catseyexi.com/database.');
+    imgui.Dummy({ ROW_W, h + 6 });
+    hint('Trade these to the guild master of each craft for guild points. Click an item for it on catseyexi.com/database.');
     if SITE.x.at then hint('From catseyexi.com/events, updated ' .. (math.floor((os.time() - SITE.x.at) / 60)) .. ' min ago.'); end
 end
 
@@ -8437,7 +8484,7 @@ end
 TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'win_scale', 'logo_style', 'logo_size', 'logo_clear',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
-    'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'check_updates' };
+    'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'gp_guild', 'check_updates' };
 function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
 function TRF.loadPresets()
     TRF.slots = {};

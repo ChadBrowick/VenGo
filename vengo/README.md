@@ -65,11 +65,12 @@ pin to unpin. It hides while the full window is open.
 
 ## Guild points
 
-The GUILD POINTS tab (under DAILIES, or `/vengo guild`) shows today's guild point items for every crafting guild, from
-catseyexi.com/events: for each guild, the items for your rank in that craft, the points each one gives and the most
-points a day. Click a guild to see every rank; click an item's name to look it up on the catseyexi.com database. The
-items change at JP midnight, and VenGo fetches the new ones then (with Hunter and Summit, so "Update from
-catseyexi.com/events" has to be on in Settings).
+The GUILD POINTS tab (under DAILIES, or `/vengo guild`) is the Guild Points section of catseyexi.com/events in
+VenGo: the pattern of the day (its letter), the time to the reset at JST midnight (15:00 UTC), a button for each
+crafting guild, and the chosen guild's items for every rank (with the items each rank trades, the points each item gives
+and the most a day). Your own rank in that craft is marked in gold. Click an item's name to look it up on the
+catseyexi.com database; OPEN CATSEYEXI.COM/EVENTS opens the site's page. VenGo fetches the new items just after the
+reset (with Hunter and Summit, so "Update from catseyexi.com/events" has to be on in Settings).
 
 ## Points
 
