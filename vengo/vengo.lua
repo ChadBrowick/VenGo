@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.97';
+addon.version = '4.98';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -8143,7 +8143,8 @@ function TRF.GP.menuItem(dl, k, x0, y, sw, ih, on, over, label, sub)
         imgui.SetWindowFontScale(0.8);
         local w = imgui.CalcTextSize(sub);
         local nh = imgui.GetTextLineHeight();
-        dl:AddText({ x0 + sw - w - 26, y + (ih - nh) / 2 }, u32(on and C.gold or C.muted), sub);
+        local room = TRF.PH.on() and 50 or 12;                     -- (clear of the row's chevrons in the styled menus)
+        dl:AddText({ x0 + sw - w - room, y + (ih - nh) / 2 }, u32(on and C.gold or C.muted), sub);
         imgui.SetWindowFontScale(1);
     end
 end
