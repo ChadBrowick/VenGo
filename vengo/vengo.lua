@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '5.00';
+addon.version = '5.01';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -5565,7 +5565,11 @@ function TRF.SV.packet(id, d)
     local function u32_(o) return u16(o) + u16(o + 2) * 65536; end
     local function i32(o) local v = u32_(o); if v >= 0x80000000 then v = v - 0x100000000; end return v; end
     if id == 0x110 then S.sparks, S.sparksAt = u8(4) + u8(5) * 256 + u8(6) * 65536, os.clock();
-    elseif id == 0x113 then S.sparks, S.sparksAt = i32(0x74), os.clock();
+    elseif id == 0x113 then
+        S.sparks, S.sparksAt = i32(0x74), os.clock();
+        local P = {};                                             -- (guild points: Fishing at 0x20, then one every 4 bytes)
+        for i, g in ipairs(TRF.GP.ORDER) do P[g] = i32(0x20 + (i - 1) * 4); end
+        TRF.GP.got(P);
     elseif id == 0x034 then
         local ev = u16(0x2C);
         local isShop = false;
@@ -7504,7 +7508,7 @@ function TRF.DL.status()
     end
     local dl_ = D.deadline();
     if D.st.deadline ~= dl_ then
-        D.st.deadline, D.st.dailies, D.st.sea = dl_, {}, {};
+        D.st.deadline, D.st.dailies, D.st.sea, D.st.gpBase = dl_, {}, {}, {};
         if D.st.goldilox ~= dl_ then D.st.goldilox = 0; end
         D.save();
     end
@@ -7898,6 +7902,9 @@ function TRF.DL.pinnedRows()
     for _, k in ipairs(D.SEA) do
         if D.pinned('s:' .. k) then local r = D.describeSea(k); r.name, r.key = r.title, 's:' .. k; rows[#rows + 1] = r; end
     end
+    for _, g in ipairs(TRF.GP.ORDER) do                           -- (GUILD POINTS' pins)
+        if D.pinned('gp:' .. g) then local r = TRF.GP.describe(g); if r then r.key = 'gp:' .. g; rows[#rows + 1] = r; end end
+    end
     return rows;
 end
 -- The tracker: only when the full window isn't showing and something is pinned
@@ -7911,6 +7918,7 @@ function TRF.DL.tracker()
     local needInv = false;
     for _, r in ipairs(rows) do if r.items and r.state == 'active' then needInv = true; end end
     if needInv then D.scanInv(); end
+    for _, r in ipairs(rows) do if r.gp then TRF.SV.ask(false); break; end end
 
     local nc, nv = pushTheme();
     local pushed = pushFont(fonts.panel, 15);
@@ -8125,6 +8133,63 @@ function TRF.GP.item(dl, id, it, x, y, lh)
     local info = ('(%s pts, max: %s)'):fmt(TRF.num(tonumber(it.points) or 0), TRF.num(tonumber(it.maxPoints) or 0));
     dl:AddText({ nx + nw + 10, y }, u32(C.muted), info);
 end
+-- Your guild points (from the Currencies packet, 0x113: asked for every 30 s while the tab or a pinned guild shows)
+-- and what you've earned today in each: the points now less the first VenGo saw since JP midnight (kept with the
+-- dailies, per character; points earned before VenGo was running that day aren't counted)
+function TRF.GP.got(P)
+    local G = TRF.GP;
+    G.points, G.pointsAt = P, os.clock();
+    local S = TRF.DL.status();
+    if S == nil then return; end
+    S.gpBase = S.gpBase or {};
+    local changed = false;
+    for g, v in pairs(P) do
+        if S.gpBase[g] == nil or v < S.gpBase[g] then S.gpBase[g] = v; changed = true; end   -- (spent some: start again from here)
+    end
+    if changed then TRF.DL.save(); end
+end
+function TRF.GP.today(g)
+    local G, S = TRF.GP, TRF.DL.status();
+    local v = G.points and G.points[g];
+    local b = S and S.gpBase and S.gpBase[g];
+    if v == nil or b == nil then return nil; end
+    return math.max(0, v - b);
+end
+-- Today's items for your rank in a guild, and the most a day (nil: no data)
+function TRF.GP.mineToday(g)
+    local G, D = TRF.GP, SITE.x.guild;
+    if D == nil or type(D.guilds) ~= 'table' or type(D.guilds[g]) ~= 'table' then return nil; end
+    local my = G.mine();
+    local rk = G.rankFor(my and my[g:lower()]) or 'Novice';
+    local e = D.guilds[g].ranks and D.guilds[g].ranks[rk];
+    if type(e) ~= 'table' then return nil; end
+    local mx = tonumber(e.items and e.items[1] and e.items[1].maxPoints) or 0;
+    return e.items or {}, mx, rk;
+end
+-- A pinned guild, as the DAILIES tracker shows it: its points, today's items and how many you carry of what it
+-- still takes today
+function TRF.GP.describe(g)
+    local G = TRF.GP;
+    local items, mx = G.mineToday(g);
+    if items == nil then return nil; end
+    local pts = G.points and G.points[g];
+    local td = G.today(g) or 0;
+    local left = math.max(0, mx - td);
+    local r = { gp = true, name = g, where = pts and ('%s pts'):fmt(TRF.num(pts)) or nil };
+    if mx > 0 and left <= 0 then
+        r.state, r.task = 'done', 'Done for today';
+        return r;
+    end
+    r.state = 'active';
+    r.task = ('Today: %s / %s points'):fmt(TRF.num(td), TRF.num(mx));
+    r.items = {};
+    for _, it in ipairs(items) do
+        local each = tonumber(it.points) or 0;
+        if each > 0 then r.items[#r.items + 1] = { name = tostring(it.name), count = math.ceil(left / each) }; end
+    end
+    return r;
+end
+
 -- One row of the craft menu, drawn like the main menu's rows (in every style)
 function TRF.GP.menuItem(dl, k, x0, y, sw, ih, on, over, label, sub)
     if TRF.PH.on() then
@@ -8175,6 +8240,7 @@ TRF.gpTab = function()
         if not TRF.UP.shell('https://catseyexi.com/events', '') then msg('Could not open your browser. Link: https://catseyexi.com/events'); end
     end
     if imgui.IsItemHovered() then imgui.SetTooltip('Open catseyexi.com/events'); end
+    TRF.SV.ask(false);                                            -- (your guild points come with the currencies)
     if not config.website or D == nil or type(D.guilds) ~= 'table' then TRF.noData('the guild point items'); return; end
     local my = G.mine();
     imgui.Spacing();
@@ -8209,7 +8275,33 @@ TRF.gpTab = function()
     local bh = imgui.GetTextLineHeight();
     if big then imgui.PopFont(); end
     dl:AddText({ px + cw + 12, cy + bh - lh - 2 }, u32(C.muted), myR and ('Your rank: %s'):fmt(myR) or 'Your rank isn\'t known');
-    cy = cy + bh + 10;
+    do                                                            -- (the pin, at the right: keep this guild on screen)
+        local key = 'gp:' .. cur;
+        local on = TRF.DL.pinned(key);
+        local qx, qy = px + pw - 12, cy + bh / 2;
+        local qh, qc = TRF.hot('##vengo_gppin', qx - 12, qy - 12, 24, 24);
+        TRF.DL.pinIcon(dl, qx, qy, 19, on and NEON2 or (qh and C.text or C.muted), on);
+        if qh then imgui.SetTooltip(on and 'Pinned: shown on screen while VenGo is minimized. Click to unpin.' or 'Pin: keep this on screen while VenGo is minimized'); end
+        if qc then TRF.DL.togglePin(key); end
+    end
+    cy = cy + bh + 6;
+    do                                                            -- (your points in this guild, and today's)
+        local pts = G.points and G.points[cur];
+        local _, mx = G.mineToday(cur);
+        local td = G.today(cur);
+        local x_ = px;
+        local lab = 'Guild points:';
+        dl:AddText({ x_, cy }, u32(C.muted), lab);
+        x_ = x_ + imgui.CalcTextSize(lab) + 6;
+        local v = pts and TRF.num(pts) or '...';
+        dl:AddText({ x_, cy }, u32(C.gold), v);
+        x_ = x_ + imgui.CalcTextSize(v) + 18;
+        if td and mx and mx > 0 then
+            local t = ('Today: %s / %s'):fmt(TRF.num(td), TRF.num(mx));
+            dl:AddText({ x_, cy }, u32(td >= mx and C.green or C.text), t);
+        end
+        cy = cy + lh + 10;
+    end
     for ri, rk in ipairs(G.RANKS) do
         local e = type(g) == 'table' and type(g.ranks) == 'table' and g.ranks[rk] or nil;
         if type(e) == 'table' then

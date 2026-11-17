@@ -72,6 +72,12 @@ rank's items for that craft: which items the rank trades, each item's points and
 gold. Click an item's name to look it up on the catseyexi.com database; WEBSITE opens catseyexi.com/events. The items
 change at JST midnight (15:00 UTC). "Update from catseyexi.com/events" has to be on in Settings.
 
+At the top of a craft: your guild points in it (from the game's currencies) and what you've earned there today out of
+the day's most. VenGo counts today's from the first total it sees after JST midnight, so points traded in before
+VenGo was running that day aren't counted. The pin (at the right of the craft's name) works like the DAILIES pins: a
+pinned craft shows in the small tracker while VenGo is minimized or closed, with your points, today's progress and
+how many of today's items you carry against how many it still takes.
+
 ## Points
 
 VenGo asks the CatsEyeXI server for your points the way Trove's Points tab does, and shows each group where it belongs:

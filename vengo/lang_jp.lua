@@ -558,6 +558,8 @@ local X = {
     ['the requested items'] = '依頼されたアイテム', ['the hunt'] = 'ハント', ['the Summit'] = 'サミット',
     ['ACE'] = 'ACE', ['CW'] = 'CW', ['Vnm armor'] = 'VNM防具', ['Odious codex'] = '禁断の書', ['Special thanks'] = 'スペシャルサンクス',
     ['Language'] = '言語',
+    ['Guild points:'] = 'ギルドポイント:', ['Today: %s / %s'] = '本日: {1} / {2}', ['Today: %s / %s points'] = '本日: {1} / {2} ポイント',
+    ['%s pts'] = '{1} ポイント',
     ['Font size'] = '文字の大きさ', ['RESET'] = 'リセット',
     ["Makes VenGo's text bigger or smaller (80% to 160%) without changing the rest of the window. To make everything bigger, use the - / + at the top of the window."] = 'ウィンドウの他の部分はそのままで、VenGoの文字を大きく・小さくします(80%〜160%)。すべてを大きくするには、ウィンドウ上部の - / + を使ってください。',
     ['WEBSITE'] = 'ウェブサイト', ['Open catseyexi.com/events'] = 'catseyexi.com/eventsを開く',
