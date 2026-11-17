@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.99';
+addon.version = '5.00';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1842,9 +1842,10 @@ local function newFont(f)
     local ok, ls = pcall(function () return f.LegacySize; end);
     return ok and ls ~= nil;
 end
+function TRF.fontK() return math.max(0.8, math.min(1.6, tonumber(config.font_size) or 1)); end   -- (Settings > Font size)
 local function pushFont(f, size)
     if f == fonts.panel then                                      -- (the text: as big as Settings > Font size says)
-        local k = math.max(0.8, math.min(1.6, tonumber(config.font_size) or 1));
+        local k = TRF.fontK();
         if k ~= 1 then size = (size or 16) * k; end
     end
     if TRF.PH and TRF.PH.on() then                                -- (Phantom: its own faces)
@@ -2873,7 +2874,7 @@ function TRF.NE.row(dl, x0, y0, x1, y1, s, on, over, label)
         dl:AddLine({ vx + 1.5 * s, cy }, { vx - 3.5 * s, cy + 5 * s }, u32({ 0.85, 0.85, 0.9, 0.9 }), 2 * s);
     end
     if label then
-        local pushed = TRF.PH.font(fonts.ne or fonts.title, 17 * s);
+        local pushed = TRF.PH.font(fonts.ne or fonts.title, 17 * s * TRF.fontK());
         N.text(dl, x0 + K + 8 * s, cy - imgui.GetTextLineHeight() / 2, label, C.text, 1, 1);
         if pushed then imgui.PopFont(); end
     end
@@ -3138,7 +3139,7 @@ function TRF.AE.row(dl, x0, y0, x1, y1, s, on, over, label)
         dl:AddLine({ vx + 1.5 * s, cy }, { vx - 3.5 * s, cy + 5 * s }, u32({ 0.86, 0.90, 0.96, 0.9 }), 2 * s);
     end
     if label then
-        local pushed = TRF.PH.font(fonts.ne or fonts.title, 17 * s);
+        local pushed = TRF.PH.font(fonts.ne or fonts.title, 17 * s * TRF.fontK());
         N.text(dl, x0 + K + 10 * s, cy - imgui.GetTextLineHeight() / 2, label, on and { 1, 1, 1 } or { 0.88, 0.90, 0.95 }, 1, 1);
         if pushed then imgui.PopFont(); end
     end
@@ -3880,7 +3881,7 @@ local GROUPS = { [10] = true, [15] = true };   -- (faint lines before the collec
 
 local function sidebar(dl, x0, y0, sw)
     local y = y0;
-    local ih = 28;
+    local ih = math.floor(28 * math.max(1, TRF.fontK()) + 0.5);   -- (taller rows for bigger letters)
     local mx, my = imgui.GetMousePos();
     for k, n in ipairs(TABS) do
         if GROUPS[k] then
@@ -8180,7 +8181,7 @@ TRF.gpTab = function()
 
     -- the craft menu on the left, the craft's items on the right
     local x0, y0 = imgui.GetCursorScreenPos();
-    local sw, ih = 200, 30;
+    local sw, ih = 200, math.floor(30 * math.max(1, TRF.fontK()) + 0.5);
     local cur = D.guilds[config.gp_guild or ''] and config.gp_guild or 'Fishing';
     local mx, my_ = imgui.GetMousePos();
     local y = y0;
