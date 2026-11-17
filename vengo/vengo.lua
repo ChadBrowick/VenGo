@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.94';
+addon.version = '4.95';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1350,8 +1350,9 @@ end
 
 -- Hunter of the week and Summit of the Stars, from the same site (its Events page feeds): fetched together in the
 -- background at load, again the moment the Summit's target changes, and every 30 minutes
-SITE.x = { pending = false, at = nil, asked = nil, hunter = nil, summit = nil, summitEnd = nil, nextAt = 0 };
-local X_URLS = { hunter = 'https://catseyexi.com/api/events/hunter', summit = 'https://catseyexi.com/api/summit' };
+SITE.x = { pending = false, at = nil, asked = nil, hunter = nil, summit = nil, guild = nil, summitEnd = nil, nextAt = 0 };
+local X_URLS = { hunter = 'https://catseyexi.com/api/events/hunter', summit = 'https://catseyexi.com/api/summit',
+    guild = 'https://catseyexi.com/api/guild-patterns-v2' };   -- (guild: today's guild point items, every guild and rank)
 function SITE.xFile(k, tmp) return addon.path .. 'site_' .. k .. (tmp and '.tmp' or '.json'); end
 function SITE.xApply(k, data, at)
     local X = SITE.x;
@@ -1362,16 +1363,17 @@ function SITE.xApply(k, data, at)
         local secs = type(tr) == 'table' and tonumber(tr.total) or nil;
         X.summitEnd = secs and (at + secs) or nil;
     end
+    if k == 'guild' and type(data) == 'table' and type(data.guilds) == 'table' then X.guild, X.guildAt = data, at; end
 end
 function SITE.xAsk()
     local X = SITE.x;
     if X.pending then return; end
-    os.remove(SITE.xFile('hunter', true)); os.remove(SITE.xFile('summit', true));
+    os.remove(SITE.xFile('hunter', true)); os.remove(SITE.xFile('summit', true)); os.remove(SITE.xFile('guild', true));
     local ok = pcall(function ()
         local ffi = require('ffi');
         pcall(ffi.cdef, 'void* __stdcall ShellExecuteA(void* hwnd, const char* op, const char* file, const char* params, const char* dir, int show);');
-        local args = ('-s -f -L -m %d -A "VenGo/%s" -o "%s" "%s" -o "%s" "%s"'):format(SITE_WAIT - 2, addon.version,
-            SITE.xFile('hunter', true), X_URLS.hunter, SITE.xFile('summit', true), X_URLS.summit);
+        local args = ('-s -f -L -m %d -A "VenGo/%s" -o "%s" "%s" -o "%s" "%s" -o "%s" "%s"'):format(SITE_WAIT - 2, addon.version,
+            SITE.xFile('hunter', true), X_URLS.hunter, SITE.xFile('summit', true), X_URLS.summit, SITE.xFile('guild', true), X_URLS.guild);
         local r = ffi.load('shell32').ShellExecuteA(nil, 'open', 'curl.exe', args, nil, 0);
         if tonumber(ffi.cast('intptr_t', r)) <= 32 then error('curl.exe could not be started'); end
     end);
@@ -1383,9 +1385,10 @@ function SITE.xCheck()
     local now = os.time();
     local h = jsonDecode(readAll(SITE.xFile('hunter', true)));
     local s = jsonDecode(readAll(SITE.xFile('summit', true)));
-    if (h and s) or now - (X.asked or 0) > SITE_WAIT then
+    local g = jsonDecode(readAll(SITE.xFile('guild', true)));
+    if (h and s and g) or now - (X.asked or 0) > SITE_WAIT then
         X.pending = false;
-        for k, d in pairs({ hunter = h, summit = s }) do
+        for k, d in pairs({ hunter = h, summit = s, guild = g }) do
             if d then
                 SITE.xApply(k, d, now);
                 pcall(function ()
@@ -1395,7 +1398,7 @@ function SITE.xCheck()
             end
             os.remove(SITE.xFile(k, true));
         end
-        if h or s then
+        if h or s or g then
             X.at = now;
             local f = io.open(addon.path .. 'site_x_meta.lua', 'w');
             if f then f:write(('return { at = %d }\n'):format(now)); f:close(); end
@@ -1405,7 +1408,7 @@ end
 function SITE.xLoadCache()
     local at = os.time();
     pcall(function () local m = loadfile(addon.path .. 'site_x_meta.lua'); if m then local t_ = m(); at = tonumber(t_.at) or at; end end);
-    for _, k in ipairs({ 'hunter', 'summit' }) do
+    for _, k in ipairs({ 'hunter', 'summit', 'guild' }) do
         local d = jsonDecode(readAll(SITE.xFile(k)));
         if d then SITE.xApply(k, d, at); SITE.x.at = at; end
     end
@@ -1415,7 +1418,9 @@ function SITE.xTick()
     SITE.xCheck();
     if X.pending then return; end
     local now = os.time();
-    local due = (X.at == nil) or (now - X.at >= 1800) or (X.summitEnd and now >= X.summitEnd + 20 and now - X.at > 60);
+    local mid = TRF.DL and TRF.DL.deadline and (TRF.DL.deadline() - 86400) or nil;   -- (the last midnight in Japan: new guild items)
+    local due = (X.at == nil) or (now - X.at >= 1800) or (X.summitEnd and now >= X.summitEnd + 20 and now - X.at > 60)
+        or (mid and X.at < mid + 60 and now >= mid + 60);
     if due and now >= (X.nextAt or 0) then
         X.nextAt = now + 60;                                         -- (a failed try waits a minute)
         SITE.xAsk();
@@ -1796,7 +1801,7 @@ local WIN_W = SW + 30 + MARGIN + FULL_ROW + 50;         -- starting size; the wi
 local WIN_H = 700;
 local MIN_W, MIN_H = 640, 460;
 
-local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'DAILIES', 'CATSEYEXI', 'VNM ARMOR', 'ULTIMATES', 'LUMORIA', 'ODIOUS CODEX', 'SPARK VENDOR', 'SETTINGS', 'SPECIAL THANKS' };
+local TABS = { 'VENTURES', 'HELM', 'FISHING', 'DYNAMIS', 'HUNTER', 'SUMMIT', 'DAILIES', 'GUILD POINTS', 'CATSEYEXI', 'VNM ARMOR', 'ULTIMATES', 'LUMORIA', 'ODIOUS CODEX', 'SPARK VENDOR', 'SETTINGS', 'SPECIAL THANKS' };
 ui.tab = ui.tab or 1;
 
 local function statusText()
@@ -2537,7 +2542,7 @@ end
 -- It rides on Phantom's plumbing (its fonts, palette and the places it draws); TRF.PH.* hand over to these.
 ------------------------------------------------------------------------
 TRF.NE = { INK = { 0.035, 0.035, 0.042 }, STRIP = { 0.10, 0.10, 0.115 },
-    ICON = { VENTURES = 11, HELM = 8, FISHING = 10, DYNAMIS = 4, HUNTER = 13, SUMMIT = 6, DAILIES = 12, CATSEYEXI = 9,
+    ICON = { VENTURES = 11, HELM = 8, FISHING = 10, DYNAMIS = 4, HUNTER = 13, SUMMIT = 6, DAILIES = 12, ['GUILD POINTS'] = 7, CATSEYEXI = 9,
              ['VNM ARMOR'] = 1, ULTIMATES = 0, LUMORIA = 3, ['ODIOUS CODEX'] = 12, ['SPARK VENDOR'] = 7, SETTINGS = 'gear',
              ['SPECIAL THANKS'] = 2, ['VNM INCOMING!'] = 13, ['STARRED VNM!'] = 6 },
     JP = { ['VNM INCOMING!'] = 'VNM出現', ['STARRED VNM!'] = 'スターVNM' } };
@@ -3864,7 +3869,7 @@ end
 
 -- The menu: dots, the chosen one lit pink fading to the right with a bright
 -- left edge and a small arrow beside it
-local GROUPS = { [9] = true, [14] = true };   -- (faint lines before the collections and before SETTINGS)
+local GROUPS = { [10] = true, [15] = true };   -- (faint lines before the collections and before SETTINGS)
 
 local function sidebar(dl, x0, y0, sw)
     local y = y0;
@@ -7359,7 +7364,7 @@ function TRF.UP.notice()
     imgui.SetCursorScreenPos({ x + ROW_W - 270, y + 5 });
     if button('INSTALL##vengo_up_i', { 120, h - 10 }, false, true) then TRF.UP.installNow(); end
     imgui.SameLine(0, 8);
-    if button('WHAT\'S NEW##vengo_up_n', { 130, h - 10 }, true, true) then ui.tab = 14; end
+    if button('WHAT\'S NEW##vengo_up_n', { 130, h - 10 }, true, true) then ui.tab = 15; end
     imgui.SetCursorScreenPos({ x, y + h + 8 });
     imgui.Dummy({ ROW_W, 1 });
 end
@@ -8041,6 +8046,141 @@ TRF.dlTab = function()
 
     imgui.Spacing();
     hint('Talk to each goblin in Lower Jeuno (and Palalumin in the Grand Palace of Hu\'Xzoi) to pick up today\'s task; VenGo reads it from chat and follows your kills and the items in your inventory. If a finished Sea quest is missed, talk to Palalumin again. Click a name in violet to look it up on catseyexi.com. Pin a daily to keep it on screen while VenGo is minimized.');
+end
+
+------------------------------------------------------------------------
+-- GUILD POINTS (from catseyexi.com/events): today's items each crafting guild takes for points, for your rank in
+-- that craft (click a guild for every rank). Each item's name is a link to catseyexi.com/database, as on DAILIES.
+------------------------------------------------------------------------
+TRF.GP = { open = {}, RANKS = { 'Novice', 'Apprentice', 'Journeyman', 'Craftsman', 'Artisan', 'Adept', 'Veteran' },
+    ORDER = { 'Fishing', 'Woodworking', 'Smithing', 'Goldsmithing', 'Clothcraft', 'Leathercraft', 'Bonecraft', 'Alchemy', 'Cooking' },
+    NAMES = { [0] = 'Amateur', 'Recruit', 'Initiate', 'Novice', 'Apprentice', 'Journeyman', 'Craftsman', 'Artisan', 'Adept', 'Veteran', 'Expert' },
+    COL = { Fishing = { 0.40, 0.70, 1.00 }, Woodworking = { 0.70, 0.50, 0.30 }, Smithing = { 0.75, 0.75, 0.80 }, Goldsmithing = { 1.00, 0.80, 0.30 },
+            Clothcraft = { 0.95, 0.60, 0.80 }, Leathercraft = { 0.80, 0.55, 0.40 }, Bonecraft = { 0.92, 0.90, 0.80 }, Alchemy = { 0.60, 0.90, 0.50 },
+            Cooking = { 1.00, 0.55, 0.35 } } };
+-- Your rank in each craft, by guild name (nil: not known), read at most every few seconds
+function TRF.GP.mine()
+    local G = TRF.GP;
+    if G.myAt and os.clock() - G.myAt < 5 then return G.my; end
+    G.myAt = os.clock();
+    local out = nil;
+    pcall(function ()
+        if not (rawget(_G, 'vana') and vana.game and vana.game.crafts) then return; end
+        local cr = vana.game.crafts();
+        if type(cr) ~= 'table' then return; end
+        out = {};
+        for _, c in pairs(cr) do
+            if type(c) == 'table' and c.name then
+                local r = c.rank;
+                if type(r) == 'number' then r = G.NAMES[r]; end
+                if r then out[tostring(c.name):lower()] = tostring(r); end
+            end
+        end
+    end);
+    if out == nil or next(out) == nil then                         -- (Ashita's way: craft 0 Fishing ... 8 Cooking)
+        pcall(function ()
+            local pl = AshitaCore:GetMemoryManager():GetPlayer();
+            for i, nm in ipairs(G.ORDER) do
+                local cs = pl:GetCraftSkill(i - 1);
+                local r = cs and cs:GetRank();
+                if type(r) == 'number' and G.NAMES[r] then out = out or {}; out[nm:lower()] = G.NAMES[r]; end
+            end
+        end);
+    end
+    G.my = out;
+    return out;
+end
+-- The site's rank for yours (below Novice: Novice's items; above Veteran: Veteran's)
+function TRF.GP.rankFor(r)
+    if r == nil then return nil; end
+    for i = 0, 10 do
+        if TRF.GP.NAMES[i]:lower() == r:lower() then
+            if i < 3 then return 'Novice'; end
+            if i > 9 then return 'Veteran'; end
+            return TRF.GP.NAMES[i];
+        end
+    end
+    return nil;
+end
+-- One item: icon, name (the link), points each and the most a day
+function TRF.GP.item(dl, id, it, x, y, lh)
+    local nm = tostring(it.name or '?');
+    if it.itemId then TRF.icon(dl, tonumber(it.itemId), x, y - 1, lh + 2, 1); end
+    local nx = x + lh + 8;
+    local nw = imgui.CalcTextSize(nm);
+    local hov, click = TRF.hot(id, nx, y, nw, lh);
+    local lc = hov and { NEON2[1], NEON2[2], NEON2[3], 1 } or C.acc;
+    dl:AddText({ nx, y }, u32(lc), nm);
+    dl:AddLine({ nx, y + lh }, { nx + nw, y + lh }, u32({ lc[1], lc[2], lc[3], hov and 0.9 or 0.4 }), 1);
+    if hov then imgui.SetTooltip(('Look up %s on catseyexi.com/database'):fmt(nm)); end
+    if click then TRF.DL.open(nm); end
+    local pts, st = TRF.num(tonumber(it.points) or 0), tonumber(it.stackSize) or 1;
+    local info = (st > 1) and ('%s pts each   ·   stacks of %d'):fmt(pts, st) or ('%s pts each'):fmt(pts);
+    dl:AddText({ nx + math.max(nw, 200) + 16, y }, u32(C.muted), info);
+end
+TRF.gpTab = function()
+    local G = TRF.GP;
+    section('Guild points');
+    imgui.TextColored(C.muted, 'Today\'s items change at JP midnight, in');
+    imgui.SameLine(0, 6);
+    imgui.TextColored(C.gold, TRF.dur(TRF.DL.deadline() - os.time()));
+    local D = SITE.x.guild;
+    if not config.website or D == nil or type(D.guilds) ~= 'table' then TRF.noData('the guild point items'); return; end
+    local my = G.mine();
+    local dl = imgui.GetWindowDrawList();
+    local lh = imgui.GetTextLineHeight();
+    for gi, gname in ipairs(G.ORDER) do
+        local g = D.guilds[gname];
+        if type(g) == 'table' and type(g.ranks) == 'table' then
+            local myR = my and my[gname:lower()] or nil;
+            local site = G.rankFor(myR);
+            local all = G.open[gname] or site == nil;
+            -- which ranks to show: yours, or all of them
+            local rows = {};
+            for _, rk in ipairs(G.RANKS) do
+                local e = g.ranks[rk];
+                if type(e) == 'table' and (all or rk == site) then rows[#rows + 1] = { rk, e }; end
+            end
+            local n = 0;
+            for _, r in ipairs(rows) do n = n + 1 + #(r[2].items or {}); end
+            local x, y = imgui.GetCursorScreenPos();
+            local h = 14 + lh + 8 + n * (lh + 8) + 4;
+            local hov, click = TRF.hot('##vengo_gph' .. gi, x, y, ROW_W, lh + 18);
+            if not site then hov = false; end
+            TRF.card(dl, x, y, ROW_W, h, nil, hov, 8);
+            local gc = G.COL[gname] or C.acc;
+            dl:AddCircleFilled({ x + 16, y + 10 + lh / 2 }, 4, u32({ gc[1], gc[2], gc[3], 1 }), 12);
+            dl:AddText({ x + 30, y + 10 }, u32(C.text), gname);
+            local sub = myR and ('Your rank: %s'):fmt(myR) or 'Your rank isn\'t known: every rank shown';
+            dl:AddText({ x + 30 + imgui.CalcTextSize(gname) + 14, y + 10 }, u32(C.muted), sub);
+            if site then
+                local t = all and 'YOUR RANK ONLY' or 'ALL RANKS';
+                imgui.SetWindowFontScale(0.82);
+                local tw = spacedW(t, 1.5);
+                spaced(dl, x + ROW_W - tw - 14, y + 12, t, u32(hov and C.acc or C.label), 1.5);
+                imgui.SetWindowFontScale(1);
+                if click then G.open[gname] = not G.open[gname]; end
+            end
+            local cy = y + 14 + lh + 8;
+            for ri, r in ipairs(rows) do
+                local lab = r[1]:upper();
+                imgui.SetWindowFontScale(0.82);
+                spaced(dl, x + 30, cy + 2, lab, u32(r[1] == site and C.gold or C.label), 1.5);
+                imgui.SetWindowFontScale(1);
+                local mx = tonumber((r[2].items or {})[1] and r[2].items[1].maxPoints);
+                if mx then dl:AddText({ x + 160, cy }, u32(C.muted), ('up to %s points today'):fmt(TRF.num(mx))); end
+                cy = cy + lh + 8;
+                for ii, it in ipairs(r[2].items or {}) do
+                    G.item(dl, ('##vengo_gpi%d_%d_%d'):format(gi, ri, ii), it, x + 44, cy, lh);
+                    cy = cy + lh + 8;
+                end
+            end
+            imgui.Dummy({ ROW_W, h + 6 });
+        end
+    end
+    imgui.Spacing();
+    hint('Trade these to the guild master of each craft for guild points (the most each day is shown for each rank). Click a guild for every rank; click an item for it on catseyexi.com/database.');
+    if SITE.x.at then hint('From catseyexi.com/events, updated ' .. (math.floor((os.time() - SITE.x.at) / 60)) .. ' min ago.'); end
 end
 
 TRF.ptTab = function()
@@ -9719,14 +9859,15 @@ local function drawUI()
             elseif ui.tab == 5 then TRF.hunterTab();
             elseif ui.tab == 6 then TRF.summitTab();
             elseif ui.tab == 7 then TRF.dlTab();
-            elseif ui.tab == 8 then TRF.ptTab();
-            elseif ui.tab == 9 then TRF.armorTab();
-            elseif ui.tab == 10 then TRF.ulTab();
-            elseif ui.tab == 11 then TRF.luTab();
-            elseif ui.tab == 12 then TRF.cxTab();
-            elseif ui.tab == 13 then TRF.svTab();
-            elseif ui.tab == 14 then tabSettings();
-            elseif ui.tab == 15 then tabThanks();
+            elseif ui.tab == 8 then TRF.gpTab();
+            elseif ui.tab == 9 then TRF.ptTab();
+            elseif ui.tab == 10 then TRF.armorTab();
+            elseif ui.tab == 11 then TRF.ulTab();
+            elseif ui.tab == 12 then TRF.luTab();
+            elseif ui.tab == 13 then TRF.cxTab();
+            elseif ui.tab == 14 then TRF.svTab();
+            elseif ui.tab == 15 then tabSettings();
+            elseif ui.tab == 16 then tabThanks();
             end
         end);
         if not ok then imgui.TextColored({ C.hp[1], C.hp[2], C.hp[3], 1 }, 'Window error: ' .. tostring(err)); end
@@ -9792,13 +9933,15 @@ ashita.events.register('command', 'vengo_command', function (e)
             ui.open[1] = not ui.open[1];
         end
     elseif cmd == 'help' then
-        msg('Usage: /vengo (window) | <nm|zone|shorthand> (warp there) | current | next | cancel | ventures | mode ace|cw | update | reload | testalert | where | dailies | points | sparks | pad (controller) | upgrade (install a new VenGo)');
+        msg('Usage: /vengo (window) | <nm|zone|shorthand> (warp there) | current | next | cancel | ventures | mode ace|cw | update | reload | testalert | where | dailies | guild | points | sparks | pad (controller) | upgrade (install a new VenGo)');
     elseif cmd == 'dailies' then
         ui.open[1], ui.tab = true, 7;
     elseif cmd == 'points' then
+        ui.open[1], ui.tab = true, 9;
+    elseif cmd == 'guild' or cmd == 'gp' then
         ui.open[1], ui.tab = true, 8;
     elseif cmd == 'sparks' then
-        ui.open[1], ui.tab = true, 13;
+        ui.open[1], ui.tab = true, 14;
     elseif cmd == 'cancel' or cmd == 'stop' then
         ARMED = nil;
         msg('Cancelled.');

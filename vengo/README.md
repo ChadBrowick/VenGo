@@ -63,6 +63,14 @@ Click the pin on a daily to keep it on screen: while VenGo is minimized (or clos
 pinned daily with its objective, zone, kill and item bars, and the time to the reset. Drag it where you like; click its
 pin to unpin. It hides while the full window is open.
 
+## Guild points
+
+The GUILD POINTS tab (under DAILIES, or `/vengo guild`) shows today's guild point items for every crafting guild, from
+catseyexi.com/events: for each guild, the items for your rank in that craft, the points each one gives and the most
+points a day. Click a guild to see every rank; click an item's name to look it up on the catseyexi.com database. The
+items change at JP midnight, and VenGo fetches the new ones then (with Hunter and Summit, so "Update from
+catseyexi.com/events" has to be on in Settings).
+
 ## Points
 
 VenGo asks the CatsEyeXI server for your points the way Trove's Points tab does, and shows each group where it belongs:
