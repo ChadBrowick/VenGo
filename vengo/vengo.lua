@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.98';
+addon.version = '4.99';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -107,6 +107,7 @@ local config = {
     bg_img_alpha = 0.45,       -- how much of it shows
     trail_size = 'medium',     -- small | medium | large
     pad_combo = true,          -- LB + Y opens VenGo with the controller (LB / RB change the menu, B closes it)
+    font_size = 1,             -- VenGo's text: 0.8 to 1.6 times its normal size (Settings > Window > Font size)
     gp_guild = 'Fishing',      -- the guild shown on GUILD POINTS
     pad_close = 'none',        -- what closing VenGo from the controller (LB + Y, B) leaves on screen: none | orb | bar
 };
@@ -195,7 +196,7 @@ local function saveSettings()
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
     for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'win_scale', 'logo_style', 'logo_size', 'logo_clear', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
-                           'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'gp_guild', 'check_updates' }) do
+                           'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'gp_guild', 'font_size', 'check_updates' }) do
         local v = config[k];
         f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v)));
     end
@@ -1842,6 +1843,10 @@ local function newFont(f)
     return ok and ls ~= nil;
 end
 local function pushFont(f, size)
+    if f == fonts.panel then                                      -- (the text: as big as Settings > Font size says)
+        local k = math.max(0.8, math.min(1.6, tonumber(config.font_size) or 1));
+        if k ~= 1 then size = (size or 16) * k; end
+    end
     if TRF.PH and TRF.PH.on() then                                -- (Phantom: its own faces)
         if f == fonts.panel and fonts.ph then f, size = fonts.ph, (size or 16) * 1.12;
         elseif (f == fonts.title or f == fonts.big) and fonts.phH then f = fonts.phH; end
@@ -8489,7 +8494,7 @@ end
 TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'win_scale', 'logo_style', 'logo_size', 'logo_clear',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
-    'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'gp_guild', 'check_updates' };
+    'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'gp_guild', 'font_size', 'check_updates' };
 function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
 function TRF.loadPresets()
     TRF.slots = {};
@@ -9207,6 +9212,26 @@ local function tabSettings()
         tip('Shows the logo next to this window so you can see its size and background. Click the logo or this button to hide it.');
         nsz = math.max(0.4, math.min(3, math.floor(nsz * 10 + 0.5) / 10));
         if nsz ~= sz then config.logo_size = nsz; saveSettings(); end
+    end
+    do                                                            -- (the text's size, apart from the window's scale)
+        local fs = math.max(0.8, math.min(1.6, tonumber(config.font_size) or 1));
+        local nfs = fs;
+        imgui.AlignTextToFramePadding();
+        imgui.TextColored(C.text, 'Font size');
+        tip('Makes VenGo\'s text bigger or smaller (80% to 160%) without changing the rest of the window. To make everything bigger, use the - / + at the top of the window.');
+        imgui.SameLine(0, 12);
+        if button('-##vengo_font_m', { 34, 0 }, true, true) then nfs = fs - 0.1; end
+        imgui.SameLine(0, 8);
+        imgui.AlignTextToFramePadding();
+        imgui.TextColored(C.text, ('%d%%'):fmt(math.floor(fs * 100 + 0.5)));
+        imgui.SameLine(0, 8);
+        if button('+##vengo_font_p', { 34, 0 }, true, true) then nfs = fs + 0.1; end
+        if fs ~= 1 then
+            imgui.SameLine(0, 14);
+            if button('RESET##vengo_font_r', { 0, 0 }, true, true) then nfs = 1; end
+        end
+        nfs = math.max(0.8, math.min(1.6, math.floor(nfs * 10 + 0.5) / 10));
+        if nfs ~= fs then config.font_size = nfs; saveSettings(); end
     end
     hint('Drag the bottom-right corner to resize. The  -  button at the top right shrinks VenGo to a small tag.');
 

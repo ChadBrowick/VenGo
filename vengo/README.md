@@ -132,6 +132,9 @@ The **-** and **+** at the top of the window, left of the EN / JP switch, make t
 bigger: 10% a press, from 50% to 300%. Point at either to see the size it is at. The window keeps its top-right
 corner where it is, so the buttons stay under the pointer. The size is saved with your settings and presets.
 
+**Font size** (Settings > Window) makes just the text bigger or smaller, 80% to 160%, without changing the rest of
+the window; RESET puts it back to 100%.
+
 ## GPS styles
 
 The trail on the ground to the VNM is the **GPS** (Settings > Trail to the VNM, and the GPS sliders). Four styles:
