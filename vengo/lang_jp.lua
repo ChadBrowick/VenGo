@@ -558,6 +558,7 @@ local X = {
     ['the requested items'] = '依頼されたアイテム', ['the hunt'] = 'ハント', ['the Summit'] = 'サミット',
     ['ACE'] = 'ACE', ['CW'] = 'CW', ['Vnm armor'] = 'VNM防具', ['Odious codex'] = '禁断の書', ['Special thanks'] = 'スペシャルサンクス',
     ['Language'] = '言語',
+    ['WEBSITE'] = 'ウェブサイト', ['Open catseyexi.com/events'] = 'catseyexi.com/eventsを開く',
     ['Pattern of the day:'] = '本日のパターン:',
     ['Resets at JST midnight (15:00 UTC), in'] = '日本時間0時(UTC 15:00)にリセット。あと',
     ['OPEN CATSEYEXI.COM/EVENTS'] = 'CATSEYEXI.COM/EVENTSを開く',

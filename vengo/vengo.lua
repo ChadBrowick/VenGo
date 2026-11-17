@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '4.96';
+addon.version = '4.97';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -1421,7 +1421,8 @@ function SITE.xTick()
     local now = os.time();
     local mid = TRF.DL and TRF.DL.deadline and (TRF.DL.deadline() - 86400) or nil;   -- (the last midnight in Japan: new guild items)
     local due = (X.at == nil) or (now - X.at >= 1800) or (X.summitEnd and now >= X.summitEnd + 20 and now - X.at > 60)
-        or (mid and X.at < mid + 60 and now >= mid + 60);
+        or (mid and X.at < mid + 60 and now >= mid + 60)
+        or (X.guild == nil);                                          -- (no guild point items yet: get them, a minute apart)
     if due and now >= (X.nextAt or 0) then
         X.nextAt = now + 60;                                         -- (a failed try waits a minute)
         SITE.xAsk();
@@ -8118,114 +8119,117 @@ function TRF.GP.item(dl, id, it, x, y, lh)
     local info = ('(%s pts, max: %s)'):fmt(TRF.num(tonumber(it.points) or 0), TRF.num(tonumber(it.maxPoints) or 0));
     dl:AddText({ nx + nw + 10, y }, u32(C.muted), info);
 end
+-- One row of the craft menu, drawn like the main menu's rows (in every style)
+function TRF.GP.menuItem(dl, k, x0, y, sw, ih, on, over, label, sub)
+    if TRF.PH.on() then
+        TRF.PH.sideItem(dl, 100 + k, x0, y, sw, ih, on, over, label:upper());
+    else
+        if on then
+            pcall(function ()
+                dl:AddRectFilledMultiColor({ x0, y }, { x0 + sw, y + ih },
+                    u32({ 0.78, 0.25, 0.52, 0.55 }), u32({ 0.78, 0.25, 0.52, 0 }),
+                    u32({ 0.78, 0.25, 0.52, 0 }), u32({ 0.78, 0.25, 0.52, 0.55 }));
+            end);
+            dl:AddRectFilled({ x0, y + 2 }, { x0 + 3, y + ih - 2 }, u32({ NEON2[1], NEON2[2], NEON2[3], 1 }));
+        elseif over then
+            dl:AddRectFilled({ x0, y }, { x0 + sw, y + ih }, u32({ 1, 1, 1, 0.04 }), 4);
+        end
+        local nh = imgui.GetTextLineHeight();
+        local gc = TRF.GP.COL[label] or C.muted;
+        dl:AddCircleFilled({ x0 + 10, y + ih / 2 + 1 }, on and 3 or 2.2, u32({ gc[1], gc[2], gc[3], 1 }), 10);
+        dl:AddText({ x0 + 20, y + (ih - nh) / 2 }, u32((on or over) and { 1, 1, 1, 1 } or C.text), label);
+    end
+    if sub then                                                   -- (your rank, small, at the row's right)
+        imgui.SetWindowFontScale(0.8);
+        local w = imgui.CalcTextSize(sub);
+        local nh = imgui.GetTextLineHeight();
+        dl:AddText({ x0 + sw - w - 26, y + (ih - nh) / 2 }, u32(on and C.gold or C.muted), sub);
+        imgui.SetWindowFontScale(1);
+    end
+end
 TRF.gpTab = function()
     local G = TRF.GP;
-    section('Guild points');
     local D = SITE.x.guild;
+    section('Guild points');
     local dl = imgui.GetWindowDrawList();
     local lh = imgui.GetTextLineHeight();
-    -- the pattern of the day (its letter in a box on the right), the reset, the site
-    local x, y = imgui.GetCursorScreenPos();
-    local pat = D and D.currentPattern and tostring(D.currentPattern) or nil;
-    imgui.TextColored(C.text, 'Pattern of the day:');
-    if pat then
-        local bs = lh * 2 + 8;
-        local bx = x + ROW_W - bs;
-        dl:AddRectFilled({ bx, y }, { bx + bs, y + bs }, u32({ C.acc[1] * 0.55, C.acc[2] * 0.55, C.acc[3] * 0.55, 1 }), 6);
-        dl:AddRect({ bx, y }, { bx + bs, y + bs }, u32({ C.acc[1], C.acc[2], C.acc[3], 0.8 }), 6, C.rall, 1);
-        local big = pushFont(fonts.big, 30);
-        local pw = imgui.CalcTextSize(pat);
-        local ph = imgui.GetTextLineHeight();
-        dl:AddText({ bx + (bs - pw) / 2, y + (bs - ph) / 2 }, u32(C.text), pat);
-        if big then imgui.PopFont(); end
+    -- today's pattern, the reset, the site
+    if D and D.currentPattern then
+        imgui.TextColored(C.muted, 'Pattern of the day:');
+        imgui.SameLine(0, 6);
+        imgui.TextColored(C.acc, tostring(D.currentPattern));
+        imgui.SameLine(0, 18);
     end
     imgui.TextColored(C.muted, 'Resets at JST midnight (15:00 UTC), in');
     imgui.SameLine(0, 6);
     imgui.TextColored(C.gold, TRF.dur(TRF.DL.deadline() - os.time()));
-    if button('OPEN CATSEYEXI.COM/EVENTS##vengo_gpweb', { 0, 0 }, true, true) then
+    imgui.SameLine(ROW_W - 120);
+    if button('WEBSITE##vengo_gpweb', { 120, 0 }, true, true) then
         if not TRF.UP.shell('https://catseyexi.com/events', '') then msg('Could not open your browser. Link: https://catseyexi.com/events'); end
     end
+    if imgui.IsItemHovered() then imgui.SetTooltip('Open catseyexi.com/events'); end
     if not config.website or D == nil or type(D.guilds) ~= 'table' then TRF.noData('the guild point items'); return; end
     local my = G.mine();
-
-    -- pick a guild: a grid of three across
     imgui.Spacing();
-    local sx, sy = imgui.GetCursorScreenPos();
-    spaced(dl, sx, sy, 'SELECT GUILD', u32(C.label), 2);
-    imgui.Dummy({ ROW_W, lh + 6 });
-    local cur = D.guilds[config.gp_guild or ''] and config.gp_guild or 'Fishing';
-    local gap, cols = 8, 3;
-    local tw, th = (ROW_W - gap * (cols - 1)) / cols, lh + 18;
-    x, y = imgui.GetCursorScreenPos();
-    for i, gname in ipairs(G.ORDER) do
-        local g = D.guilds[gname];
-        local tx = x + ((i - 1) % cols) * (tw + gap);
-        local ty = y + math.floor((i - 1) / cols) * (th + gap);
-        local hov, click = TRF.hot('##vengo_gpg' .. i, tx, ty, tw, th);
-        local on = (gname == cur);
-        local gc = G.COL[gname] or C.acc;
-        dl:AddRectFilled({ tx, ty }, { tx + tw, ty + th }, u32(on and { gc[1] * 0.22, gc[2] * 0.22, gc[3] * 0.22, 1 } or (hov and { 0.15, 0.14, 0.19, 1 } or { C.well[1], C.well[2], C.well[3], 0.95 })), 6);
-        dl:AddRect({ tx, ty }, { tx + tw, ty + th }, u32(on and { gc[1], gc[2], gc[3], 0.9 } or { 1, 1, 1, hov and 0.25 or 0.10 }), 6, C.rall, on and 1.4 or 1);
-        -- its icon: today's Novice item of that guild
-        local nov = g and g.ranks and g.ranks.Novice and g.ranks.Novice.items and g.ranks.Novice.items[1];
-        local nw = imgui.CalcTextSize(gname);
-        local iw = nov and (lh + 6) or 0;
-        local cx = tx + (tw - nw - iw) / 2;
-        if nov and nov.itemId then TRF.icon(dl, tonumber(nov.itemId), cx, ty + (th - lh - 2) / 2, lh + 2, 1); end
-        dl:AddText({ cx + iw, ty + (th - lh) / 2 }, u32(on and C.text or { 0.85, 0.85, 0.90, 1 }), gname);
-        if my and my[gname:lower()] and G.rankFor(my[gname:lower()]) then   -- (a dot: you've a rank in it)
-            dl:AddCircleFilled({ tx + tw - 10, ty + 10 }, 2.5, u32({ gc[1], gc[2], gc[3], 0.9 }), 8);
-        end
-        if click and not on then config.gp_guild = gname; saveSettings(); end
-    end
-    imgui.Dummy({ ROW_W, 3 * th + 2 * gap + 8 });
 
-    -- the guild: every rank, yours marked, each with the items it takes
+    -- the craft menu on the left, the craft's items on the right
+    local x0, y0 = imgui.GetCursorScreenPos();
+    local sw, ih = 200, 30;
+    local cur = D.guilds[config.gp_guild or ''] and config.gp_guild or 'Fishing';
+    local mx, my_ = imgui.GetMousePos();
+    local y = y0;
+    for k, gname in ipairs(G.ORDER) do
+        if D.guilds[gname] then
+            local on = (gname == cur);
+            local over = mx >= x0 and mx < x0 + sw and my_ >= y and my_ < y + ih;
+            local r = my and my[gname:lower()] or nil;
+            G.menuItem(dl, k, x0 + 14, y, sw - 14, ih, on, over, gname, r);
+            imgui.SetCursorScreenPos({ x0, y });
+            if imgui.InvisibleButton('##vengo_gpm' .. k, { sw, ih }) and not on then config.gp_guild = gname; saveSettings(); cur = gname; end
+            y = y + ih + 2;
+        end
+    end
+    local menuH = y - y0;
+
     local g = D.guilds[cur];
-    if type(g) ~= 'table' or type(g.ranks) ~= 'table' then return; end
+    local px, pw = x0 + sw + 16, ROW_W - sw - 16;
     local myR = my and my[cur:lower()] or nil;
     local site = G.rankFor(myR);
-    local n, nr = 0, 0;
-    for _, rk in ipairs(G.RANKS) do local e = g.ranks[rk]; if type(e) == 'table' then nr = nr + 1; n = n + #(e.items or {}); end end
-    x, y = imgui.GetCursorScreenPos();
-    local h = 16 + lh + 14 + nr * (lh + 10) + n * (lh + 8) + (nr - 1) * 9 + 8;
-    TRF.card(dl, x, y, ROW_W, h, nil, false, 8);
-    local gc = G.COL[cur] or C.acc;
-    local big = pushFont(fonts.big, 20);
-    dl:AddText({ x + 18, y + 12 }, u32(C.text), cur);
+    local cy = y0 + 4;
+    local big = pushFont(fonts.big, 22);
+    dl:AddText({ px, cy }, u32(C.text), cur);
     local cw = imgui.CalcTextSize(cur);
+    local bh = imgui.GetTextLineHeight();
     if big then imgui.PopFont(); end
-    dl:AddCircleFilled({ x + 10, y + 12 + lh / 2 + 2 }, 3.5, u32({ gc[1], gc[2], gc[3], 1 }), 12);
-    dl:AddText({ x + 18 + cw + 14, y + 16 }, u32(C.muted), myR and ('Your rank: %s'):fmt(myR) or 'Your rank isn\'t known');
-    local cy = y + 16 + lh + 14;
-    local first = true;
+    dl:AddText({ px + cw + 12, cy + bh - lh - 2 }, u32(C.muted), myR and ('Your rank: %s'):fmt(myR) or 'Your rank isn\'t known');
+    cy = cy + bh + 10;
     for ri, rk in ipairs(G.RANKS) do
-        local e = g.ranks[rk];
+        local e = type(g) == 'table' and type(g.ranks) == 'table' and g.ranks[rk] or nil;
         if type(e) == 'table' then
-            if not first then dl:AddLine({ x + 16, cy - 5 }, { x + ROW_W - 16, cy - 5 }, u32({ 1, 1, 1, 0.07 }), 1); cy = cy + 4; end
-            first = false;
+            local items = e.items or {};
             local mine = (rk == site);
-            if mine then dl:AddRectFilled({ x + 6, cy - 2 }, { x + 9, cy + lh + 2 + #(e.items or {}) * (lh + 8) }, u32({ C.gold[1], C.gold[2], C.gold[3], 0.9 }), 1); end
-            dl:AddText({ x + 18, cy }, u32(mine and C.gold or C.text), rk);
+            local hh = lh + 10 + #items * (lh + 8) + 4;
+            TRF.card(dl, px, cy, pw, hh, mine and 'done' or nil, false, 6);
+            dl:AddText({ px + 12, cy + 6 }, u32(mine and C.gold or C.text), rk);
             local rw = imgui.CalcTextSize(rk);
-            local sub = e.itemRank and ('(Trading %s items)'):fmt(tostring(e.itemRank)) or '';
-            dl:AddText({ x + 18 + rw + 10, cy }, u32(C.muted), sub);
+            if e.itemRank then dl:AddText({ px + 12 + rw + 8, cy + 6 }, u32(C.muted), ('(Trading %s items)'):fmt(tostring(e.itemRank))); end
             if mine then
+                imgui.SetWindowFontScale(0.8);
                 local t = 'YOUR RANK';
-                imgui.SetWindowFontScale(0.82);
                 local w_ = spacedW(t, 1.5);
-                spaced(dl, x + ROW_W - w_ - 18, cy + 2, t, u32(C.gold), 1.5);
+                spaced(dl, px + pw - w_ - 12, cy + 8, t, u32(C.gold), 1.5);
                 imgui.SetWindowFontScale(1);
             end
-            cy = cy + lh + 10;
-            for ii, it in ipairs(e.items or {}) do
-                G.item(dl, ('##vengo_gpi%d_%d'):format(ri, ii), it, x + 26, cy, lh);
-                cy = cy + lh + 8;
+            local iy = cy + lh + 12;
+            for ii, it in ipairs(items) do
+                G.item(dl, ('##vengo_gpi%d_%d'):format(ri, ii), it, px + 14, iy, lh);
+                iy = iy + lh + 8;
             end
-            cy = cy + 5;
+            cy = cy + hh + 6;
         end
     end
-    imgui.Dummy({ ROW_W, h + 6 });
+    imgui.SetCursorScreenPos({ x0, y0 });
+    imgui.Dummy({ ROW_W, math.max(menuH, cy - y0) + 6 });
     hint('Trade these to the guild master of each craft for guild points. Click an item for it on catseyexi.com/database.');
     if SITE.x.at then hint('From catseyexi.com/events, updated ' .. (math.floor((os.time() - SITE.x.at) / 60)) .. ' min ago.'); end
 end
