@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '5.01';
+addon.version = '5.02';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -8219,6 +8219,25 @@ function TRF.GP.menuItem(dl, k, x0, y, sw, ih, on, over, label, sub)
         imgui.SetWindowFontScale(1);
     end
 end
+-- The craft menu's width: its longest name (in the face and size the rows draw it) and longest rank side by side,
+-- with room for the slant on the left and the arrows on the right
+function TRF.GP.menuW(my)
+    local G = TRF.GP;
+    local nameW, rankW = 0, 0;
+    local styled = TRF.PH.on();
+    local fancy = TRF.NE.on() or TRF.AE.on();
+    local pushed = fancy and TRF.PH.font(fonts.ne or fonts.title, 17 * TRF.fontK());
+    for _, g in ipairs(G.ORDER) do nameW = math.max(nameW, imgui.CalcTextSize(styled and not fancy and g:upper() or g)); end
+    if pushed then imgui.PopFont(); end
+    imgui.SetWindowFontScale(0.8);
+    for _, g in ipairs(G.ORDER) do
+        local r = my and my[g:lower()];
+        if r then rankW = math.max(rankW, imgui.CalcTextSize(r)); end
+    end
+    imgui.SetWindowFontScale(1);
+    local w = 14 + (fancy and 34 or 20) + nameW + 14 + rankW + (styled and 50 or 12) + 6;
+    return math.max(200, math.min(math.floor(w + 0.5), math.floor(ROW_W * 0.55)));
+end
 TRF.gpTab = function()
     local G = TRF.GP;
     local D = SITE.x.guild;
@@ -8247,7 +8266,8 @@ TRF.gpTab = function()
 
     -- the craft menu on the left, the craft's items on the right
     local x0, y0 = imgui.GetCursorScreenPos();
-    local sw, ih = 200, math.floor(30 * math.max(1, TRF.fontK()) + 0.5);
+    local ih = math.floor(30 * math.max(1, TRF.fontK()) + 0.5);
+    local sw = G.menuW(my);                                       -- (as wide as its longest name and rank need)
     local cur = D.guilds[config.gp_guild or ''] and config.gp_guild or 'Fishing';
     local mx, my_ = imgui.GetMousePos();
     local y = y0;
@@ -10001,6 +10021,7 @@ local function drawUI()
         local wx, wy = imgui.GetWindowPos();
         local ww, wh = imgui.GetWindowSize();
         WIN_W, WIN_H = math.max(MIN_W, ww or WIN_W), math.max(MIN_H, wh or WIN_H);
+        SW = math.floor(200 + 140 * (math.max(1, TRF.fontK()) - 1));   -- (the menu widens with Settings > Font size)
         ROW_W = math.max(360, WIN_W - SW - 8 - MARGIN - 44);
         local z = zone();
         frame(dl, wx, wy, WIN_W, WIN_H);
