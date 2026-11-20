@@ -142,6 +142,9 @@ corner where it is, so the buttons stay under the pointer. The size is saved wit
 the window (the menu's names too: its rows get taller and wider to fit, and the GUILD POINTS craft menu as wide as
 its names and ranks need); RESET puts it back to 100%.
 
+**Bar size** (Settings > Window, or the - / + on the bar itself) makes the venture bar VenGo minimizes to smaller or
+bigger, 60% to 200%.
+
 ## GPS styles
 
 The trail on the ground to the VNM is the **GPS** (Settings > Trail to the VNM, and the GPS sliders). Four styles:

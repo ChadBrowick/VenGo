@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '5.02';
+addon.version = '5.03';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -107,6 +107,7 @@ local config = {
     bg_img_alpha = 0.45,       -- how much of it shows
     trail_size = 'medium',     -- small | medium | large
     pad_combo = true,          -- LB + Y opens VenGo with the controller (LB / RB change the menu, B closes it)
+    bar_size = 1,              -- the venture bar (VenGo minimized to a bar): 0.6 to 2 times its size
     font_size = 1,             -- VenGo's text: 0.8 to 1.6 times its normal size (Settings > Window > Font size)
     gp_guild = 'Fishing',      -- the guild shown on GUILD POINTS
     pad_close = 'none',        -- what closing VenGo from the controller (LB + Y, B) leaves on screen: none | orb | bar
@@ -196,7 +197,7 @@ local function saveSettings()
     f:write('-- VenGo settings (changed from the window)\nreturn {\n');
     for _, k in ipairs({ 'transparent', 'minimized', 'strip', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'win_scale', 'logo_style', 'logo_size', 'logo_clear', 'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
                            'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
-                           'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'gp_guild', 'font_size', 'check_updates' }) do
+                           'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'gp_guild', 'font_size', 'bar_size', 'check_updates' }) do
         local v = config[k];
         f:write(('    %s = %s,\n'):format(k, type(v) == 'string' and ('%q'):format(v) or tostring(v)));
     end
@@ -4285,7 +4286,24 @@ end
 
 -- The venture bar (the _ button): one row, the venture furthest along right now (the one being announced
 -- first), with its star and GO button, and a button at the end to open VenGo again. Drag it by its edges.
+-- The venture bar's size: Settings > Window > Bar size, or the - / + on the bar (the window scale's plumbing, on
+-- only while the bar is drawn)
+function TRF.barK() return math.max(0.6, math.min(2, tonumber(config.bar_size) or 1)); end
+function TRF.barStep(d)
+    local k = math.max(0.6, math.min(2, math.floor((TRF.barK() + d) * 10 + 0.5) / 10));
+    if k ~= TRF.barK() then config.bar_size = k; saveSettings(); end
+end
+function TRF.barScale()
+    local Z = TRF.Z;
+    local k = TRF.barK();
+    Z.s = k;
+    if k ~= 1 and Z.o == nil then Z.hook(); end
+    Z.dl = false;
+    if k ~= 1 or TRF.DLH.want.z then Z.dl = TRF.DLH.set('z', k ~= 1); end
+    Z.on = (k ~= 1) and Z.dl == true;
+end
 TRF.drawStrip = function()
+    TRF.barScale();
     local top = nil;
     for _, v in ipairs(vdata.exp or {}) do
         local p = (ALERT and ALERT.v == v) and 1000 or (v.progress or 0);
@@ -4303,6 +4321,7 @@ TRF.drawStrip = function()
         ImGuiWindowFlags_AlwaysAutoResize, ImGuiWindowFlags_NoScrollbar, ImGuiWindowFlags_NoScrollWithMouse, ImGuiWindowFlags_NoFocusOnAppearing);
     local pushed = pushFont(fonts.panel, 16);
     if imgui.Begin('VenGo bar##vengo_strip', { true }, flags) then pcall(function ()
+        TRF.Z.origin();
         local dl = imgui.GetWindowDrawList();
         local wx, wy = imgui.GetWindowPos();
         local ww = imgui.GetWindowSize();
@@ -4326,7 +4345,20 @@ TRF.drawStrip = function()
             config.strip = false;
             saveSettings();
         end
+        -- - / + : the bar smaller or bigger
+        for i, d in ipairs({ -0.1, 0.1 }) do
+            imgui.SameLine(0, 4);
+            local sx, sy = imgui.GetCursorScreenPos();
+            if iconButton(dl, '##vengo_strip_sz' .. i, sx, sy, bs, { C.acc[1], C.acc[2], C.acc[3], 0.22 },
+                    (d < 0) and 'Smaller bar' or 'Bigger bar', function (cx, cy, r, col)
+                        dl:AddLine({ cx - r * 0.8, cy }, { cx + r * 0.8, cy }, col, 1.8);
+                        if d > 0 then dl:AddLine({ cx, cy - r * 0.8 }, { cx, cy + r * 0.8 }, col, 1.8); end
+                    end) then
+                TRF.barStep(d);
+            end
+        end
     end); end
+    TRF.Z.on = false;                                             -- (the bar's scale ends with the bar)
     imgui.End();
     if pushed then imgui.PopFont(); end
     imgui.PopStyleVar(3);
@@ -8607,7 +8639,7 @@ end
 TRF.PRESET_KEYS = { 'transparent', 'alerts', 'alert_chat', 'alert_popup', 'alert_voice', 'lang', 'alert_sound', 'alert90', 'mode', 'pool', 'sort', 'website', 'login_refresh', 'logo_anim', 'win_scale', 'logo_style', 'logo_size', 'logo_clear',
     'trail', 'trail_glow', 'trail_full', 'trail_color', 'trail_style', 'trail_size', 'theme', 'bg', 'style', 'ph_accent', 'ph_slab', 'ph_edge', 'bg_img', 'bg_img_alpha', 'lite',
     'seal_check', 'seal_scan', 'cam_every', 'trail_range', 'trail_scale', 'trail_spacing', 'trail_speed', 'pulse_speed', 'glow_q',
-    'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'gp_guild', 'font_size', 'check_updates' };
+    'star_zones', 'star_items', 'dl_pins', 'star_chat', 'star_sound', 'pad_combo', 'pad_close', 'gp_guild', 'font_size', 'bar_size', 'check_updates' };
 function TRF.presetFile() return addon.path .. 'vengo_presets.lua'; end
 function TRF.loadPresets()
     TRF.slots = {};
@@ -9345,6 +9377,23 @@ local function tabSettings()
         end
         nfs = math.max(0.8, math.min(1.6, math.floor(nfs * 10 + 0.5) / 10));
         if nfs ~= fs then config.font_size = nfs; saveSettings(); end
+    end
+    do                                                            -- (the venture bar's size)
+        local bk = TRF.barK();
+        imgui.AlignTextToFramePadding();
+        imgui.TextColored(C.text, 'Bar size');
+        tip('How big the venture bar is when VenGo is minimized to it (60% to 200%). The - / + on the bar do the same.');
+        imgui.SameLine(0, 12);
+        if button('-##vengo_bar_m', { 34, 0 }, true, true) then TRF.barStep(-0.1); end
+        imgui.SameLine(0, 8);
+        imgui.AlignTextToFramePadding();
+        imgui.TextColored(C.text, ('%d%%'):fmt(math.floor(bk * 100 + 0.5)));
+        imgui.SameLine(0, 8);
+        if button('+##vengo_bar_p', { 34, 0 }, true, true) then TRF.barStep(0.1); end
+        if bk ~= 1 then
+            imgui.SameLine(0, 14);
+            if button('RESET##vengo_bar_r', { 0, 0 }, true, true) then config.bar_size = 1; saveSettings(); end
+        end
     end
     hint('Drag the bottom-right corner to resize. The  -  button at the top right shrinks VenGo to a small tag.');
 

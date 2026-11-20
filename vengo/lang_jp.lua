@@ -558,6 +558,8 @@ local X = {
     ['the requested items'] = '依頼されたアイテム', ['the hunt'] = 'ハント', ['the Summit'] = 'サミット',
     ['ACE'] = 'ACE', ['CW'] = 'CW', ['Vnm armor'] = 'VNM防具', ['Odious codex'] = '禁断の書', ['Special thanks'] = 'スペシャルサンクス',
     ['Language'] = '言語',
+    ['Bar size'] = 'バーの大きさ', ['Smaller bar'] = 'バーを小さく', ['Bigger bar'] = 'バーを大きく',
+    ['How big the venture bar is when VenGo is minimized to it (60% to 200%). The - / + on the bar do the same.'] = 'VenGoをバーに最小化したときのベンチャーバーの大きさ(60%〜200%)。バーの - / + でも変えられます。',
     ['Guild points:'] = 'ギルドポイント:', ['Today: %s / %s'] = '本日: {1} / {2}', ['Today: %s / %s points'] = '本日: {1} / {2} ポイント',
     ['%s pts'] = '{1} ポイント',
     ['Font size'] = '文字の大きさ', ['RESET'] = 'リセット',
