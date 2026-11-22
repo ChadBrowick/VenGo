@@ -108,7 +108,9 @@ its name and "One minute to the pop!" (the Japanese voice says it in Japanese). 
 
 The server sends the venture board (packet 0x1A3) on its own. VenGo reads it as it
 arrives, so the zones and percentages stay current: no editing needed. Pick ACE or CW
-zones with the pills above the list. A venture reaching 100% raises the VNM alert.
+zones with the pills above the list. A venture reaching 100% raises the VNM alert. When more than one VNM is up, the pop-up shows the Hard VNM over
+the rest and a starred VNM (its zone or one of its pieces starred) over one that isn't; the others wait and come up in
+turn when the one showing is dismissed, killed or runs out.
 
 Drops, grid squares and notes come from the community VNM list kept by the
 [ventures](https://github.com/commandobill/ventures) addon (Commandobill, Seekey, Phatty).

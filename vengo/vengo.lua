@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '5.03';
+addon.version = '5.04';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -473,12 +473,86 @@ dropsOf = function(v)
     return '';
 end
 
+-- Which alert shows on the pop-up when more than one VNM is up: the Hard VNM over the rest, and a starred VNM
+-- (its zone or one of its pieces starred) over one that isn't; between equals, the newest. The others wait in
+-- TRF.AQ and come up in turn as the one showing is dismissed, killed or runs out.
+TRF.AQ = {};
+function TRF.alertRank(v)
+    if v == nil then return 0; end
+    local r = (v.key == 'hvnm') and 2 or 0;
+    if TRF.ST and TRF.ST.watched and TRF.ST.watched(v) then r = r + 1; end
+    return r;
+end
+function TRF.alertLive(A)                                         -- (still worth showing: not killed, not long past its pop)
+    if A == nil then return false; end
+    local v = A.v;
+    if (v.progress or 0) < 100 and (v.prog_at or 0) > A.at and (A.source ~= 'chat' or A.saw) then return false; end
+    local pl = popLeft(v);
+    if pl then A.pop_at = os.time() + pl; end
+    return (A.pop_at - os.time()) >= -900;
+end
+-- The alert for a VNM, showing or waiting (nil: none)
+function TRF.alertFor(v)
+    if ALERT and ALERT.v == v then return ALERT; end
+    for _, A in ipairs(TRF.AQ) do if A.v == v then return A; end end
+    return nil;
+end
+function TRF.alertQueue(A)                                        -- (to wait: one per VNM)
+    for i = #TRF.AQ, 1, -1 do if TRF.AQ[i].v == A.v then table.remove(TRF.AQ, i); end end
+    TRF.AQ[#TRF.AQ + 1] = A;
+end
+-- The waiting alert that should show now (removed from the queue), or nil
+function TRF.alertNext()
+    local best, bi = nil, nil;
+    for i = #TRF.AQ, 1, -1 do
+        local A = TRF.AQ[i];
+        if not TRF.alertLive(A) then table.remove(TRF.AQ, i);
+        elseif best == nil or TRF.alertRank(A.v) > TRF.alertRank(best.v) or (TRF.alertRank(A.v) == TRF.alertRank(best.v) and A.at > best.at) then
+            best, bi = A, i;
+        end
+    end
+    if best then
+        for i, A in ipairs(TRF.AQ) do if A == best then table.remove(TRF.AQ, i); break; end end
+    end
+    return best;
+end
+-- Each frame: if the pop-up is free (nothing, or dismissed), the best waiting alert takes it; and a waiting one
+-- that now ranks above the one showing (its zone just starred, say) moves in front of it
+function TRF.alertPromote()
+    if #TRF.AQ == 0 then return; end
+    if ALERT == nil or ALERT.dismissed then
+        local A = TRF.alertNext();
+        if A then ALERT = A; end
+        return;
+    end
+    local r = TRF.alertRank(ALERT.v);
+    for _, A in ipairs(TRF.AQ) do
+        if TRF.alertRank(A.v) > r and TRF.alertLive(A) then
+            local cur = ALERT;
+            ALERT = TRF.alertNext();
+            TRF.alertQueue(cur);
+            return;
+        end
+    end
+end
+
 raiseAlert = function(v, line, source)
     local now = os.time();
     v.progress = 100;
     local left = popLeft(v);
     local popAt = (left and left > -600) and (now + left) or (now + POP_DELAY);   -- (a seal time already known wins)
-    ALERT = { v = v, at = now, pop_at = popAt, line = line, warned = false, source = source or 'chat' };
+    local A = { v = v, at = now, pop_at = popAt, line = line, warned = false, source = source or 'chat' };
+    for i = #TRF.AQ, 1, -1 do if TRF.AQ[i].v == v then table.remove(TRF.AQ, i); end end
+    if ALERT and not ALERT.dismissed and ALERT.v ~= v and TRF.alertLive(ALERT) then
+        if TRF.alertRank(ALERT.v) > TRF.alertRank(v) then
+            TRF.alertQueue(A);                                    -- (the one showing outranks it: it waits)
+        else
+            TRF.alertQueue(ALERT);                                -- (it takes the pop-up; the other waits)
+            ALERT = A;
+        end
+    else
+        ALERT = A;
+    end
     if left == nil or left <= -600 then setPop(v, popAt, source or 'chat'); end
     local d = dropsOf(v);
     local crest = (v.crest and v.crest ~= '') and v.crest or TRF.crestOf(v.zone_name);
@@ -514,10 +588,11 @@ checkAnnouncement = function(mode, raw)
     if not fromPopulox and not (low:find('spawn', 1, true) or low:find('appear', 1, true) or low:find('venture', 1, true)) then
         return;
     end
-    if ALERT and ALERT.v == v and os.time() - ALERT.at < 900 then
-        -- already alerted (the board hit 100%): Populox's callout sets the exact 10 minutes
-        if ALERT.source ~= 'chat' and not ALERT.confirmed then
-            ALERT.confirmed = true;
+    local A_ = TRF.alertFor(v);
+    if A_ and os.time() - A_.at < 900 then
+        -- already alerted (the board hit 100%), showing or waiting: Populox's callout sets the exact 10 minutes
+        if A_.source ~= 'chat' and not A_.confirmed then
+            A_.confirmed = true;
             if not (POPS[v.key] and POPS[v.key].src == 'seal') then
                 setPop(v, os.time() + POP_DELAY, 'chat');
             end
@@ -529,6 +604,7 @@ end
 
 -- One minute before the pop: a second sound. 15 minutes after: the alert goes away.
 tickAlert = function()
+    TRF.alertPromote();
     if ALERT == nil then return; end
     local av = ALERT.v;
     if (av.progress or 0) >= 100 then ALERT.saw = true; end
@@ -878,7 +954,8 @@ crossed = function(v, before)
     if before == nil then before = heads[v.key] and 100 or 0; end
     if now >= 100 and before < 100 then
         heads[v.key] = 100;
-        if not (ALERT and ALERT.v == v and os.time() - ALERT.at < 900)
+        local A_ = TRF.alertFor(v);
+        if not (A_ and os.time() - A_.at < 900)
             and not (TRF.flap and TRF.flap[v.key] and os.time() - TRF.flap[v.key] < 600) then raiseAlert(v, '(venture board)', 'board'); end
     elseif now >= 90 and before < 90 and now < 100 and config.alert90 then
         TRF.note(('%s (%s) is at %d%%.'):fmt(v.nm, v.zone_name, now));
@@ -9510,7 +9587,7 @@ local function tabSettings()
         AshitaCore:GetChatManager():QueueCommand(-1, '/vengo testalert');
     end
     imgui.SameLine(0, 10);
-    if ALERT and button('CLEAR ALERT##vengo_clear_alert', { 240, 0 }, true) then ALERT = nil; end
+    if ALERT and button('CLEAR ALERT##vengo_clear_alert', { 240, 0 }, true) then ALERT = nil; TRF.AQ = {}; end
     if LAST_ANNOUNCE then
         hint('Last Populox line: ' .. LAST_ANNOUNCE);
     else
