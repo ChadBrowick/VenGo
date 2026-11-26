@@ -26,7 +26,7 @@
 
 addon.name    = 'vengo';
 addon.author  = 'Chadbrowick';
-addon.version = '5.04';
+addon.version = '5.05';
 addon.desc    = 'One-click runs to Venture Seals, with the ventures list, in YunaUI style.';
 addon.link    = '';
 
@@ -5091,7 +5091,7 @@ function TRF.BAG.step()
     if now - B.wantAt > 3 then return; end                      -- (no collection tab open: nothing to do)
     if B.cur == nil then
         if now < B.restAt then return; end
-        B.cur, B.bi, B.slot, B.max = { count = {}, where = {}, extra = {} }, 1, 0, nil;
+        B.cur, B.bi, B.slot, B.max = { count = {}, where = {}, extra = {}, augs = {} }, 1, 0, nil;
     end
     local budget = 170;                                          -- (slots per frame)
     pcall(function ()
@@ -5108,6 +5108,11 @@ function TRF.BAG.step()
                     B.cur.count[id] = (B.cur.count[id] or 0) + (tonumber(it.Count) or 1);
                     B.cur.where[id] = B.cur.where[id] or B.names[bag] or 'Bag';
                     if B.EXTRA[id] and B.cur.extra[id] == nil then B.cur.extra[id] = B.bytes(it.Extra, 24); end
+                    if TRF.LU.piece and TRF.LU.piece(id) then          -- (Homam / Nashira: every copy's augments)
+                        local l = B.cur.augs[id] or {};
+                        l[#l + 1] = B.bytes(it.Extra, 12);
+                        B.cur.augs[id] = l;
+                    end
                 end
                 B.slot = B.slot + 1;
                 budget = budget - 1;
@@ -6231,6 +6236,54 @@ end
 -- weapons and organs (all from the CatsEyeXI server)
 ------------------------------------------------------------------------
 function TRF.LU.bit(m, pos) return bit.band(m or 0, bit.lshift(1, pos)) ~= 0; end
+-- Homam and Nashira tiers read from the pieces in your bags too (the server's count can lag behind, or miss an
+-- augmented copy): an augmented item's extra data starts with 2, then up to five augments of two bytes each (the
+-- augment in the low 11 bits, its step in the high 5). Each tier's augments go up together, so the sum of the
+-- steps tells the tier: it's matched to the nearest of the sums the tier texts give (each "+N" a step of N - 1).
+function TRF.LU.piece(id)
+    local LU = TRF.LU;
+    if LU.PIECE == nil then
+        if LU.HOMAM == nil or LU.NASHIRA == nil then return false; end
+        LU.PIECE = {};
+        for _, set in ipairs({ LU.HOMAM, LU.NASHIRA }) do for _, p in ipairs(set) do LU.PIECE[p.id] = p; end end
+    end
+    return LU.PIECE[id] ~= nil;
+end
+function TRF.LU.sums(p)                                          -- (the step sum each augment tier gives)
+    if p.sums then return p.sums; end
+    p.sums = {};
+    for t, a in ipairs(p.augs or {}) do
+        local sum = 0;
+        for n in tostring(a[1] or ''):gmatch('[%+%-](%d+)') do sum = sum + math.max(0, tonumber(n) - 1); end
+        p.sums[t] = sum;
+    end
+    return p.sums;
+end
+-- A piece's tier from one copy's extra data: 1 = base (no augments), 2 to 4 = augment tiers 1 to 3
+function TRF.LU.tierOf(p, ex)
+    if type(ex) ~= 'string' or ex:byte(1) ~= 2 then return 1; end
+    local sum, n = 0, 0;
+    for o = 3, 11, 2 do
+        local raw = (ex:byte(o) or 0) + (ex:byte(o + 1) or 0) * 256;
+        if bit.band(raw, 0x7FF) ~= 0 then n = n + 1; sum = sum + bit.rshift(raw, 11); end
+    end
+    if n == 0 then return 1; end
+    local best, bd = 1, 1e9;
+    for t, s_ in ipairs(TRF.LU.sums(p)) do
+        local d = math.abs(s_ - sum);
+        if d < bd then best, bd = t, d; end
+    end
+    return best + 1;
+end
+-- The best tier of a piece among the copies in your bags (0: none there, or the bags not read yet)
+function TRF.LU.bagTier(p)
+    local B = TRF.BAG;
+    local l = B.ready and B.ready.augs and B.ready.augs[p.id];
+    if l == nil then return 0; end
+    local best = 0;
+    for _, ex in ipairs(l) do best = math.max(best, TRF.LU.tierOf(p, ex)); end
+    return best;
+end
 TRF.luTab = function()
     local LU, T = TRF.LU, TRF.TV;
     T.askLumoria(false);
@@ -6272,7 +6325,10 @@ TRF.luTab = function()
     imgui.Dummy({ ROW_W, 1 });
 
     -- Homam and Nashira, side by side
-    local function column(cx, cy, cw, name, pieces, tiers, mats, matCounts, locMask)
+    local function column(cx, cy, cw, name, pieces, srvTiers, mats, matCounts, locMask)
+        TRF.BAG.want();
+        local tiers = {};
+        for i, p in ipairs(pieces) do tiers[i] = math.max(srvTiers[i] or 0, LU.bagTier(p)); end
         local n = 0;
         for i = 1, 5 do if (tiers[i] or 0) > 0 then n = n + 1; end end
         local tw_ = spaced(dl, cx, cy, name:upper(), u32(C.label), 2);
